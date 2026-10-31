@@ -37,3 +37,8 @@ The playback panel requests `/Sessions` only on opening/refreshing it and filter
 ## 0.2.10 packaged startup correction
 
 On the LG C1's Chromium 79 runtime, the installed file-based page's `'self'` CSP source did not authorize its own local scripts or stylesheet. Browser security logs confirmed all three were blocked, preventing startup. Script, style and image directives now explicitly allow `file:` alongside `'self'`. This permits local-file resources (not a directory-specific allowlist); HTTP/HTTPS scripts, inline scripts, eval, objects, forms and base changes remain blocked. Server metadata is still rendered as text. A startup regression checks explicit file sources, login rendering and applied CSS, and confirms inline/remote scripts remain blocked; it can also run against extracted, minified IPK contents with `APP_DIR`.
+
+
+## 0.2.12 subtitle rendering
+
+Subtitle extraction uses the same authenticated, redirect-rejecting, cookie-free API helper and 20-second body deadline. It is restricted to a constructed path on the configured server, pinned to the selected media source and stream index. The response is limited to 2 MiB and 20,000 parsed cues; displayed text is bounded and assigned via textContent, never innerHTML. VTT styles/scripts/markup are not executed. Appearance preferences accept only known color/size/background/position values and a bounded delay. Cues stay in playback memory, are released on Stop, and pending extraction shares playback cancellation. No subtitle URLs/tokens/cues are persisted in preferences, and no server files or user configuration are changed.

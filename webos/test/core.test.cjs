@@ -687,3 +687,51 @@ test("playback diagnostics distinguish source, remux and output without exposing
     "Direct play",
   );
 });
+
+test("subtitle styling accepts only bounded known values and text codecs", () => {
+  assert.deepEqual(
+    C.subtitleStyle({
+      enabled: true,
+      size: 999,
+      color: "url(secret)",
+      background: "red",
+      position: "left",
+      delay: 99,
+    }),
+    {
+      enabled: true,
+      size: 48,
+      color: "white",
+      background: "none",
+      position: "bottom",
+      delay: 10,
+    },
+  );
+  const source = {
+    MediaStreams: [
+      { Type: "Subtitle", Index: 9, Codec: "SRT" },
+      { Type: "Subtitle", Index: 12, Codec: "pgssub" },
+      { Type: "Subtitle", Index: 14, Codec: "ass" },
+    ],
+  };
+  assert.equal(C.textSubtitle(source, 9).Index, 9);
+  assert.equal(C.textSubtitle(source, 12), undefined);
+  assert.equal(C.textSubtitle(source, 14), undefined);
+});
+test("subtitle cues preserve absolute timing, overlap, seeks and delay without HTML rendering", () => {
+  const cues = C.parseSubtitles(
+    "WEBVTT\n\n00:00:10.000 --> 00:00:15.000 align:start\n<b>Hello</b> &amp; &#x1f600;\n\ncue-id\n00:00:12.000 --> 00:00:13.000\n&lt;img src=x onerror=evil()&gt;\n\nNOTE ignored\n00:00:01.000 --> 00:00:03.000\nNot a cue\n\n00:00:90.000 --> 00:00:91.000\nInvalid",
+  );
+  assert.equal(cues.length, 2);
+  assert.equal(C.subtitleText(cues, 11, 0), "Hello & 😀");
+  assert.match(C.subtitleText(cues, 12, 0), /<img src=x onerror=evil\(\)>/);
+  assert.equal(C.subtitleText(cues, 15, 0), "");
+  assert.equal(C.subtitleText(cues, 10, 1), "");
+  assert.equal(C.subtitleText(cues, 10, -1), "Hello & 😀");
+  assert.equal(C.subtitleText(cues, 11, 0), "Hello & 😀");
+  assert.equal(
+    C.parseSubtitles("1\n00:00:01,000 --> 00:00:02,000\nSRT")[0].text,
+    "SRT",
+  );
+  assert.throws(() => C.parseSubtitles("x".repeat(2097153)), /too large/);
+});

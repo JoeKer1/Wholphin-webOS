@@ -861,7 +861,134 @@
     ];
     return parts.filter(Boolean).join("  ·  ");
   }
+  function subtitleStyle(value) {
+    value = value || {};
+    function choice(key, values, fallback) {
+      return values.indexOf(value[key]) >= 0 ? value[key] : fallback;
+    }
+    var delay = Number(value.delay);
+    return {
+      enabled: value.enabled === true,
+      size: choice("size", [32, 40, 48, 56, 64], 48),
+      color: choice("color", ["white", "yellow", "cyan"], "white"),
+      background: choice("background", ["none", "half", "solid"], "none"),
+      position: choice("position", ["bottom", "raised", "top"], "bottom"),
+      delay: Number.isFinite(delay)
+        ? Math.max(-10, Math.min(10, Math.round(delay * 2) / 2))
+        : 0,
+    };
+  }
+  function textSubtitle(source, index) {
+    return ((source && source.MediaStreams) || []).find(function (track) {
+      return (
+        track.Type === "Subtitle" &&
+        track.Index === index &&
+        ["srt", "subrip", "vtt", "webvtt"].indexOf(
+          String(track.Codec || "").toLowerCase(),
+        ) >= 0 &&
+        track.IsTextSubtitleStream !== false
+      );
+    });
+  }
+  function parseSubtitles(value) {
+    if (typeof value !== "string" || value.length > 2097152)
+      throw new Error("Subtitle file is too large.");
+    value = value.replace(/^\uFEFF/, "").replace(/\r/g, "");
+    function timestamp(text) {
+      var parts = text.replace(",", ".").split(":").map(Number);
+      if (
+        parts.length < 2 ||
+        parts.length > 3 ||
+        parts.some(function (n) {
+          return !Number.isFinite(n) || n < 0;
+        }) ||
+        parts[parts.length - 1] >= 60 ||
+        parts[parts.length - 2] >= 60
+      )
+        return NaN;
+      return parts.reduce(function (total, part) {
+        return total * 60 + part;
+      }, 0);
+    }
+    function plain(text) {
+      return text
+        .replace(/<[^>]*>/g, "")
+        .replace(
+          /&(#x[0-9a-f]+|#\d+|amp|lt|gt|nbsp|quot|apos);/gi,
+          function (match, entity) {
+            var names = {
+              amp: "&",
+              lt: "<",
+              gt: ">",
+              nbsp: " ",
+              quot: '"',
+              apos: "'",
+            };
+            if (entity.charAt(0) !== "#") return names[entity.toLowerCase()];
+            var n =
+              entity.charAt(1).toLowerCase() === "x"
+                ? parseInt(entity.slice(2), 16)
+                : Number(entity.slice(1));
+            return n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff)
+              ? String.fromCodePoint(n)
+              : "";
+          },
+        )
+        .slice(0, 2000);
+    }
+    var cues = [];
+    value.split(/\n[ \t]*\n/).forEach(function (block) {
+      var lines = block.split("\n");
+      if (/^(NOTE|STYLE|REGION)(?:\s|$)/.test(lines[0])) return;
+      var index = lines.findIndex(function (line) {
+        return line.indexOf("-->") >= 0;
+      });
+      if (index < 0) return;
+      var match = lines[index].match(
+        /^\s*([\d:.,]+)\s+-->\s+([\d:.,]+)(?:\s.*)?$/,
+      );
+      if (!match) return;
+      var start = timestamp(match[1]),
+        end = timestamp(match[2]);
+      var text = plain(lines.slice(index + 1).join("\n"));
+      if (Number.isFinite(start) && end > start && text)
+        cues.push({ start: start, end: end, text: text });
+    });
+    if (cues.length > 20000)
+      throw new Error("Subtitle file has too many cues.");
+    cues.sort(function (a, b) {
+      return a.start - b.start;
+    });
+    var maxEnd = 0;
+    cues.forEach(function (cue) {
+      cue.maxEnd = maxEnd = Math.max(maxEnd, cue.end);
+    });
+    return cues;
+  }
+  function subtitleText(cues, seconds, delay) {
+    var time = seconds - (delay || 0),
+      low = 0,
+      high = cues.length;
+    while (low < high) {
+      var mid = (low + high) >>> 1;
+      if (cues[mid].start <= time) low = mid + 1;
+      else high = mid;
+    }
+    var active = [];
+    for (
+      var i = low - 1;
+      i >= 0 && cues[i].maxEnd > time && active.length < 6;
+      i--
+    ) {
+      if (cues[i].end > time) active.unshift(cues[i].text);
+    }
+    return active.join("\n").slice(0, 2000);
+  }
   var api = {
+    subtitleStyle: subtitleStyle,
+    textSubtitle: textSubtitle,
+    parseSubtitles: parseSubtitles,
+    subtitleText: subtitleText,
     serverUrl: serverUrl,
     query: query,
     profile: profile,

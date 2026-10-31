@@ -14,6 +14,7 @@
     busy = false,
     controlsTimer = null,
     resumeTimer = null,
+    subtitleTimer = null,
     libraryItems = [],
     contentFocus = null,
     previewTimer = null,
@@ -73,7 +74,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.11"' +
+      '", Version="0.2.12"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -117,6 +118,37 @@
         );
         error.status = response.status;
         throw error;
+      }
+      if (options.subtitleText) {
+        var limit = 2097152;
+        if (Number(response.headers.get("content-length")) > limit) {
+          if (response.body) await response.body.cancel();
+          throw new Error("Subtitle file is too large.");
+        }
+        var reader = response.body.getReader(),
+          chunks = [],
+          bytes = 0;
+        try {
+          while (true) {
+            var part = await reader.read();
+            if (part.done) break;
+            bytes += part.value.length;
+            if (bytes > limit) {
+              await reader.cancel();
+              throw new Error("Subtitle file is too large.");
+            }
+            chunks.push(part.value);
+          }
+        } finally {
+          reader.releaseLock();
+        }
+        var all = new Uint8Array(bytes),
+          offset = 0;
+        chunks.forEach(function (chunk) {
+          all.set(chunk, offset);
+          offset += chunk.length;
+        });
+        return new TextDecoder("utf-8").decode(all);
       }
       return response.status === 204 ? null : await response.json();
     } finally {
@@ -393,6 +425,17 @@
         main,
       );
     });
+    button(
+      "Subtitle appearance",
+      function () {
+        return go(function () {
+          reset("Subtitle appearance");
+          renderSubtitleAppearance(main, false);
+          focusFirst();
+        });
+      },
+      main,
+    );
     button(
       "Reset track preferences",
       function () {
@@ -2208,6 +2251,210 @@
     }
     focusFirst();
   }
+  function subtitleOptions() {
+    return C.subtitleStyle(readPreference("subtitle-appearance", {}));
+  }
+  var subtitleOverlay = el("div", null, player);
+  subtitleOverlay.id = "subtitle-overlay";
+  subtitleOverlay.hidden = true;
+  subtitleOverlay.setAttribute("aria-hidden", "true");
+  var subtitleTextNode = el("span", "", subtitleOverlay);
+  function applySubtitleStyle(node, style) {
+    var text = node.querySelector("span");
+    text.style.fontSize = style.size / 19.2 + "vw";
+    text.style.color = { white: "#ffffff", yellow: "#ffff66", cyan: "#80ffff" }[
+      style.color
+    ];
+    text.style.backgroundColor = {
+      none: "transparent",
+      half: "rgba(0,0,0,0.65)",
+      solid: "#000000",
+    }[style.background];
+    node.style.top = style.position === "top" ? "8%" : "auto";
+    node.style.bottom =
+      style.position === "top"
+        ? "auto"
+        : style.position === "raised"
+          ? "22%"
+          : "7%";
+  }
+  function renderSubtitleOverlay() {
+    var active = playing;
+    if (!active || !active.subtitleCues || document.hidden) {
+      subtitleOverlay.hidden = true;
+      return;
+    }
+    if (active.subtitleStyle.position !== "top") {
+      var controls = document.getElementById("controls");
+      var base =
+        innerHeight *
+        (active.subtitleStyle.position === "raised" ? 0.22 : 0.07);
+      var bottom =
+        Math.max(
+          base,
+          controls.style.opacity !== "0" ? controls.offsetHeight + 20 : 0,
+        ) + "px";
+      if (subtitleOverlay.style.bottom !== bottom)
+        subtitleOverlay.style.bottom = bottom;
+    }
+    var text = C.subtitleText(
+      active.subtitleCues,
+      video.currentTime,
+      active.subtitleStyle.delay,
+    );
+    if (subtitleTextNode.textContent !== text)
+      subtitleTextNode.textContent = text;
+    subtitleOverlay.hidden = !text;
+  }
+  function renderSubtitleAppearance(container, inPlayer) {
+    var draft = subtitleOptions();
+    el(
+      "p",
+      "TV styling supports SRT and WebVTT text. Image subtitles and ASS/SSA retain server rendering and original styling.",
+      container,
+    );
+    if (inPlayer)
+      el(
+        "p",
+        playing && playing.subtitleCues
+          ? "Current subtitles: styled on TV."
+          : "Current subtitles: Off or rendered by server.",
+        container,
+      );
+    var preview = el("div", null, container);
+    preview.className = "subtitle-preview";
+    var sample = el("div", null, preview);
+    sample.className = "subtitle-sample";
+    el("span", "This is how your subtitles will look.", sample);
+    function refresh() {
+      applySubtitleStyle(sample, draft);
+    }
+    var settings = [
+      [
+        "enabled",
+        "Text rendering",
+        [false, true],
+        ["Server (original)", "Styled on TV"],
+      ],
+      ["size", "Text size", [32, 40, 48, 56, 64]],
+      ["color", "Text color", ["white", "yellow", "cyan"]],
+      [
+        "background",
+        "Text background",
+        ["none", "half", "solid"],
+        ["None", "Translucent black", "Solid black"],
+      ],
+      [
+        "position",
+        "Text position",
+        ["bottom", "raised", "top"],
+        ["Bottom", "Raised", "Top"],
+      ],
+      ["delay", "Subtitle delay", [-10, -5, -2, -1, -0.5, 0, 0.5, 1, 2, 5, 10]],
+    ];
+    var controls = [];
+    function label(setting) {
+      var index = setting[2].indexOf(draft[setting[0]]);
+      return (
+        setting[1] +
+        ": " +
+        (setting[3] ? setting[3][index] : draft[setting[0]]) +
+        (setting[0] === "delay" ? " s (+ later, − earlier)" : "")
+      );
+    }
+    settings.forEach(function (setting) {
+      var control = button(
+        label(setting),
+        function () {
+          var values = setting[2];
+          draft[setting[0]] =
+            values[(values.indexOf(draft[setting[0]]) + 1) % values.length];
+          if (setting[0] !== "enabled") {
+            draft.enabled = true;
+            controls[0].textContent = label(settings[0]);
+          }
+          control.textContent = label(setting);
+          refresh();
+        },
+        container,
+      );
+      controls.push(control);
+    });
+    button(
+      "Reset appearance",
+      function () {
+        draft = C.subtitleStyle({});
+        controls.forEach(function (control, index) {
+          control.textContent = label(settings[index]);
+        });
+        refresh();
+      },
+      container,
+    );
+    button(
+      "Apply subtitle appearance",
+      async function () {
+        draft = C.subtitleStyle(draft);
+        var active = inPlayer && playing;
+        if (active && (busy || !active.started)) {
+          message("Wait for playback to start before applying subtitles.");
+          return;
+        }
+        localStorage.setItem(
+          accountKey("subtitle-appearance"),
+          JSON.stringify(draft),
+        );
+        if (!active) {
+          message(
+            "Subtitle appearance saved. Select Styled on TV to apply appearance settings to text tracks.",
+          );
+          return;
+        }
+        if (active.subtitleCues && draft.enabled) {
+          active.subtitleStyle = draft;
+          applySubtitleStyle(subtitleOverlay, draft);
+          renderSubtitleOverlay();
+          closePlaybackPanel();
+          return;
+        }
+        if (
+          !(active.subtitleIndex >= 0) ||
+          !C.textSubtitle(active.source, active.subtitleIndex)
+        ) {
+          closePlaybackPanel();
+          message(
+            "Saved. Appearance applies to SRT/WebVTT text tracks; current subtitles are Off or use server rendering.",
+          );
+          return;
+        }
+        if (!draft.enabled && !active.subtitleCues) {
+          closePlaybackPanel();
+          return;
+        }
+        var ticks = position(),
+          paused = video.paused;
+        video.pause();
+        try {
+          await play(active.item, ticks, false, false, {
+            trackChange: true,
+            paused: paused,
+            mediaSourceId: active.source.Id,
+            audioIndex: active.audioIndex,
+            subtitleIndex: active.subtitleIndex,
+          });
+        } catch (error) {
+          if (playing === active && !paused && !document.hidden)
+            await video.play();
+          message(
+            "Appearance saved for future playback; current subtitles unchanged. " +
+              error.message,
+          );
+        }
+      },
+      container,
+    );
+    refresh();
+  }
   function decoderOptions() {
     return readPreference("decoder-options", {
       native: false,
@@ -2459,6 +2706,7 @@
       chapters: "Chapters",
       queue: "Playback queue",
       info: "Playback information",
+      appearance: "Subtitle appearance",
     }[kind];
     panel.setAttribute("aria-label", title);
     el("h2", title, panel);
@@ -2548,7 +2796,8 @@
           },
           content,
         );
-    } else if (kind === "queue") renderQueue(content, true);
+    } else if (kind === "appearance") renderSubtitleAppearance(content, true);
+    else if (kind === "queue") renderQueue(content, true);
     else if (kind === "chapters") {
       var chapters = C.chapters(active.item);
       if (!chapters.length) el("p", "No chapters available.", content);
@@ -2582,7 +2831,16 @@
         );
         entry.setAttribute("aria-pressed", String(index === current));
       }
-      if (subtitle) option(-1, "Off");
+      if (subtitle) {
+        button(
+          "Subtitle appearance",
+          function () {
+            return openPlaybackPanel("appearance");
+          },
+          content,
+        );
+        option(-1, "Off");
+      }
       C.tracks(active.source, subtitle ? "Subtitle" : "Audio").forEach(
         function (track) {
           option(track.index, track.label);
@@ -2596,7 +2854,9 @@
       if (subtitle)
         el(
           "p",
-          "Subtitles are rendered by the server. Changing tracks briefly reloads playback at the same position.",
+          active.subtitleCues
+            ? "Text subtitles are styled on this TV. Appearance changes apply immediately; changing tracks briefly reloads playback."
+            : "Subtitles are rendered by the server. Enable Styled on TV in Subtitle appearance for SRT/WebVTT size, color, background, position and delay controls.",
           content,
         );
     }
@@ -2933,6 +3193,7 @@
       if (
         !live &&
         ((decoder.native && !options.compatibility) ||
+          subtitleOptions().enabled ||
           preferences.Audio ||
           preferences.Subtitle ||
           ((options.audioIndex != null || options.subtitleIndex != null) &&
@@ -2992,11 +3253,55 @@
           : sourceMetadata
             ? sourceMetadata.DefaultSubtitleStreamIndex
             : undefined;
+      var subtitleStyle = subtitleOptions(),
+        subtitleCues = null,
+        subtitleNotice = "";
+      var selectedSubtitle = C.textSubtitle(sourceMetadata, subtitleIndex);
+      if (!live && subtitleStyle.enabled && selectedSubtitle) {
+        try {
+          if (
+            previous &&
+            previous.item.Id === item.Id &&
+            previous.source.Id === sourceMetadata.Id &&
+            previous.subtitleIndex === subtitleIndex &&
+            previous.subtitleCues
+          )
+            subtitleCues = previous.subtitleCues;
+          else {
+            var text = await api(
+              "/Videos/" +
+                encodeURIComponent(item.Id) +
+                "/" +
+                encodeURIComponent(sourceMetadata.Id) +
+                "/Subtitles/" +
+                subtitleIndex +
+                "/Stream.vtt",
+              {
+                StartPositionTicks: 0,
+                CopyTimestamps: true,
+                AddVttTimeMap: false,
+              },
+              null,
+              "GET",
+              { signal: controller.signal, subtitleText: true },
+            );
+            subtitleCues = C.parseSubtitles(text);
+            if (!subtitleCues.length)
+              throw new Error("No subtitle cues were returned.");
+          }
+        } catch (error) {
+          if (controller.signal.aborted) throw error;
+          subtitleCues = null;
+          subtitleNotice =
+            "TV subtitle styling unavailable; using server-rendered subtitles for this video.";
+        }
+      }
+      var deliveredSubtitleIndex = subtitleCues ? -1 : subtitleIndex;
       var policy = live
         ? { native: false, reason: "Live TV uses compatibility HLS" }
         : options.compatibility
           ? { native: false, reason: options.policyReason }
-          : C.nativePolicy(sourceMetadata, decoder, subtitleIndex);
+          : C.nativePolicy(sourceMetadata, decoder, deliveredSubtitleIndex);
       var nativeMode = policy.native;
       var deviceProfile = C.profile({
         native: nativeMode,
@@ -3005,6 +3310,7 @@
       var forceTranscode =
         !!live ||
         !!options.trackChange ||
+        !!subtitleCues ||
         !!options.applyPreferences ||
         !!options.compatibility;
       var requestBody = {
@@ -3015,10 +3321,11 @@
         EnableDirectPlay: !forceTranscode,
         EnableDirectStream: nativeMode,
         EnableTranscoding: true,
-        AllowVideoStreamCopy: !options.compatibility && !(subtitleIndex >= 0),
+        AllowVideoStreamCopy:
+          !options.compatibility && !(deliveredSubtitleIndex >= 0),
         MaxAudioChannels: nativeMode ? 6 : 2,
         AudioStreamIndex: options.audioIndex,
-        SubtitleStreamIndex: options.subtitleIndex,
+        SubtitleStreamIndex: subtitleCues ? -1 : options.subtitleIndex,
         MediaSourceId: options.mediaSourceId,
       };
       var info = await playbackApi(
@@ -3041,6 +3348,8 @@
         device,
         forceTranscode,
       );
+      if (subtitleCues && selected.source.Id !== sourceMetadata.Id)
+        throw new Error("Subtitle source changed. Try another track.");
       if (request !== playRequest || document.hidden) return;
       if (previous)
         await stop({
@@ -3064,8 +3373,11 @@
           options.audioIndex != null
             ? options.audioIndex
             : selected.source.DefaultAudioStreamIndex,
-        subtitleIndex:
-          options.subtitleIndex != null
+        subtitleCues: subtitleCues,
+        subtitleStyle: subtitleStyle,
+        subtitleIndex: subtitleCues
+          ? subtitleIndex
+          : options.subtitleIndex != null
             ? options.subtitleIndex
             : selected.source.DefaultSubtitleStreamIndex,
         nativeMode: nativeMode,
@@ -3095,6 +3407,9 @@
       closePlaybackPanel(false);
       updatePlaybackButtons();
       loadPlaybackExtras(playing);
+      applySubtitleStyle(subtitleOverlay, subtitleStyle);
+      renderSubtitleOverlay();
+      subtitleTimer = setInterval(renderSubtitleOverlay, 100);
       player.hidden = false;
       document.body.classList.add("is-playing");
       video.style.objectFit = previous ? video.style.objectFit : "contain";
@@ -3109,7 +3424,7 @@
       resumeTimer = setInterval(finishResume, 250);
       video.load();
       document.getElementById("toggle").focus();
-      message("");
+      message(subtitleNotice);
       timer = setInterval(function () {
         run(function () {
           return report("/Progress");
@@ -3174,6 +3489,7 @@
     if (!playing) return;
     playing.lastPositionTicks = position();
     updateUpNext();
+    renderSubtitleOverlay();
     var elapsed = position() / 10000000;
     var duration = playing.live
       ? 0
@@ -3249,6 +3565,9 @@
     clearInterval(timer);
     clearTimeout(controlsTimer);
     clearInterval(resumeTimer);
+    clearInterval(subtitleTimer);
+    subtitleOverlay.hidden = true;
+    subtitleTextNode.textContent = "";
     var stopped = playing,
       stoppedRevision = revision,
       ticks =
@@ -3659,6 +3978,7 @@
       );
     }
     if (!document.hidden && playing) updateUpNext();
+    if (document.hidden) subtitleOverlay.hidden = true;
     if (document.hidden && playing) {
       hideUpNext();
       if (playing.live) run(stop);

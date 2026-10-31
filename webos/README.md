@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.11_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.12_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.11_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.11_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.12_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -54,11 +54,11 @@ Keep the Developer Mode session extended. Expiration can disable Developer Mode 
 
 ## Playback scope
 
-The initial device profile advertises MP4 H.264/AAC/MP3 direct playback, with conservative 1080p/H.264 level 4.1 limits. Other media requests HLS H.264/AAC stereo transcoding from Jellyfin. The user needs server transcoding permissions and the server needs a working encoder. Subtitle formats advertised in the profile use server burn-in; audio/subtitle pickers are available during on-demand playback in v0.2.5, with a brief stream reload at the current position when changing tracks. Compatibility remains the default. Version 0.2.8 adds an opt-in experimental LG C1 native profile for HEVC/4K/HDR10 and Dolby audio, plus a separate experimental Dolby Vision MP4 toggle; see [native playback scope and validation](NATIVE-PLAYBACK.md). Audio passthrough is not verified or promised.
+The initial device profile advertises MP4 H.264/AAC/MP3 direct playback, with conservative 1080p/H.264 level 4.1 limits. Other media requests HLS H.264/AAC stereo transcoding from Jellyfin. The user needs server transcoding permissions and the server needs a working encoder. Subtitle formats advertised in the profile use server burn-in by default; v0.2.12 adds opt-in TV styling for SRT/WebVTT text, with authenticated extraction and subtitles disabled in the delivered video to avoid duplicates; audio/subtitle pickers are available during on-demand playback in v0.2.5, with a brief stream reload at the current position when changing tracks. Compatibility remains the default. Version 0.2.8 adds an opt-in experimental LG C1 native profile for HEVC/4K/HDR10 and Dolby audio, plus a separate experimental Dolby Vision MP4 toggle; see [native playback scope and validation](NATIVE-PLAYBACK.md). Audio passthrough is not verified or promised.
 
-Resume reloads the latest server bookmark, then seeks the native player to that absolute time for both direct playback and HLS. Initial seeks are retried as the TV becomes ready; session reporting begins only after the seek is confirmed. Progress and stop reports are ordered, with no extra offset added to HLS timestamps. A failed initial seek preserves the bookmark. Seeking still depends on the TV's native HLS seekable window. There is no automatic decoder-failure fallback yet.
+Resume reloads the latest server bookmark, then seeks the native player to that absolute time for both direct playback and HLS. Initial seeks are retried as the TV becomes ready; session reporting begins only after the seek is confirmed. Progress and stop reports are ordered, with no extra offset added to HLS timestamps. A failed initial seek preserves the bookmark. Seeking still depends on the TV's native HLS seekable window. Native mode has a single Compatibility retry on decoder failure.
 
-Not implemented: multiple accounts, DVR recording management, music, Seerr, subtitle search/download/style editing, trickplay, refresh-rate switching, and Android/MPV-specific playback features.
+Not implemented: multiple accounts, DVR recording management, music, Seerr, subtitle search/download, trickplay, refresh-rate switching, and Android/MPV-specific playback features.
 
 
 ## Home and loading
@@ -156,3 +156,12 @@ Explicitly permits local `file:` scripts, styles and images in the document secu
 Series details now offer Choose season, including Specials in numeric season order. Episode details offer View seasons. A season switcher remains above the continuous episode grid, with episode-number sorting by default and the selected season restored on Back. Season loading failures offer Retry.
 
 Playback now has icon-based play/pause, 30-second skip, Next and Stop controls, a focusable/clickable seek bar, elapsed/total time and time remaining. Audio, subtitles, chapters, queue, screen fit and diagnostics sit under Options. Left/Right on the seek bar moves ten seconds; Enter returns to play/pause. Hidden controls can be revealed with Enter or directional keys; Left/Right while hidden also seeks ten seconds. Controls fade during playback, remain visible while paused or using Options, and Back first closes Options or a playback panel, then hides controls before leaving playback on another Back. Live TV retains its disabled seek controls. Local browser tests cover seek input, remote navigation, Options focus, season retries/switching and Back restoration; validation on the physical TV is pending.
+
+
+### v0.2.12 — Subtitle appearance and timing
+
+Open **Settings → Subtitle appearance**, or **Options → Subtitles → Subtitle appearance** during playback. Choose text size, white/yellow/cyan, no/translucent/solid black background, bottom/raised/top placement, and −10 to +10 seconds of delay (positive means later). A preview updates before Apply. Changing an appearance option selects Styled on TV; choose Server (original) to restore burn-in. Reset returns to original server rendering and default appearance. Preferences are saved per server/account on this TV. No Jellyfin user settings or subtitle files are modified.
+
+TV styling supports SRT/SubRip and WebVTT, including server extraction of embedded text. ASS/SSA, PGS and DVD/image tracks retain original server rendering; appearance and delay controls do not affect those burned-in subtitles. Live TV continues using server rendering. TV text intentionally uses plain text and the chosen appearance rather than source cue markup/positioning. If extraction fails, times out, is oversized or returns no usable cues, playback falls back to server burn-in with a notice.
+
+Text is fetched from Jellyfin's authenticated [subtitle endpoint](https://github.com/jellyfin/jellyfin/blob/master/Jellyfin.Api/Controllers/SubtitleController.cs), with full absolute timestamps and no HLS time-map offset. Fetch/parse occurs before replacing the current stream. Video negotiation explicitly disables its subtitle track while the app displays cues, keeping the selected logical track for the picker, preferences and reports. Switching rendering mode preserves the playback position and pause state; appearance changes on an already-styled track apply without reloading video. Cancelling playback aborts pending extraction. Local tests cover timing/seek/overlap, plain-text safety, bounded parsing, mode/track switching, Off, bitmap/ASS preservation, paused resume, failure fallback and late-response cancellation. Physical TV subtitle-overlay validation is pending.

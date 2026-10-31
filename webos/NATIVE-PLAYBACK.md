@@ -41,3 +41,8 @@ The TV was not launched, navigated or inspected during this update. Every hardwa
 ## References
 
 Profile limits follow [LG's webOS 6 media specification](https://webostv.developer.lge.com/develop/specifications/video-audio-60). Container/remux and Dolby Vision restrictions are informed by the [official Jellyfin webOS adapter](https://github.com/jellyfin/jellyfin-webos/blob/master/frontend/js/webOS.js) and [Jellyfin browser profile implementation](https://github.com/jellyfin/jellyfin-web/blob/master/src/scripts/browserDeviceProfile.js). Codec condition application and stream-index/source-ID requirements were checked against [Jellyfin StreamBuilder](https://github.com/jellyfin/jellyfin/blob/master/MediaBrowser.Model/Dlna/StreamBuilder.cs); diagnostics use the fields in [TranscodingInfo](https://github.com/jellyfin/jellyfin/blob/master/MediaBrowser.Model/Session/TranscodingInfo.cs).
+
+
+### Styled text subtitles (0.2.12)
+
+Opt-in TV styling extracts SRT/WebVTT cues separately and requests the video with SubtitleStreamIndex=-1. In this mode the selected logical track does not require burn-in and can preserve native video-copy eligibility. If extraction fails or the format is unsupported, normal server-rendered subtitle negotiation and Compatibility policy remain in effect. This does not advertise native PGS/ASS rendering. Actual C1 overlay behavior remains pending hardware validation.

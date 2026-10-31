@@ -1002,3 +1002,41 @@ body:not(.signed-in) main {
 #up-next button {
   margin: 8px 16px 0 0;
 }
+
+#subtitle-overlay,
+.subtitle-sample {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  text-align: center;
+  pointer-events: none;
+  line-height: 1.3;
+  white-space: pre-line;
+  overflow-wrap: break-word;
+}
+#subtitle-overlay {
+  z-index: 1;
+}
+#subtitle-overlay span,
+.subtitle-sample span {
+  padding: 3px 8px;
+  text-shadow:
+    -2px -2px 1px #000,
+    2px -2px 1px #000,
+    -2px 2px 1px #000,
+    2px 2px 1px #000;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+#controls {
+  z-index: 2;
+}
+#playback-panel {
+  z-index: 3;
+}
+.subtitle-preview {
+  position: relative;
+  height: 160px;
+  background: #242126;
+  margin: 16px 0;
+}
