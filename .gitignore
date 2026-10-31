@@ -1,0 +1,7 @@
+node_modules/
+webos/dist/
+.DS_Store
+.env
+.env.*
+*.pem
+*.key

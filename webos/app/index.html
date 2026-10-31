@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' http: https: data:; media-src 'self' http: https: blob:; connect-src http: https:; base-uri 'none'; object-src 'none'; form-action 'none'"
+    />
+    <title>Wholphin</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <img id="backdrop" alt="" hidden />
+    <div id="backdrop-shade" aria-hidden="true"></div>
+    <header>
+      <div id="brand">
+        <span id="profile-initial" aria-label="Current profile">U</span
+        ><strong>Wholphin</strong>
+      </div>
+      <nav id="nav" aria-label="Main navigation"></nav>
+    </header>
+    <time id="wall-clock"></time>
+    <p id="status" role="status" aria-live="polite"></p>
+    <main id="main"></main>
+    <section id="player" hidden aria-label="Video player">
+      <video id="video"></video>
+      <div id="controls">
+        <h2 id="playing-title"></h2>
+        <div id="timeline" aria-hidden="true">
+          <div id="timeline-fill"></div>
+        </div>
+        <p id="clock"></p>
+        <button id="toggle">Pause / Play</button
+        ><button id="rewind">Back 30 seconds</button
+        ><button id="forward">Forward 30 seconds</button
+        ><button id="fit">Fill screen</button>
+        <button id="audio">Audio</button>
+        <button id="subtitles">Subtitles</button>
+        <button id="chapters">Chapters</button>
+        <button id="queue">Queue</button>
+        <button id="next-video">Next</button>
+        <button id="playback-info">Playback info</button>
+        <button id="stop">Stop</button>
+      </div>
+      <section
+        id="playback-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Playback options"
+        hidden
+      ></section>
+    </section>
+    <script src="core.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

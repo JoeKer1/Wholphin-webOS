@@ -1,0 +1,12 @@
+{
+  "id": "com.github.damontecres.wholphin.webos",
+  "version": "0.2.9",
+  "vendor": "Wholphin contributors",
+  "type": "web",
+  "main": "index.html",
+  "title": "Wholphin",
+  "icon": "icon.png",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "requiredACG": []
+}
