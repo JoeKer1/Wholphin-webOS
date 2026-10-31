@@ -224,6 +224,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       }),
       { x: 0, y: 0, width: 1920, height: 1080 },
     );
+    await page.locator("#player-options").click();
     await page
       .getByRole("button", { name: "Fill screen", exact: true })
       .click();
@@ -238,7 +239,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       document.getElementById("video").currentTime = 90;
     });
     let details = detailRequests;
-    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    await page.getByRole("button", { name: "Stop playback", exact: true }).click();
     await waitFor(() => stopped().length === 1 && detailRequests > details);
     assert.equal(stopped()[0].body.PositionTicks, 900000000);
     // Simulate a newer bookmark from another client after the details screen loaded.
@@ -260,7 +261,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       document.getElementById("video").currentTime = 135;
     });
     details = detailRequests;
-    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    await page.getByRole("button", { name: "Stop playback", exact: true }).click();
     await waitFor(() => stopped().length === 2 && detailRequests > details);
     // HLS has an absolute media timeline: never add the requested 120 seconds again.
     assert.equal(stopped()[1].body.PositionTicks, 1350000000);
@@ -275,7 +276,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.waitForFunction(
       () => document.getElementById("video").readyState === 4,
     );
-    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    await page.getByRole("button", { name: "Stop playback", exact: true }).click();
     await page.locator("#player[hidden]").waitFor({ state: "attached" });
     assert.equal(started().length, 2);
     assert.equal(stopped().length, 2);

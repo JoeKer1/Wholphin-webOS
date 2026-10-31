@@ -16,6 +16,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       errors = [],
       requests = [];
     page.on("pageerror", (e) => errors.push(e.message));
+    let failSeasons = false;
     let failSwitch = false,
       releaseNegotiation = null,
       holdNegotiation = false;
@@ -77,6 +78,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       Chapters: chapters,
     });
     const items = {
+      series: {
+        Id: "series",
+        Name: "Test show",
+        Type: "Series",
+        IsFolder: true,
+      },
       e1: ep("e1", 1),
       e2: ep("e2", 2),
       e3: ep("e3", 3),
@@ -112,14 +119,37 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
           contentType: "image/svg+xml",
           body: '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#534060"/></svg>',
         });
+      if (failSeasons && url.pathname === "/Shows/series/Seasons")
+        return route.fulfill({ status: 503, json: {} });
       let json = { Items: [] };
+      if (url.pathname === "/Shows/series/Seasons")
+        json = {
+          Items: [
+            { Id: "season2", Name: "Season 2", IndexNumber: 2 },
+            { Id: "specials", Name: "Specials", IndexNumber: 0 },
+            { Id: "season1", Name: "Season 1", IndexNumber: 1 },
+          ],
+        };
+      if (
+        url.pathname === "/Users/user/Items" &&
+        url.searchParams.has("ParentId")
+      ) {
+        const season = url.searchParams.get("ParentId");
+        const episodes =
+          season === "season1"
+            ? [items.e1, items.e2]
+            : season === "season2"
+              ? [items.e3]
+              : [];
+        json = { Items: episodes, TotalRecordCount: episodes.length };
+      }
       if (url.pathname.endsWith("/Views"))
         json = {
           Items: [{ Id: "library", Name: "Videos", CollectionType: "movies" }],
         };
       if (url.pathname.endsWith("/Latest")) json = Object.values(items);
       const detail = url.pathname.match(
-        /^\/Users\/(?:user|other)\/Items\/(e[123]|m[12])$/,
+        /^\/Users\/(?:user|other)\/Items\/(series|e[123]|m[12])$/,
       );
       if (detail) json = items[detail[1]];
       if (url.pathname === "/Shows/series/Episodes") {
@@ -251,6 +281,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       }
       throw new Error("Condition not met");
     }
+    async function control(id) {
+      if (await page.locator("#player-tools").isHidden())
+        await page.locator("#player-options").click();
+      await page.locator("#" + id).click();
+    }
     const infos = () =>
       requests.filter(
         (r) => r.path.endsWith("/PlaybackInfo") && r.method === "POST",
@@ -283,7 +318,61 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await started(1);
     await page.screenshot({ path: "/tmp/wholphin-player-controls.png" });
     await atTime(123.25);
-    await page.locator("#audio").click();
+    assert.equal(await page.locator("#player-tools").isHidden(), true);
+    await atTime(100);
+    await page.locator("#timeline").focus();
+    await page.keyboard.press("ArrowRight");
+    assert.equal(
+      await page.locator("#video").evaluate((v) => v.currentTime),
+      110,
+    );
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(
+      await page.locator("#video").evaluate((v) => v.currentTime),
+      100,
+    );
+    await page.locator("#timeline").evaluate((n) => {
+      n.value = "120";
+      n.dispatchEvent(new Event("input"));
+    });
+    assert.equal(
+      await page.locator("#video").evaluate((v) => v.currentTime),
+      120,
+    );
+    await page.keyboard.press("Enter");
+    assert.equal(await page.locator(":focus").getAttribute("id"), "toggle");
+    await page.locator("#player-options").click();
+    await page.keyboard.press("Escape");
+    assert.equal(await page.locator("#player-tools").isHidden(), true);
+    assert.equal(
+      await page.locator(":focus").getAttribute("id"),
+      "player-options",
+    );
+    await page.screenshot({ path: "/tmp/wholphin-normal-controls.png" });
+    await page.waitForFunction(
+      () => document.getElementById("controls").style.opacity === "0",
+    );
+    await page.keyboard.press("Enter");
+    assert.equal(await page.locator(":focus").getAttribute("id"), "toggle");
+    assert.equal(
+      await page.locator("#video").evaluate((v) => v.paused),
+      false,
+      "First Enter reveals controls without toggling playback",
+    );
+    await page.keyboard.press("Escape");
+    assert.equal(
+      await page.locator("#controls").getAttribute("aria-hidden"),
+      "true",
+    );
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await page.locator(":focus").getAttribute("id"), "timeline");
+    assert.equal(
+      await page.locator("#video").evaluate((v) => v.currentTime),
+      130,
+    );
+
+    await atTime(123.25);
+    await control("audio");
     await page
       .getByRole("button", { name: "Spanish stereo", exact: true })
       .waitFor();
@@ -304,7 +393,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page.locator("#video").evaluate((v) => v.currentTime),
       123.25,
     );
-    await page.locator("#subtitles").click();
+    await control("subtitles");
     await click("English subtitles");
     await started(3);
     assert.equal(infos().at(-1).body.SubtitleStreamIndex, 9);
@@ -317,7 +406,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         ),
     );
     await page.locator("#toggle").click();
-    await page.locator("#subtitles").click();
+    await control("subtitles");
     await click("Off");
     await started(4);
     assert.equal(infos().at(-1).body.SubtitleStreamIndex, -1);
@@ -326,13 +415,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       true,
       "Track switch preserves pause",
     );
-    await page.locator("#chapters").click();
+    await control("chapters");
     await click("5:00 · The discovery");
     assert.equal(
       await page.locator("#video").evaluate((v) => v.currentTime),
       300,
     );
-    await page.locator("#audio").click();
+    await control("audio");
     await page.keyboard.press("Escape");
     assert.equal(
       await page.locator("#player").evaluate((p) => p.hidden),
@@ -341,7 +430,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     await page.locator("#toggle").click();
     failSwitch = true;
-    await page.locator("#audio").click();
+    await control("audio");
     await click("English stereo");
     await page.getByText(/Could not change track/).waitFor();
     assert.equal(
@@ -356,7 +445,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     failSwitch = false;
     await page.keyboard.press("Escape");
     // Manual queue takes priority over automatic following episodes.
-    await page.locator("#queue").click();
+    await control("queue");
     await page
       .getByRole("heading", { name: "Following episodes", exact: true })
       .waitFor();
@@ -394,7 +483,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await click("Episode 1");
     await click("Play from beginning");
     await started(before + 2);
-    await page.locator("#queue").click();
+    await control("queue");
     await click("Autoplay next episodes: On");
     await click("Close");
     let e2Infos = infos().filter((r) => r.path.includes("/e2/")).length;
@@ -412,7 +501,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     await click("Play from beginning");
     await started(before + 3);
-    await page.locator("#queue").click();
+    await control("queue");
     await click("Autoplay next episodes: Off");
     await click("Close");
     await atTime(1800);
@@ -461,7 +550,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await click("Play from beginning");
     await started(before + 6);
     holdNegotiation = true;
-    await page.locator("#subtitles").click();
+    await control("subtitles");
     await click("English subtitles");
     await waitFor(() => !!releaseNegotiation);
     await page.keyboard.press("Escape");
@@ -496,7 +585,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "Language preference survives app restart",
     );
     assert.equal(infos().at(-1).body.SubtitleStreamIndex, -1);
-    await page.locator("#subtitles").click();
+    await control("subtitles");
     await click("Spanish subtitles");
     await started(++count);
     assert.equal((await saved()).Subtitle.language, "es");
@@ -671,6 +760,50 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page.locator("#playing-title").textContent(),
       /Episode 3/,
     );
+    await page.locator("#stop").click();
+    await page.locator("nav [data-nav=home]").click();
+    await click("Test show");
+    failSeasons = true;
+    await click("Choose season");
+    await page
+      .getByRole("button", { name: "Retry seasons", exact: true })
+      .waitFor();
+    failSeasons = false;
+    await click("Retry seasons");
+    await page
+      .locator(".season-choices button")
+      .filter({ hasText: "Specials" })
+      .waitFor();
+    assert.deepEqual(
+      await page.locator(".season-choices button").allTextContents(),
+      ["Specials", "Season 1", "Season 2"],
+    );
+    await click("Season 1");
+    await page.locator('[data-item="e2"]').waitFor();
+    assert.equal(
+      await page.locator('.season-picker [aria-pressed="true"]').textContent(),
+      "Season 1",
+    );
+    await page
+      .locator(".season-picker button")
+      .filter({ hasText: "Season 2" })
+      .click();
+    await page.locator('[data-item="e3"]').waitFor();
+    assert.equal(await page.locator('[data-item="e1"]').count(), 0);
+    await page.locator('[data-item="e3"]').click();
+    await page.keyboard.press("Escape");
+    await page.locator('[data-item="e3"]').waitFor();
+    assert.equal(
+      await page.locator('.season-picker [aria-pressed="true"]').textContent(),
+      "Season 2",
+      "Back restores selected season",
+    );
+    await page.locator('[data-item="e3"]').click();
+    await click("View seasons");
+    await page
+      .locator(".season-choices button")
+      .filter({ hasText: "Specials" })
+      .waitFor();
     assert.deepEqual(errors, []);
     console.log(
       "PASS: Up Next artwork/description, playback-time countdown, seek dismissal, cancellation, Still watching confirmation; audio/subtitle indices, Off, exact-position and paused switching, failure recovery, chapters, menu Back, queue reorder/priority, stop-before-start, autoplay toggle/season boundary/finale, cancelled-switch race, remembered languages across indices/restarts, missing-language fallback, account isolation and preference reset",

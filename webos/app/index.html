@@ -28,21 +28,61 @@
       <video id="video"></video>
       <div id="controls">
         <h2 id="playing-title"></h2>
-        <div id="timeline" aria-hidden="true">
-          <div id="timeline-fill"></div>
+        <div class="seek-row">
+          <p id="clock"></p>
+          <input
+            id="timeline"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value="0"
+            aria-label="Playback position"
+          />
+          <span id="remaining-time"></span>
         </div>
-        <p id="clock"></p>
-        <button id="toggle">Pause / Play</button
-        ><button id="rewind">Back 30 seconds</button
-        ><button id="forward">Forward 30 seconds</button
-        ><button id="fit">Fill screen</button>
-        <button id="audio">Audio</button>
-        <button id="subtitles">Subtitles</button>
-        <button id="chapters">Chapters</button>
-        <button id="queue">Queue</button>
-        <button id="next-video">Next</button>
-        <button id="playback-info">Playback info</button>
-        <button id="stop">Stop</button>
+        <div id="transport">
+          <div class="transport-main">
+            <button
+              id="rewind"
+              aria-label="Back 30 seconds"
+              title="Back 30 seconds"
+            ></button>
+            <button id="toggle" aria-label="Pause" title="Pause"></button>
+            <button
+              id="forward"
+              aria-label="Forward 30 seconds"
+              title="Forward 30 seconds"
+            ></button>
+            <button
+              id="next-video"
+              aria-label="Next video"
+              title="Next video"
+            ></button>
+          </div>
+          <div class="transport-tools">
+            <button
+              id="player-options"
+              aria-expanded="false"
+              aria-controls="player-tools"
+            >
+              Options
+            </button>
+            <button
+              id="stop"
+              aria-label="Stop playback"
+              title="Stop playback"
+            ></button>
+          </div>
+        </div>
+        <div id="player-tools" hidden>
+          <button id="audio">Audio</button>
+          <button id="subtitles">Subtitles</button>
+          <button id="chapters">Chapters</button>
+          <button id="queue">Queue</button>
+          <button id="fit">Fill screen</button>
+          <button id="playback-info">Playback info</button>
+        </div>
       </div>
       <section
         id="playback-panel"

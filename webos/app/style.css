@@ -512,19 +512,116 @@ body:not(.signed-in) main {
 #controls button {
   margin-right: 16px;
 }
-#clock {
-  font-size: 22px;
-  margin: 12px 0 20px;
+.seek-row {
+  display: flex;
+  align-items: center;
+  margin: 16px 0 24px;
+}
+#clock,
+#remaining-time {
+  font-size: 23px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#clock {
+  min-width: 200px;
+  margin: 0 24px 0 0;
+}
+#remaining-time {
+  min-width: 85px;
+  margin-left: 24px;
+  text-align: right;
 }
 #timeline {
-  height: 5px;
-  background: #555;
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+  width: auto;
+  height: 8px;
+  padding: 0;
+  margin: 12px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: #666;
+  background-image: linear-gradient(#bb86fc, #bb86fc);
+  background-repeat: no-repeat;
+  background-size: 0% 100%;
+  cursor: pointer;
 }
-#timeline-fill {
-  height: 100%;
-  width: 0;
-  background: #bb86fc;
+#timeline::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  background: #eee8f5;
+  border-radius: 50%;
+}
+#timeline:focus {
+  outline: 3px solid #bb86fc;
+  outline-offset: 8px;
+}
+#transport,
+.transport-main,
+.transport-tools {
+  display: flex;
+  align-items: center;
+}
+#transport {
+  justify-content: space-between;
+}
+#transport button {
+  min-height: 76px;
+}
+#transport button svg {
+  width: 32px;
+  height: 32px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  display: block;
+  margin: 0 auto;
+}
+#transport button span {
+  display: block;
+  font-size: 18px;
+  margin-top: 6px;
+}
+#transport #toggle {
+  min-width: 104px;
+  background: #ece7f6;
+  color: #211a2b;
+}
+#transport #toggle svg {
+  width: 36px;
+  height: 36px;
+}
+#transport #stop {
+  margin-right: 0;
+}
+#player-tools {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #555;
+}
+#player-tools button {
+  font-size: 24px;
+}
+.season-choices,
+.season-picker {
+  display: flex;
+  flex-wrap: wrap;
+}
+.season-choices button,
+.season-picker button {
+  margin: 0 16px 16px 0;
+}
+.season-picker {
+  margin-bottom: 16px;
+}
+.season-picker [aria-pressed="true"] {
+  background: #51405f;
+  border-color: #bb86fc;
 }
 [hidden] {
   display: none !important;

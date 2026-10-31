@@ -563,6 +563,8 @@
   }
   function libraryQuery(id, options, offset, type) {
     var sorts = {
+      "episode-asc": ["IndexNumber,SortName", "Ascending"],
+      "episode-desc": ["IndexNumber,SortName", "Descending"],
       "title-asc": ["SortName", "Ascending"],
       "title-desc": ["SortName", "Descending"],
       "release-desc": ["PremiereDate,SortName", "Descending"],

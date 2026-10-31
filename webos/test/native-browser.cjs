@@ -248,6 +248,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       }
       throw new Error("Condition not met");
     }
+    async function control(id) {
+      if (await page.locator("#player-tools").isHidden())
+        await page.locator("#player-options").click();
+      await page.locator("#" + id).click();
+    }
     const infos = () =>
       requests.filter(
         (r) => r.path.endsWith("/PlaybackInfo") && r.method === "POST",
@@ -271,7 +276,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       }, t);
     }
     async function info() {
-      await page.locator("#playback-info").click();
+      await control("playback-info");
       await page.locator(".playback-info").waitFor();
       return page.locator("#playback-panel").textContent();
     }
@@ -344,7 +349,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "Compatibility failure does not loop",
     );
     await play();
-    await page.locator("#subtitles").click();
+    await control("subtitles");
     await click("English subtitles");
     await waitFor(() => starts().at(-1).body.SubtitleStreamIndex === 9);
     assert.equal(
@@ -352,7 +357,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "Wholphin webOS (H.264 / AAC)",
       "Subtitle burn-in leaves the native HDR path",
     );
-    await page.locator("#subtitles").click();
+    await control("subtitles");
     await click("Off");
     await waitFor(() => starts().at(-1).body.SubtitleStreamIndex === -1);
     assert.ok(infos().at(-1).body.DeviceProfile.Name.includes("C1"));

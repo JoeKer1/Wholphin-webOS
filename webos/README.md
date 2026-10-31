@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.10_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.11_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.10_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.10_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.11_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -150,3 +150,9 @@ Account-scoped Settings offer countdown Off/15/30/60 seconds (default 30), and S
 ### v0.2.10 — LG packaged startup fix
 
 Explicitly permits local `file:` scripts, styles and images in the document security policy. The C1's Chromium 79 rejected `'self'` for these installed resources, leaving v0.2.9 blank before login. Remote and inline scripts remain blocked. Adds a startup smoke test for both source and extracted IPK contents.
+
+### v0.2.11 — Season selection and media controls
+
+Series details now offer Choose season, including Specials in numeric season order. Episode details offer View seasons. A season switcher remains above the continuous episode grid, with episode-number sorting by default and the selected season restored on Back. Season loading failures offer Retry.
+
+Playback now has icon-based play/pause, 30-second skip, Next and Stop controls, a focusable/clickable seek bar, elapsed/total time and time remaining. Audio, subtitles, chapters, queue, screen fit and diagnostics sit under Options. Left/Right on the seek bar moves ten seconds; Enter returns to play/pause. Hidden controls can be revealed with Enter or directional keys; Left/Right while hidden also seeks ten seconds. Controls fade during playback, remain visible while paused or using Options, and Back first closes Options or a playback panel, then hides controls before leaving playback on another Back. Live TV retains its disabled seek controls. Local browser tests cover seek input, remote navigation, Options focus, season retries/switching and Back restoration; validation on the physical TV is pending.

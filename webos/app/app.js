@@ -73,7 +73,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.10"' +
+      '", Version="0.2.11"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -176,6 +176,14 @@
       login();
       return;
     }
+    if (playing && !document.getElementById("player-tools").hidden) {
+      closePlayerTools();
+      return;
+    }
+    if (playing && document.getElementById("controls").style.opacity !== "0") {
+      hideControls();
+      return;
+    }
     if (playing) {
       await stop();
       return;
@@ -205,6 +213,12 @@
   }
   function navIcon(name) {
     var paths = {
+      play: "M8 4l13 8-13 8Z",
+      pause: "M8 4v16M16 4v16",
+      rewind: "M11 5L3 12l8 7V5M21 5l-8 7 8 7V5",
+      forward: "M3 5l8 7-8 7V5M13 5l8 7-8 7V5",
+      next: "M5 4l12 8-12 8ZM20 4v16",
+      stop: "M5 5h14v14H5Z",
       home: "M3 11L12 3l9 8M5 10v11h5v-7h4v7h5V10",
       search: "M21 21l-6-6M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0",
       favorites:
@@ -1409,7 +1423,7 @@
     var first = rows.querySelector("section:not([hidden]) button");
     if (first) first.focus();
   }
-  async function listing(id, title, focusControl) {
+  async function listing(id, title, focusControl, seasonContext) {
     var r = reset(title),
       controller = new AbortController(),
       disposed = false;
@@ -1423,7 +1437,12 @@
       { movies: "Movie,Video", tvshows: "Series" }[library.CollectionType];
     var key = accountKey("library:" + id),
       preferenceKey = "library-options:" + id;
-    var defaults = { sort: "title-asc", watched: "all", genre: "", year: "" };
+    var defaults = {
+      sort: seasonContext ? "episode-asc" : "title-asc",
+      watched: "all",
+      genre: "",
+      year: "",
+    };
     function fresh(options) {
       return {
         options: options,
@@ -1446,6 +1465,30 @@
     listingStates.set(key, state);
     while (listingStates.size > 3)
       listingStates.delete(listingStates.keys().next().value);
+    if (seasonContext) {
+      var picker = el("div", null, main);
+      picker.className = "season-picker";
+      picker.setAttribute("aria-label", "Season selection");
+      seasonContext.seasons.forEach(function (season) {
+        var choice = button(
+          season.Name || "Season " + season.IndexNumber,
+          function () {
+            var action = function () {
+              return listing(
+                season.Id,
+                seasonContext.title + " · " + season.Name,
+                false,
+                seasonContext,
+              );
+            };
+            stack[stack.length - 1].action = action;
+            return action();
+          },
+          picker,
+        );
+        choice.setAttribute("aria-pressed", String(season.Id === id));
+      });
+    }
     var toolbar = el("div", null, main);
     toolbar.className = "library-toolbar";
     var count = el("p", "", main);
@@ -1487,6 +1530,11 @@
       ["added-desc", "Date added (newest)"],
       ["added-asc", "Date added (oldest)"],
     ];
+    if (seasonContext)
+      sortOptions.unshift(
+        ["episode-asc", "Episode number (first to last)"],
+        ["episode-desc", "Episode number (last to first)"],
+      );
     function valid() {
       return !disposed && r === revision && holder.isConnected;
     }
@@ -1683,7 +1731,7 @@
       var replacement = fresh(options);
       replacement.facets = state.facets;
       listingStates.set(key, replacement);
-      return listing(id, title, control);
+      return listing(id, title, control, seasonContext);
     }
     function facets() {
       if (state.facets) return Promise.resolve(state.facets);
@@ -1937,6 +1985,63 @@
     };
     focusFirst();
   }
+  async function seasonChoices(seriesId) {
+    var data = await api(
+      "/Shows/" + encodeURIComponent(seriesId) + "/Seasons",
+      {
+        UserId: session.user,
+        IsMissing: false,
+        Fields: "ItemCounts,UserData",
+      },
+    );
+    return (data.Items || [])
+      .filter(function (season) {
+        return season.Id;
+      })
+      .sort(function (a, b) {
+        return (
+          (a.IndexNumber == null ? 9999 : a.IndexNumber) -
+          (b.IndexNumber == null ? 9999 : b.IndexNumber)
+        );
+      });
+  }
+  async function seasonsPage(seriesId, title) {
+    var r = reset(title + " · Seasons");
+    var holder = el("section", null, main);
+    holder.className = "season-choices";
+    el("p", "Loading seasons…", holder);
+    async function load() {
+      holder.textContent = "";
+      el("p", "Loading seasons…", holder);
+      try {
+        var seasons = await seasonChoices(seriesId);
+        if (r !== revision) return;
+        holder.textContent = "";
+        if (!seasons.length) el("p", "No seasons available.", holder);
+        seasons.forEach(function (season) {
+          button(
+            season.Name || "Season " + season.IndexNumber,
+            function () {
+              return go(function () {
+                return listing(season.Id, title + " · " + season.Name, false, {
+                  title: title,
+                  seasons: seasons,
+                });
+              });
+            },
+            holder,
+          );
+        });
+        focusFirst();
+      } catch (error) {
+        if (r !== revision) return;
+        holder.textContent = "";
+        el("p", "Could not load seasons. " + error.message, holder);
+        button("Retry seasons", load, holder).focus();
+      }
+    }
+    await load();
+  }
   async function detail(id, liveProgram) {
     var r = reset("Loading…");
     var item = await api(
@@ -1967,6 +2072,16 @@
         "Watch live",
         function () {
           return play(item, 0, false, true);
+        },
+        actions,
+      );
+    } else if (item.Type === "Series") {
+      button(
+        "Choose season",
+        function () {
+          return go(function () {
+            return seasonsPage(item.Id, item.Name);
+          });
         },
         actions,
       );
@@ -2025,6 +2140,17 @@
         "View playback queue",
         function () {
           return go(queuePage);
+        },
+        actions,
+      );
+    }
+    if (item.Type === "Episode" && item.SeriesId) {
+      button(
+        "View seasons",
+        function () {
+          return go(function () {
+            return seasonsPage(item.SeriesId, item.SeriesName || "Series");
+          });
         },
         actions,
       );
@@ -2316,6 +2442,7 @@
   }
   async function openPlaybackPanel(kind) {
     hideUpNext();
+    closePlayerTools();
     var active = playing;
     if (!active || (active.live && kind !== "queue" && kind !== "info")) return;
     var panel = document.getElementById("playback-panel"),
@@ -2528,12 +2655,12 @@
     if (!active || document.hidden) return;
     if (
       upNext.hidden ||
-      upNext.dataset.item !== next.Id ||
+      upNext.dataset.nextItem !== next.Id ||
       upNext.dataset.watching !== String(watching)
     ) {
       upNextFocus = document.activeElement;
       upNext.textContent = "";
-      upNext.dataset.item = next.Id;
+      upNext.dataset.nextItem = next.Id;
       upNext.dataset.watching = String(watching);
       var artwork = image(next, true);
       if (artwork) {
@@ -2563,6 +2690,9 @@
       upNext.hidden = false;
       upNext.querySelector("button").focus();
     }
+    upNext.style.bottom =
+      Math.max(260, document.getElementById("controls").offsetHeight + 24) +
+      "px";
     upNext.querySelector(".up-next-countdown").textContent = watching
       ? "Playback is paused until you choose."
       : "Starts in " + Math.max(0, Math.ceil(remaining)) + " seconds";
@@ -2961,6 +3091,7 @@
         return entry.Id !== item.Id;
       });
       hideUpNext();
+      closePlayerTools(false);
       closePlaybackPanel(false);
       updatePlaybackButtons();
       loadPlaybackExtras(playing);
@@ -3051,9 +3182,18 @@
     document.getElementById("clock").textContent = playing.live
       ? "Live"
       : formatTime(elapsed) + (duration ? " / " + formatTime(duration) : "");
-    document.getElementById("timeline-fill").style.width = duration
-      ? Math.min(100, (elapsed / duration) * 100) + "%"
-      : "0%";
+    var timeline = document.getElementById("timeline");
+    timeline.max = duration || 1;
+    timeline.value = Math.min(elapsed, duration || 0);
+    timeline.setAttribute(
+      "aria-valuetext",
+      formatTime(elapsed) + " of " + formatTime(duration),
+    );
+    timeline.style.backgroundSize =
+      (duration ? Math.min(100, (elapsed / duration) * 100) : 0) + "% 100%";
+    document.getElementById("remaining-time").textContent = duration
+      ? "−" + formatTime(duration - elapsed)
+      : "";
   };
   video.onerror = function () {
     if (
@@ -3086,14 +3226,14 @@
   };
   video.onpause = function () {
     showControls();
-    document.getElementById("toggle").textContent = "Play";
+    setTransportState(true);
     run(function () {
       return report("/Progress");
     });
   };
   video.onplay = function () {
     showControls();
-    document.getElementById("toggle").textContent = "Pause";
+    setTransportState(false);
     run(function () {
       return report("/Progress");
     });
@@ -3169,14 +3309,70 @@
       await detail(stopped.returnItem.Id, !!stopped.live);
     }
   }
+  function transportIcon(id, icon, label) {
+    var control = document.getElementById(id);
+    control.textContent = "";
+    control.appendChild(navIcon(icon));
+    el("span", label, control);
+    control.setAttribute("aria-label", label);
+    control.title = label;
+  }
+  function setTransportState(paused) {
+    transportIcon(
+      "toggle",
+      paused ? "play" : "pause",
+      paused ? "Play" : "Pause",
+    );
+  }
+  transportIcon("rewind", "rewind", "Back 30 seconds");
+  transportIcon("forward", "forward", "Forward 30 seconds");
+  transportIcon("next-video", "next", "Next video");
+  transportIcon("stop", "stop", "Stop playback");
+  setTransportState(false);
+  function closePlayerTools(restore) {
+    var tools = document.getElementById("player-tools"),
+      focused = tools.contains(document.activeElement);
+    tools.hidden = true;
+    document
+      .getElementById("player-options")
+      .setAttribute("aria-expanded", "false");
+    if (focused && restore !== false)
+      document.getElementById("player-options").focus();
+  }
+  document.getElementById("player-options").onclick = function () {
+    var tools = document.getElementById("player-tools");
+    if (!tools.hidden) closePlayerTools();
+    else {
+      tools.hidden = false;
+      this.setAttribute("aria-expanded", "true");
+      var first = tools.querySelector("button:not(:disabled)");
+      if (first) first.focus();
+    }
+    showControls();
+  };
+  function hideControls() {
+    document.getElementById("controls").style.opacity = "0";
+    document.getElementById("controls").style.pointerEvents = "none";
+    document.getElementById("controls").setAttribute("aria-hidden", "true");
+    if (document.getElementById("controls").contains(document.activeElement))
+      document.activeElement.blur();
+  }
   function showControls() {
     var controls = document.getElementById("controls");
     controls.style.opacity = "1";
+    controls.style.pointerEvents = "auto";
+    controls.removeAttribute("aria-hidden");
     clearTimeout(controlsTimer);
     if (playing)
       controlsTimer = setTimeout(function () {
-        if (!video.paused && document.getElementById("playback-panel").hidden)
-          controls.style.opacity = "0";
+        if (
+          !video.paused &&
+          !video.seeking &&
+          document.getElementById("playback-panel").hidden &&
+          document.getElementById("player-tools").hidden &&
+          upNext.hidden
+        )
+          hideControls();
       }, 3000);
   }
   player.addEventListener("mousemove", showControls);
@@ -3199,6 +3395,22 @@
       target = Math.min(target, video.duration);
     video.currentTime = target;
   }
+  document.getElementById("timeline").oninput = function () {
+    if (
+      !playing ||
+      !playing.started ||
+      playing.live ||
+      playing.awaitingWatching
+    )
+      return;
+    video.currentTime = Number(this.value);
+    showControls();
+  };
+  document.getElementById("timeline").onchange = function () {
+    run(function () {
+      return report("/Progress");
+    });
+  };
   document.getElementById("toggle").onclick = function () {
     run(toggle);
   };
@@ -3283,13 +3495,38 @@
       var controlsHidden =
         document.getElementById("controls").style.opacity === "0";
       showControls();
+      if (
+        !panelOpen &&
+        document.activeElement.id === "timeline" &&
+        (key === 37 || key === 39)
+      ) {
+        e.preventDefault();
+        seek(key === 37 ? -10 : 10);
+        return;
+      }
       if (controlsHidden && (key === 37 || key === 39)) {
         e.preventDefault();
-        seek(key === 37 ? -30 : 30);
+        seek(key === 37 ? -10 : 10);
+        document.getElementById("timeline").focus();
         return;
       }
       if (controlsHidden && key === 13) {
         e.preventDefault();
+        document.getElementById("toggle").focus();
+        return;
+      }
+      if (!panelOpen && controlsHidden && key >= 37 && key <= 40) {
+        e.preventDefault();
+        document.getElementById(key === 38 ? "timeline" : "toggle").focus();
+        return;
+      }
+      if (
+        !panelOpen &&
+        document.activeElement.id === "timeline" &&
+        key === 13
+      ) {
+        e.preventDefault();
+        document.getElementById("toggle").focus();
         return;
       }
       if (key === 415) {
