@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.9_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.10_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.9_all.i
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.9_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.10_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -146,3 +146,7 @@ See [native format limits, references, and the pending device test matrix](NATIV
 Up Next previews the next queued video or episode, including available artwork and description. The countdown follows the current video's remaining playback time; playback advances at its actual end. Play now advances immediately; Cancel or Back suppresses automatic advance for that video, including queued videos. Seeking away from the end hides the preview. Live TV does not show Up Next.
 
 Account-scoped Settings offer countdown Off/15/30/60 seconds (default 30), and Still watching Off/every 3/every 5 episodes (default 3). The latter waits at an episode boundary for Keep watching or Stop watching, with no unattended playback while unanswered. Explicit confirmation resets the episode count; track changes and Compatibility retries preserve it. Manual standalone playback starts a new count. Artwork/description depend on server metadata. Local mocked browser coverage verifies countdown timing, pause, seeking, cancellation and confirmation; physical TV validation is pending.
+
+### v0.2.10 — LG packaged startup fix
+
+Explicitly permits local `file:` scripts, styles and images in the document security policy. The C1's Chromium 79 rejected `'self'` for these installed resources, leaving v0.2.9 blank before login. Remote and inline scripts remain blocked. Adds a startup smoke test for both source and extracted IPK contents.

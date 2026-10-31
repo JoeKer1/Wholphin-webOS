@@ -33,3 +33,7 @@ Validation: 15 core tests, syntax checks, and six browser suites covering existi
 ## v0.2.8 diagnostics follow-up
 
 The playback panel requests `/Sessions` only on opening/refreshing it and filters results by current device/user/item and available play-session ID. Display fields are explicitly selected; media URLs, tokens, source paths and raw session JSON are not rendered. Unknown transcode-reason strings are not echoed. API redirect/referrer/cookie protections remain in effect. Closing the panel aborts its pending request, and lack of session-read permission degrades to source-only diagnostics. New preset choices are non-secret account-scoped local preferences. This follow-up has core and mocked-browser coverage, without a live server permission audit or TV execution.
+
+## 0.2.10 packaged startup correction
+
+On the LG C1's Chromium 79 runtime, the installed file-based page's `'self'` CSP source did not authorize its own local scripts or stylesheet. Browser security logs confirmed all three were blocked, preventing startup. Script, style and image directives now explicitly allow `file:` alongside `'self'`. This permits local-file resources (not a directory-specific allowlist); HTTP/HTTPS scripts, inline scripts, eval, objects, forms and base changes remain blocked. Server metadata is still rendered as text. A startup regression checks explicit file sources, login rendering and applied CSS, and confirms inline/remote scripts remain blocked; it can also run against extracted, minified IPK contents with `APP_DIR`.
