@@ -735,3 +735,33 @@ test("subtitle cues preserve absolute timing, overlap, seeks and delay without H
   );
   assert.throws(() => C.parseSubtitles("x".repeat(2097153)), /too large/);
 });
+
+test("Live TV now/next handles gaps, expired and duplicate listings per channel", () => {
+  const at = Date.parse("2026-10-31T12:00:00Z");
+  const p = (Id, ChannelId, start, end) => ({
+    Id,
+    ChannelId,
+    StartDate: new Date(at + start * 60000).toISOString(),
+    EndDate: new Date(at + end * 60000).toISOString(),
+  });
+  const current = p("now", "c", -20, 10),
+    next = p("next", "c", 15, 45);
+  const result = C.liveProgrammes(
+    [
+      next,
+      p("old", "c", -60, 0),
+      current,
+      current,
+      p("other", "d", -5, 5),
+      { Id: "bad", ChannelId: "c" },
+    ],
+    "c",
+    at,
+  );
+  assert.equal(result.current.Id, "now");
+  assert.equal(result.next.Id, "next");
+  assert.equal(C.liveProgrammes([next], "c", at).current, null);
+  assert.ok(Math.abs(C.liveProgress(current, at) - 200 / 3) < 1e-10);
+  assert.equal(C.liveProgress(current, at + 600000), 100);
+  assert.equal(C.liveProgress({}, at), 0);
+});

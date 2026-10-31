@@ -38,7 +38,8 @@
     panelReturnFocus = null,
     infoController = null,
     listingStates = new Map(),
-    activeListing = null;
+    activeListing = null,
+    activeGuide = null;
   var device = localStorage.getItem("wholphin-device");
   if (!device) {
     device = "webos-" + Math.random().toString(36).slice(2) + Date.now();
@@ -74,7 +75,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.12"' +
+      '", Version="0.2.13"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -163,6 +164,10 @@
   }
   function reset(title) {
     revision++;
+    if (activeGuide) {
+      activeGuide.dispose();
+      activeGuide = null;
+    }
     if (activeListing) {
       activeListing.dispose();
       activeListing = null;
@@ -326,7 +331,19 @@
       },
       "favorites",
     );
+    entry(
+      "Live TV",
+      "tv",
+      function () {
+        var state = {};
+        return go(function () {
+          return liveGuide(state);
+        });
+      },
+      "livetv",
+    );
     libraryItems.forEach(function (item) {
+      if (item.CollectionType === "livetv") return;
       entry(
         item.Name,
         item.CollectionType === "movies"
@@ -2028,6 +2045,590 @@
     };
     focusFirst();
   }
+  function guideTime(value) {
+    var date = new Date(value);
+    return Number.isFinite(date.getTime())
+      ? date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : "";
+  }
+  async function liveGuide(state) {
+    var r = reset("Live TV");
+    selectNav("livetv");
+    main.className = "live-guide-page";
+    var owner = accountKey("live-guide");
+    if (state.owner !== owner)
+      Object.assign(state, {
+        owner: owner,
+        channels: [],
+        next: 0,
+        done: false,
+        total: null,
+        cache: new Map(),
+        offset: 0,
+        at: Date.now(),
+        favorites: false,
+        scroll: 0,
+        focusChannel: null,
+        focusColumn: 0,
+      });
+    if (!state.offset && Date.now() - state.at > 60000) {
+      state.at = Date.now();
+      state.cache.clear();
+    }
+    var controller = new AbortController(),
+      disposed = false,
+      loading = false,
+      failed = false,
+      frame = null;
+    var rows = new Map(),
+      queued = new Set(),
+      jobs = [],
+      running = 0,
+      pendingFocus = null;
+    var toolbar = el("div", null, main);
+    toolbar.className = "guide-toolbar";
+    function reopen(channels) {
+      if (channels) {
+        state.channels = [];
+        state.next = 0;
+        state.done = false;
+        state.total = null;
+      }
+      state.at = Date.now() + state.offset * 3600000;
+      state.cache.clear();
+      state.scroll = 0;
+      return liveGuide(state);
+    }
+    button(
+      "Now",
+      function () {
+        state.offset = 0;
+        return reopen(false);
+      },
+      toolbar,
+    );
+    var earlier = button(
+      "Earlier",
+      function () {
+        state.offset = Math.max(0, state.offset - 2);
+        return reopen(false);
+      },
+      toolbar,
+    );
+    earlier.disabled = state.offset === 0;
+    var later = button(
+      "Later",
+      function () {
+        state.offset += 2;
+        return reopen(false);
+      },
+      toolbar,
+    );
+    later.disabled = state.offset >= 24;
+    var favoriteFilter = button(
+      state.favorites ? "Channels: Favorites" : "Channels: All",
+      function () {
+        state.favorites = !state.favorites;
+        return reopen(true);
+      },
+      toolbar,
+    );
+    favoriteFilter.setAttribute("aria-pressed", String(state.favorites));
+    button(
+      "Refresh guide",
+      function () {
+        return reopen(true);
+      },
+      toolbar,
+    );
+    el(
+      "p",
+      new Date(state.at).toLocaleString([], {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+      main,
+    ).className = "metadata";
+    var headers = el("div", null, main);
+    headers.className = "guide-headings";
+    el("span", "Channel · OK to watch", headers);
+    el("span", state.offset ? "At " + guideTime(state.at) : "Now", headers);
+    el("span", "Next", headers);
+    var count = el("p", "Loading channels…", main);
+    count.id = "guide-count";
+    count.setAttribute("role", "status");
+    var holder = el("div", null, main);
+    holder.id = "guide-channels";
+    var top = el("div", null, holder),
+      list = el("div", null, holder),
+      bottom = el("div", null, holder);
+    top.setAttribute("aria-hidden", "true");
+    bottom.setAttribute("aria-hidden", "true");
+    var loader = el("div", null, main);
+    loader.id = "guide-loading";
+    function valid() {
+      return !disposed && r === revision;
+    }
+    function itemButton(label, action, parent, channel, column, itemId) {
+      var control = button(label, action, parent);
+      control.dataset.channel = channel.Id;
+      control.dataset.column = column;
+      control.dataset.item = itemId;
+      return control;
+    }
+    function focusRow(index, column) {
+      if (!valid()) return;
+      var channel = state.channels[index];
+      if (!channel) {
+        pendingFocus = { index: index, column: column };
+        if (!loading && !failed && !state.done) run(loadChannels);
+        return;
+      }
+      var node = rows.get(channel.Id);
+      if (!node || !node.isConnected) {
+        main.scrollTop = Math.max(
+          0,
+          holder.offsetTop - main.offsetTop + index * 132 - 100,
+        );
+        render(index);
+        node = rows.get(channel.Id);
+      }
+      if (node) {
+        var target =
+          node.querySelector('[data-column="' + column + '"]') ||
+          node.querySelector("button");
+        if (target) focusContent(target);
+      }
+    }
+    function fillProgrammes(row, channel, result) {
+      var focused =
+        row.contains(document.activeElement) &&
+        document.activeElement.dataset.column;
+      var cells = row.querySelectorAll(".guide-programme");
+      cells.forEach(function (cell, index) {
+        cell.textContent = "";
+        var programme = index === 0 ? result.current : result.next;
+        if (!programme) {
+          el(
+            "p",
+            index === 0 ? "No programme listed" : "No upcoming listing",
+            cell,
+          );
+          return;
+        }
+        var control = itemButton(
+          "",
+          function () {
+            return go(function () {
+              return detail(programme.Id, true);
+            });
+          },
+          cell,
+          channel,
+          index + 1,
+          programme.Id,
+        );
+        el("span", programme.Name || "Untitled programme", control).className =
+          "guide-programme-title";
+        el(
+          "span",
+          guideTime(programme.StartDate) + " – " + guideTime(programme.EndDate),
+          control,
+        ).className = "guide-time";
+        if (!state.offset && index === 0) {
+          var progress = el("div", null, control);
+          progress.className = "guide-progress";
+          el("div", null, progress).style.width =
+            C.liveProgress(programme, state.at) + "%";
+        }
+      });
+      if (focused) {
+        var restore = row.querySelector('[data-column="' + focused + '"]');
+        if (restore) restore.focus();
+      }
+    }
+    function enqueue(channel, row) {
+      var cached = state.cache.get(channel.Id);
+      if (cached && Date.now() - cached.time < 60000) {
+        if (cached.error) guideError(row, channel);
+        else fillProgrammes(row, channel, cached.data);
+        return;
+      }
+      if (queued.has(channel.Id)) return;
+      queued.add(channel.Id);
+      jobs.push({ channel: channel, row: row });
+      pump();
+    }
+    function guideError(row, channel) {
+      var cells = row.querySelectorAll(".guide-programme");
+      cells[0].textContent = "";
+      cells[1].textContent = "";
+      el("p", "Guide unavailable", cells[0]);
+      itemButton(
+        "Retry guide",
+        function () {
+          state.cache.delete(channel.Id);
+          enqueue(channel, row);
+        },
+        cells[1],
+        channel,
+        2,
+        channel.Id + ":retry",
+      );
+    }
+    function pump() {
+      if (!valid()) return;
+      while (running < 2 && jobs.length) {
+        var job = jobs.shift();
+        job.row = rows.get(job.channel.Id) || job.row;
+        if (!job.row.isConnected) {
+          queued.delete(job.channel.Id);
+          continue;
+        }
+        running++;
+        (function (entry) {
+          api(
+            "/LiveTv/Programs",
+            {
+              UserId: session.user,
+              ChannelIds: entry.channel.Id,
+              MinEndDate: new Date(state.at).toISOString(),
+              MaxStartDate: new Date(state.at + 24 * 3600000).toISOString(),
+              SortBy: "StartDate",
+              SortOrder: "Ascending",
+              Limit: 24,
+              Fields: "Overview,ChannelInfo",
+              EnableImages: true,
+            },
+            null,
+            "GET",
+            { signal: controller.signal },
+          )
+            .then(function (data) {
+              if (!valid()) return;
+              var result = C.liveProgrammes(
+                data.Items,
+                entry.channel.Id,
+                state.at,
+              );
+              state.cache.set(entry.channel.Id, {
+                time: Date.now(),
+                data: result,
+              });
+              var target = rows.get(entry.channel.Id);
+              if (target && target.isConnected)
+                fillProgrammes(target, entry.channel, result);
+            })
+            .catch(function () {
+              if (!valid()) return;
+              state.cache.set(entry.channel.Id, {
+                time: Date.now(),
+                error: true,
+              });
+              var target = rows.get(entry.channel.Id);
+              if (target && target.isConnected)
+                guideError(target, entry.channel);
+            })
+            .finally(function () {
+              running--;
+              queued.delete(entry.channel.Id);
+              while (state.cache.size > 100)
+                state.cache.delete(state.cache.keys().next().value);
+              pump();
+            });
+        })(job);
+      }
+    }
+    function channelRow(channel) {
+      var row = el("div");
+      row.className = "guide-channel-row";
+      var station = el("div", null, row);
+      station.className = "guide-station";
+      var watch = itemButton(
+        "",
+        function () {
+          return play(
+            {
+              Id: channel.Id,
+              ChannelId: channel.Id,
+              ChannelName: channel.Name,
+              Name: channel.Name,
+              IsLiveChannel: true,
+            },
+            0,
+            false,
+            true,
+          );
+        },
+        station,
+        channel,
+        0,
+        channel.Id + ":watch",
+      );
+      watch.setAttribute("aria-label", "Watch " + channel.Name);
+      var logo = image(channel, true);
+      if (logo) {
+        var img = el("img", null, watch);
+        img.src = logo;
+        img.alt = "";
+        img.loading = "lazy";
+        img.width = 56;
+        img.height = 48;
+        img.onerror = function () {
+          img.hidden = true;
+        };
+      }
+      el(
+        "span",
+        (channel.ChannelNumber ? channel.ChannelNumber + " · " : "") +
+          channel.Name,
+        watch,
+      );
+      var favorite = itemButton(
+        "",
+        async function () {
+          if (favorite.disabled) return;
+          favorite.disabled = true;
+          try {
+            var remove = !!(channel.UserData && channel.UserData.IsFavorite);
+            await api(
+              "/Users/" +
+                session.user +
+                "/FavoriteItems/" +
+                encodeURIComponent(channel.Id),
+              null,
+              null,
+              remove ? "DELETE" : "POST",
+              { signal: controller.signal },
+            );
+            if (!valid()) return;
+            channel.UserData = Object.assign({}, channel.UserData, {
+              IsFavorite: !remove,
+            });
+            labelFavorite();
+            if (state.favorites && remove) return reopen(true);
+          } finally {
+            if (valid()) favorite.disabled = false;
+          }
+        },
+        station,
+        channel,
+        3,
+        channel.Id + ":favorite",
+      );
+      favorite.className = "guide-favorite";
+      function labelFavorite() {
+        var saved = !!(channel.UserData && channel.UserData.IsFavorite);
+        favorite.textContent = saved ? "★" : "☆";
+        favorite.setAttribute(
+          "aria-label",
+          (saved ? "Unfavorite " : "Favorite ") + channel.Name,
+        );
+        favorite.setAttribute("aria-pressed", String(saved));
+      }
+      labelFavorite();
+      for (var i = 0; i < 2; i++) {
+        var cell = el("div", null, row);
+        cell.className = "guide-programme";
+        el("p", "Loading…", cell);
+      }
+      return row;
+    }
+    function render(ensureIndex) {
+      if (!valid()) return;
+      var offset = Math.max(
+        0,
+        main.getBoundingClientRect().top - holder.getBoundingClientRect().top,
+      );
+      var first = Math.max(0, Math.floor(offset / 132) - 3);
+      if (ensureIndex != null) first = Math.max(0, ensureIndex - 3);
+      var end = Math.min(
+        state.channels.length,
+        first + Math.ceil(main.clientHeight / 132) + 7,
+      );
+      var keep = new Set(
+        state.channels.slice(first, end).map(function (c) {
+          return c.Id;
+        }),
+      );
+      rows.forEach(function (row, id) {
+        if (!keep.has(id)) {
+          row.remove();
+          rows.delete(id);
+        }
+      });
+      top.style.height = first * 132 + "px";
+      bottom.style.height = (state.channels.length - end) * 132 + "px";
+      var cursor = list.firstChild;
+      state.channels.slice(first, end).forEach(function (channel) {
+        var row = rows.get(channel.Id),
+          fresh = !row;
+        if (fresh) {
+          row = channelRow(channel);
+          rows.set(channel.Id, row);
+        }
+        if (row !== cursor) list.insertBefore(row, cursor);
+        cursor = row.nextSibling;
+        if (fresh) enqueue(channel, row);
+      });
+      count.textContent =
+        state.channels.length +
+        (state.total != null ? " of " + state.total : "") +
+        " channels";
+      if (!state.channels.length && state.done)
+        count.textContent = state.favorites
+          ? "No favorite channels. Switch to All to add favorites."
+          : "No Live TV channels available. Check your Jellyfin Live TV setup and account access.";
+    }
+    async function loadChannels() {
+      if (!valid() || loading || state.done) return;
+      loading = true;
+      failed = false;
+      loader.textContent = "Loading channels…";
+      try {
+        var data = await api(
+          "/LiveTv/Channels",
+          {
+            UserId: session.user,
+            StartIndex: state.next,
+            Limit: 24,
+            SortBy: "ChannelNumber,SortName",
+            SortOrder: "Ascending",
+            IsFavorite: state.favorites ? true : undefined,
+            AddCurrentProgram: true,
+            EnableUserData: true,
+            EnableImages: true,
+          },
+          null,
+          "GET",
+          { signal: controller.signal },
+        );
+        if (!valid()) return;
+        var items = data.Items || [],
+          ids = new Set(
+            state.channels.map(function (c) {
+              return c.Id;
+            }),
+          ),
+          added = 0;
+        items.forEach(function (c) {
+          if (c.Id && !ids.has(c.Id)) {
+            ids.add(c.Id);
+            state.channels.push(c);
+            added++;
+          }
+        });
+        if (items.length && !added)
+          throw new Error(
+            "The server returned duplicate channels. Retry to continue.",
+          );
+        state.next += items.length;
+        state.total = Number.isFinite(data.TotalRecordCount)
+          ? data.TotalRecordCount
+          : null;
+        state.done =
+          !items.length || (state.total != null && state.next >= state.total);
+        loader.textContent = "";
+        render();
+        if (pendingFocus) {
+          var pending = pendingFocus;
+          pendingFocus = null;
+          focusRow(pending.index, pending.column);
+        }
+      } catch (error) {
+        if (!valid()) return;
+        failed = true;
+        if (!state.channels.length) count.textContent = "No channels loaded";
+        loader.textContent = "";
+        el(
+          "p",
+          error.status === 403
+            ? "Live TV is unavailable for this account."
+            : "Could not load channels. " + error.message,
+          loader,
+        );
+        var retry = button("Retry channels", loadChannels, loader);
+        if (pendingFocus) retry.focus();
+      } finally {
+        loading = false;
+        if (valid() && !failed) schedule();
+      }
+    }
+    function tick() {
+      frame = null;
+      if (!valid()) return;
+      state.scroll = main.scrollTop;
+      render();
+      if (
+        main.scrollTop + main.clientHeight >= main.scrollHeight - 396 &&
+        !loading &&
+        !failed &&
+        !state.done
+      )
+        run(loadChannels);
+    }
+    function schedule() {
+      if (frame == null && valid()) frame = requestAnimationFrame(tick);
+    }
+    function remember(e) {
+      if (e.target.dataset.channel) {
+        state.focusChannel = e.target.dataset.channel;
+        state.focusColumn = Number(e.target.dataset.column);
+      }
+    }
+    main.addEventListener("scroll", schedule);
+    main.addEventListener("focusin", remember);
+    activeGuide = {
+      dispose: function () {
+        disposed = true;
+        controller.abort();
+        if (frame != null) cancelAnimationFrame(frame);
+        main.removeEventListener("scroll", schedule);
+        main.removeEventListener("focusin", remember);
+        jobs = [];
+      },
+      handleKey: function (key, node) {
+        if (!node.dataset.channel) return false;
+        var index = state.channels.findIndex(function (c) {
+            return c.Id === node.dataset.channel;
+          }),
+          column = Number(node.dataset.column);
+        if (key === 38 || key === 40) {
+          var next = index + (key === 38 ? -1 : 1);
+          if (next < 0) focusContent(toolbar.querySelector("button"));
+          else if (next < state.channels.length || !state.done)
+            focusRow(next, column);
+          return true;
+        }
+        if (key === 37 || key === 39) {
+          var row = node.closest(".guide-channel-row"),
+            order = [0, 3, 1, 2],
+            at = order.indexOf(column),
+            target = order[at + (key === 37 ? -1 : 1)];
+          if (target != null) {
+            var choice = row.querySelector('[data-column="' + target + '"]');
+            if (choice) focusContent(choice);
+          } else if (key === 37)
+            focusContent(nav.querySelector('[data-nav="livetv"]'));
+          return true;
+        }
+        return false;
+      },
+    };
+    render();
+    main.scrollTop = state.scroll;
+    render();
+    if (state.focusChannel) {
+      var index = state.channels.findIndex(function (c) {
+        return c.Id === state.focusChannel;
+      });
+      if (index >= 0) focusRow(index, state.focusColumn || 0);
+    } else focusFirst();
+    if (!state.channels.length) await loadChannels();
+  }
   async function seasonChoices(seriesId) {
     var data = await api(
       "/Shows/" + encodeURIComponent(seriesId) + "/Seasons",
@@ -2112,7 +2713,10 @@
     actions.className = "actions";
     if (item.IsLiveProgram) {
       button(
-        "Watch live",
+        Date.parse(item.StartDate) > Date.now() ||
+          Date.parse(item.EndDate) <= Date.now()
+          ? "Watch channel now"
+          : "Watch live",
         function () {
           return play(item, 0, false, true);
         },
@@ -3620,6 +4224,7 @@
     if (
       !options.transition &&
       stopped.started &&
+      !stopped.returnItem.IsLiveChannel &&
       revision === stoppedRevision &&
       !playing &&
       stopped.returnFocus &&
@@ -3886,6 +4491,7 @@
     )
       return;
     e.preventDefault();
+    if (!playing && activeGuide && activeGuide.handleKey(key, active)) return;
     if (!playing && activeListing && activeListing.handleKey(key, active))
       return;
     if (!playing && nav.contains(active)) {

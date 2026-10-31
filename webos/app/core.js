@@ -861,6 +861,47 @@
     ];
     return parts.filter(Boolean).join("  ·  ");
   }
+  function liveProgrammes(items, channelId, at) {
+    var seen = new Set();
+    var valid = (items || [])
+      .filter(function (item) {
+        var start = Date.parse(item.StartDate),
+          end = Date.parse(item.EndDate);
+        if (
+          !item.Id ||
+          item.ChannelId !== channelId ||
+          seen.has(item.Id) ||
+          !Number.isFinite(start) ||
+          !(end > start) ||
+          end <= at
+        )
+          return false;
+        seen.add(item.Id);
+        return true;
+      })
+      .sort(function (a, b) {
+        return Date.parse(a.StartDate) - Date.parse(b.StartDate);
+      });
+    return {
+      current:
+        valid.find(function (item) {
+          return (
+            Date.parse(item.StartDate) <= at && Date.parse(item.EndDate) > at
+          );
+        }) || null,
+      next:
+        valid.find(function (item) {
+          return Date.parse(item.StartDate) > at;
+        }) || null,
+    };
+  }
+  function liveProgress(programme, now) {
+    var start = programme && Date.parse(programme.StartDate),
+      end = programme && Date.parse(programme.EndDate);
+    return Number.isFinite(start) && end > start
+      ? Math.max(0, Math.min(100, ((now - start) / (end - start)) * 100))
+      : 0;
+  }
   function subtitleStyle(value) {
     value = value || {};
     function choice(key, values, fallback) {
@@ -985,6 +1026,8 @@
     return active.join("\n").slice(0, 2000);
   }
   var api = {
+    liveProgrammes: liveProgrammes,
+    liveProgress: liveProgress,
     subtitleStyle: subtitleStyle,
     textSubtitle: textSubtitle,
     parseSubtitles: parseSubtitles,

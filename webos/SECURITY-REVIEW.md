@@ -42,3 +42,7 @@ On the LG C1's Chromium 79 runtime, the installed file-based page's `'self'` CSP
 ## 0.2.12 subtitle rendering
 
 Subtitle extraction uses the same authenticated, redirect-rejecting, cookie-free API helper and 20-second body deadline. It is restricted to a constructed path on the configured server, pinned to the selected media source and stream index. The response is limited to 2 MiB and 20,000 parsed cues; displayed text is bounded and assigned via textContent, never innerHTML. VTT styles/scripts/markup are not executed. Appearance preferences accept only known color/size/background/position values and a bounded delay. Cues stay in playback memory, are released on Stop, and pending extraction shares playback cancellation. No subtitle URLs/tokens/cues are persisted in preferences, and no server files or user configuration are changed.
+
+## 0.2.13 Live TV guide
+
+Channel/programme requests use the existing authenticated helper, abort on navigation and reject stale revisions. Guide cache state is scoped to the current account and stays in memory. Programme/channel names use text nodes; image requests are constructed on the configured server. Browsing and Refresh do not open tuners or start playback. Favorites change only through explicit star-button activation. Only an explicit channel/Watch action starts live playback, using the existing negotiated stream and tuner cleanup path; selecting a future programme does not create a recording or scheduled action.

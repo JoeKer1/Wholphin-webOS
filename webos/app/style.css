@@ -1040,3 +1040,97 @@ body:not(.signed-in) main {
   background: #242126;
   margin: 16px 0;
 }
+
+.guide-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.guide-toolbar button {
+  margin: 0 16px 12px 0;
+  font-size: 24px;
+}
+.guide-headings,
+.guide-channel-row {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr) minmax(0, 1fr);
+  grid-gap: 20px;
+}
+.guide-headings {
+  padding: 12px 8px;
+  font-size: 24px;
+  border-bottom: 1px solid #65586e;
+}
+.guide-channel-row {
+  height: 132px;
+  padding: 8px;
+  border-bottom: 1px solid #39313f;
+  box-sizing: border-box;
+}
+.guide-station {
+  display: flex;
+  min-width: 0;
+}
+.guide-station > button:first-child {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  text-align: left;
+  font-size: 23px;
+  padding: 12px;
+}
+.guide-station img {
+  object-fit: contain;
+  margin-right: 12px;
+}
+.guide-station span {
+  max-height: 90px;
+  overflow: hidden;
+}
+.guide-favorite {
+  padding: 8px;
+  margin-left: 8px;
+  min-width: 46px;
+  font-size: 30px;
+}
+.guide-programme {
+  min-width: 0;
+}
+.guide-programme button {
+  width: 100%;
+  height: 100%;
+  text-align: left;
+  padding: 12px 16px;
+  overflow: hidden;
+}
+.guide-programme-title {
+  display: block;
+  font-size: 25px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.guide-time {
+  display: block;
+  font-size: 21px;
+  color: #d1c9d9;
+  margin-top: 8px;
+}
+.guide-programme p {
+  font-size: 23px;
+  margin: 12px;
+}
+.guide-progress {
+  height: 4px;
+  background: #52475d;
+  margin-top: 12px;
+}
+.guide-progress div {
+  height: 100%;
+  background: #bb86fc;
+}
+#guide-count {
+  font-size: 22px;
+  color: #d1c9d9;
+}

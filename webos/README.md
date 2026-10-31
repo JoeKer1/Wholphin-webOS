@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.12_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.13_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.12_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.12_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.13_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -165,3 +165,11 @@ Open **Settings → Subtitle appearance**, or **Options → Subtitles → Subtit
 TV styling supports SRT/SubRip and WebVTT, including server extraction of embedded text. ASS/SSA, PGS and DVD/image tracks retain original server rendering; appearance and delay controls do not affect those burned-in subtitles. Live TV continues using server rendering. TV text intentionally uses plain text and the chosen appearance rather than source cue markup/positioning. If extraction fails, times out, is oversized or returns no usable cues, playback falls back to server burn-in with a notice.
 
 Text is fetched from Jellyfin's authenticated [subtitle endpoint](https://github.com/jellyfin/jellyfin/blob/master/Jellyfin.Api/Controllers/SubtitleController.cs), with full absolute timestamps and no HLS time-map offset. Fetch/parse occurs before replacing the current stream. Video negotiation explicitly disables its subtitle track while the app displays cues, keeping the selected logical track for the picker, preferences and reports. Switching rendering mode preserves the playback position and pause state; appearance changes on an already-styled track apply without reloading video. Cancelling playback aborts pending extraction. Local tests cover timing/seek/overlap, plain-text safety, bounded parsing, mode/track switching, Off, bitmap/ASS preservation, paused resume, failure fallback and late-response cancellation. Physical TV subtitle-overlay validation is pending.
+
+### v0.2.13 — Live TV channel guide
+
+The sidebar now has a dedicated **Live TV** screen. Channel rows show numbers/logos, the programme on at the selected time, its progress when viewing Now, and the next programme. Select a channel to watch immediately, including channels with no EPG. Select a programme for details; future/finished programmes offer **Watch channel now**, which tunes the current broadcast rather than scheduling the selected show. This does not add DVR scheduling or catch-up playback.
+
+**Later/Earlier** move the reference time in two-hour steps, up to 24 hours ahead. **Now** returns to current listings. The displayed timestamp identifies the reference time; use Now or Refresh guide to update it. Favorites stars update Jellyfin channel favorites, with an All/Favorites filter. D-pad moves between channel rows and listing columns; Back returns from details to the guide. Direct channel playback returns to the guide on Stop and releases its tuner.
+
+Channels load continuously in batches of 24, with a bounded window of rendered rows. EPG requests are limited to nearby rows and two concurrent requests, with a small memory cache. A failing programme row offers Retry without blocking channel playback or other listings. Channel errors/permission failures offer Retry channels. Navigation cancels pending guide requests and stale responses cannot replace the next page. Uses Jellyfin's [Live TV channel/programme APIs](https://github.com/jellyfin/jellyfin/blob/master/Jellyfin.Api/Controllers/LiveTvController.cs). Local tests cover now/next selection, favorites, continuous loading, remote navigation, Back focus, lazy/bounded rendering, retries, denied access, no-EPG playback and tuner cleanup. Physical TV validation of the new guide is pending.

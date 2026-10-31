@@ -2,7 +2,7 @@
 
 An unofficial, experimental Jellyfin client for LG webOS TVs, inspired by [Wholphin for Android TV](https://github.com/damontecres/Wholphin). This repository contains the standalone webOS implementation; it does not require an Android build or a Jellyfin Web deployment.
 
-Current version: **0.2.12**. Developed for an LG C1 running webOS 6.5; other models are untested. This is not affiliated with or an official release of Wholphin, Jellyfin, or LG, and does not have feature parity with Android Wholphin.
+Current version: **0.2.13**. Developed for an LG C1 running webOS 6.5; other models are untested. This is not affiliated with or an official release of Wholphin, Jellyfin, or LG, and does not have feature parity with Android Wholphin.
 
 ## Features
 
@@ -10,6 +10,7 @@ Current version: **0.2.12**. Developed for an LG C1 running webOS 6.5; other mod
 - Continuous library browsing, season selection, sorting/filtering, search, favorites and item details.
 - Resume playback, audio/subtitle selection, remembered track languages, styled SRT/WebVTT subtitles with size/color/background/position/delay controls, chapters and playback queue.
 - Next-episode autoplay, Up Next previews/countdown and configurable Still watching confirmation.
+- Live TV now/next guide, channel favorites, later listings, continuous channel browsing and playback without EPG.
 - Conservative Compatibility playback by default; experimental opt-in LG C1 native HEVC/4K support and playback diagnostics.
 - Remote navigation, standard media controls with a seek bar and Options menu, Magic Remote pointer controls and lazy-loaded posters.
 
