@@ -75,7 +75,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.14"' +
+      '", Version="0.2.15"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -2892,31 +2892,82 @@
       actions,
     );
     button("Back", back, actions);
-    var people = (item.People || [])
-      .filter(function (person) {
-        return person.Type === "Actor";
-      })
-      .slice(0, 6);
+    var people = (item.People || []).filter(function (person) {
+      return person.Type === "Actor";
+    });
     if (people.length) {
       var cast = el("section", null, main);
       cast.className = "cast-section";
-      el("h2", "People", cast);
-      var row = el("div", null, cast);
+      el("h2", "Cast", cast);
+      var row = el("div", null, cast),
+        renderedCast = 0;
       row.className = "cast-row";
-      people.forEach(function (person) {
-        var figure = el("figure", null, row);
-        if (person.PrimaryImageTag) {
-          var img = el("img", null, figure);
-          img.src =
-            session.server +
-            "/Items/" +
-            person.Id +
-            "/Images/Primary?maxWidth=250";
-          img.alt = "";
+      row.setAttribute("role", "list");
+      row.setAttribute("aria-label", "Cast");
+      row.loadMoreCast = function () {
+        var end = Math.min(renderedCast + 8, people.length);
+        while (renderedCast < end) {
+          var index = renderedCast++,
+            person = people[index];
+          var figure = el("figure", null, row);
+          figure.tabIndex = 0;
+          figure.setAttribute("role", "listitem");
+          figure.setAttribute("aria-setsize", String(people.length));
+          figure.setAttribute("aria-posinset", String(index + 1));
+          figure.setAttribute(
+            "aria-label",
+            person.Name + (person.Role ? " as " + person.Role : ""),
+          );
+          if (person.PrimaryImageTag) {
+            var img = el("img", null, figure);
+            img.dataset.src =
+              session.server +
+              "/Items/" +
+              encodeURIComponent(person.Id) +
+              "/Images/Primary?maxWidth=250&quality=80&tag=" +
+              encodeURIComponent(person.PrimaryImageTag);
+            img.alt = "";
+            observePoster(img);
+          } else {
+            var placeholder = el("div", (person.Name || "?").charAt(0), figure);
+            placeholder.className = "cast-placeholder";
+            placeholder.setAttribute("aria-hidden", "true");
+          }
+          el("figcaption", person.Name, figure);
+          if (person.Role) el("p", person.Role, figure);
         }
-        el("figcaption", person.Name, figure);
-        if (person.Role) el("p", person.Role, figure);
+      };
+      row.loadMoreCast();
+      row.addEventListener("scroll", function () {
+        if (row.scrollWidth - row.clientWidth - row.scrollLeft < 480)
+          row.loadMoreCast();
       });
+      row.addEventListener("focusin", function (event) {
+        var figure = event.target.closest("figure");
+        if (!figure) return;
+        if (Number(figure.getAttribute("aria-posinset")) >= renderedCast - 2)
+          row.loadMoreCast();
+        loadPoster(figure.querySelector("img[data-src]"));
+        figure.scrollIntoView({ block: "nearest", inline: "nearest" });
+      });
+      row.addEventListener(
+        "wheel",
+        function (event) {
+          if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+          var target = Math.max(
+            0,
+            Math.min(
+              row.scrollWidth - row.clientWidth,
+              row.scrollLeft + event.deltaY,
+            ),
+          );
+          if (target !== row.scrollLeft) {
+            event.preventDefault();
+            row.scrollLeft = target;
+          }
+        },
+        { passive: false },
+      );
     }
     focusFirst();
   }
@@ -4614,6 +4665,43 @@
             ? contentFocus
             : main.querySelector("input,button,select"),
         );
+      return;
+    }
+    if (!playing && key === 40 && active.closest(".actions")) {
+      var detailCast = main.querySelector(".cast-row");
+      if (detailCast) {
+        detailCast.castReturnFocus = active;
+        focusContent(detailCast.querySelector("figure"));
+        return;
+      }
+    }
+    var castRow = !playing && active.closest(".cast-row");
+    if (castRow) {
+      var castCards = Array.prototype.slice.call(
+          castRow.querySelectorAll("figure"),
+        ),
+        castIndex = castCards.indexOf(active);
+      if (key === 37 || key === 39) {
+        if (key === 39 && castIndex >= castCards.length - 2) {
+          castRow.loadMoreCast();
+          castCards = Array.prototype.slice.call(
+            castRow.querySelectorAll("figure"),
+          );
+        }
+        var nextCast = castCards[castIndex + (key === 37 ? -1 : 1)];
+        if (nextCast) focusContent(nextCast);
+        else if (key === 37)
+          focusContent(
+            nav.querySelector('[aria-current="page"]') ||
+              nav.querySelector("button"),
+          );
+      } else if (key === 38) {
+        focusContent(
+          castRow.castReturnFocus && castRow.castReturnFocus.isConnected
+            ? castRow.castReturnFocus
+            : main.querySelector(".actions button"),
+        );
+      }
       return;
     }
     var rail = !playing && active.closest(".rail");

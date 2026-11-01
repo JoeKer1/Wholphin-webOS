@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.14_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.15_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.14_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.14_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.15_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -177,3 +177,7 @@ Channels load continuously in batches of 24, with a bounded window of rendered r
 ### v0.2.14 — Subtitle selection before playback
 
 Movie and episode details include a subtitle dropdown with available tracks, Off, and the default/remembered choice. Explicit choices apply to Play and Resume. Playback transport controls use ordered left/right remote navigation so Options stays reachable. Back exits playback and saves progress; the on-screen Stop button has been removed. Scrollbars are hidden throughout the TV interface while scrolling remains enabled.
+
+### v0.2.15 — Progressive cast browsing
+
+Details show the complete actor list in batches of eight instead of stopping at six. Portraits load near the viewport. Down from the actions enters the cast row, Left/Right follows cast order and keeps focus visible, and Up returns to the previous action. Horizontal pointer scrolling and the mouse wheel load more cast near the end. Missing portraits show an initial.

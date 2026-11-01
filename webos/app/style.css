@@ -436,13 +436,17 @@ form [role="alert"] {
 }
 .cast-row {
   display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px;
 }
 .cast-row figure {
   width: 210px;
   flex: 0 0 210px;
   margin: 0 32px 0 0;
 }
-.cast-row img {
+.cast-row img,
+.cast-placeholder {
   width: 200px;
   height: 200px;
   object-fit: cover;
@@ -692,7 +696,8 @@ body:not(.signed-in) main {
     width: 140px;
     flex-basis: 140px;
   }
-  .cast-row img {
+  .cast-row img,
+  .cast-placeholder {
     width: 130px;
     height: 130px;
   }
@@ -1144,4 +1149,15 @@ body:not(.signed-in) main {
 }
 .detail-subtitle-settings label {
   margin-right: 12px;
+}
+
+.cast-row figure:focus {
+  outline: 4px solid #a779ff;
+  outline-offset: 2px;
+}
+.cast-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 64px;
 }

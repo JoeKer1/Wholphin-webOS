@@ -239,7 +239,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       document.getElementById("video").currentTime = 90;
     });
     let details = detailRequests;
-    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { keyCode: 413, bubbles: true })));
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+      ),
+    );
     await waitFor(() => stopped().length === 1 && detailRequests > details);
     assert.equal(stopped()[0].body.PositionTicks, 900000000);
     // Simulate a newer bookmark from another client after the details screen loaded.
@@ -261,7 +265,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       document.getElementById("video").currentTime = 135;
     });
     details = detailRequests;
-    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { keyCode: 413, bubbles: true })));
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+      ),
+    );
     await waitFor(() => stopped().length === 2 && detailRequests > details);
     // HLS has an absolute media timeline: never add the requested 120 seconds again.
     assert.equal(stopped()[1].body.PositionTicks, 1350000000);
@@ -276,7 +284,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.waitForFunction(
       () => document.getElementById("video").readyState === 4,
     );
-    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { keyCode: 413, bubbles: true })));
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+      ),
+    );
     await page.locator("#player[hidden]").waitFor({ state: "attached" });
     assert.equal(started().length, 2);
     assert.equal(stopped().length, 2);
@@ -293,6 +305,70 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page
       .getByRole("button", { name: "Test movie", exact: true })
       .waitFor();
+    movie.People = Array.from({ length: 32 }, (_, i) => ({
+      Id: "person-" + i,
+      Name: "Actor " + (i + 1),
+      Role: "Character " + (i + 1),
+      Type: "Actor",
+      PrimaryImageTag: i === 3 ? null : "portrait",
+    }));
+    await page.getByRole("button", { name: "Test movie", exact: true }).click();
+    const cast = page.getByRole("list", { name: "Cast", exact: true });
+    await cast.waitFor();
+    assert.equal(
+      await cast.locator("figure").count(),
+      8,
+      "Only the first cast batch renders initially",
+    );
+    assert.equal(
+      requests.some((r) => r.path.includes("/person-31/Images/")),
+      false,
+      "Offscreen portraits stay unloaded",
+    );
+    await page.getByRole("button", { name: "Resume", exact: true }).focus();
+    await page.keyboard.press("ArrowDown");
+    assert.equal(
+      await page.locator(":focus").getAttribute("aria-posinset"),
+      "1",
+    );
+    for (let i = 1; i < 32; i++) await page.keyboard.press("ArrowRight");
+    assert.equal(
+      await page.locator(":focus").getAttribute("aria-label"),
+      "Actor 32 as Character 32",
+    );
+    assert.equal(await cast.locator("figure").count(), 32);
+    assert.ok(
+      await cast.evaluate((row) => row.scrollLeft > 0),
+      "The focused cast member scrolls into view",
+    );
+    await page.screenshot({ path: "/tmp/wholphin-cast-row.png" });
+    await page.keyboard.press("ArrowRight");
+    assert.equal(
+      await page.locator(":focus").getAttribute("aria-posinset"),
+      "32",
+      "Right stays at the final cast member",
+    );
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(
+      await page.locator(":focus").getAttribute("aria-posinset"),
+      "31",
+    );
+    await page.keyboard.press("ArrowUp");
+    assert.equal(await page.locator(":focus").textContent(), "Resume");
+    await cast.locator("figure").first().focus();
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(
+      await page.locator(":focus").getAttribute("aria-label"),
+      "Search",
+    );
+    await cast.evaluate((row) => {
+      row.scrollLeft = 0;
+    });
+    await cast.dispatchEvent("wheel", { deltaY: 500, deltaX: 0 });
+    assert.ok(
+      await cast.evaluate((row) => row.scrollLeft > 0),
+      "Pointer wheel scrolls the cast horizontally",
+    );
     await page.reload();
     await page.getByRole("heading", { name: "Home", exact: true }).waitFor();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
@@ -304,7 +380,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: direct and HLS resume, delayed seek retry, fresh server bookmarks, no double offset, failed seek preserves bookmark, fullscreen, navigation, search and sign out",
+      "PASS: direct and HLS resume, delayed seek retry, fresh server bookmarks, no double offset, failed seek preserves bookmark, fullscreen, navigation, search, progressive cast batches, lazy portraits, cast D-pad/focus/pointer scrolling and sign out",
     );
   } finally {
     await browser.close();
