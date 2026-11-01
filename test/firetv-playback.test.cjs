@@ -35,3 +35,14 @@ test('Native track selection converts server indices to embedded stream ordinals
  assert.deepEqual(F.tracks(selected,source,3,-1,null,true),{audio:0,subtitle:-1});
  assert.deepEqual(F.tracks({...selected,source:{Id:'changed'}},source,3,15,null,true),{unavailable:true});
 });
+test('HDR10 and eight-channel decoded Opus direct play require display HDR and decoder support',()=>{
+ const hdr=structuredClone(source);hdr.MediaStreams[0].VideoRangeType='HDR10';
+ const hardware={...caps,audio:['opus','ac3'],audioChannels:{opus:8,ac3:6},videoRanges:['SDR','HDR10','HLG']};
+ assert.equal(F.policy(hdr,{native:true},-1,hardware).native,true);
+ const p=F.profile(hardware,C.profile());
+ assert.ok(p.CodecProfiles.find(c=>c.Codec==='hevc').Conditions.some(c=>c.Property==='VideoRangeType'&&c.Value==='SDR|HDR10|HLG'));
+ assert.equal(p.CodecProfiles.find(c=>c.Codec==='opus').Conditions[0].Value,'8');
+ assert.equal(p.CodecProfiles.find(c=>c.Codec==='ac3').Conditions[0].Value,'6');
+ hdr.MediaStreams[0].VideoRangeType='DOVI';
+ assert.equal(F.policy(hdr,{native:true},-1,hardware).native,false);
+});

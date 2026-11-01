@@ -35,6 +35,7 @@
     homeController = null,
     cancelQuickConnect = null,
     queueItems = [],
+    playbackHistory = [],
     playRequest = 0,
     playController = null,
     panelReturnFocus = null,
@@ -142,7 +143,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.57"' +
+      '", Version="0.2.60"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -5947,6 +5948,8 @@
       !active || active.live || !C.tracks(active.source, "Subtitle").length;
     document.getElementById("chapters").disabled =
       !active || active.live || !C.chapters(active.item).length;
+    document.getElementById("previous-video").hidden = !!(active && active.live);
+    document.getElementById("previous-video").disabled = !active || active.live || !playbackHistory.length;
     document.getElementById("next-video").hidden = !!(active && active.live);
     document.getElementById("next-video").disabled =
       !active || active.live || (!queueItems.length && !active.episodes.length);
@@ -6353,7 +6356,10 @@
         showUpNext(next, 0, true);
         return;
       }
-      await play(next, 0, false, false, { episodeCount: active.episodeCount });
+      await play(next, 0, false, false, { episodeCount: active.episodeCount, preserveHistory: true });
+      playbackHistory.push(active.item);
+      if (playbackHistory.length > 100) playbackHistory.shift();
+      updatePlaybackButtons();
     } catch (error) {
       message("Could not play the next video. " + error.message);
       showControls();
@@ -6401,6 +6407,16 @@
       });
     };
   });
+  document.getElementById("previous-video").onclick = function () {
+    run(async function () {
+      if (!playing || playing.live || !playbackHistory.length) return;
+      var previous = playbackHistory[playbackHistory.length - 1], current = playing.item;
+      await play(previous, 0, false, false, { preserveHistory: true });
+      playbackHistory.pop();
+      queueItems.unshift(current);
+      updatePlaybackButtons();
+    });
+  };
   document.getElementById("next-video").onclick = function () {
     run(function () {
       return advancePlayback(true);
@@ -6496,6 +6512,7 @@
     }
     if (busy) return;
     busy = true;
+    if (!options.trackChange && !options.preserveHistory) playbackHistory = [];
     var wasLivePreview = livePreview && live;
     var request = ++playRequest,
       previous = playing,
@@ -6776,7 +6793,16 @@
         .getElementById("timeline")
         .setAttribute("aria-label", "Playback position");
       showControls();
-      document.getElementById("playing-title").textContent = item.Name;
+      document.getElementById("playing-title").textContent = item.SeriesName ? item.SeriesName + " · " + item.Name : item.Name;
+      document.getElementById("playing-year").textContent = item.ProductionYear || "";
+      var playerLogo = document.getElementById("player-logo"), logoId = C.logoItem(item);
+      playerLogo.hidden = true;
+      playerLogo.dataset.playingItem = item.Id;
+      playerLogo.onload = function () { if (playerLogo.dataset.playingItem === item.Id) playerLogo.hidden = false; };
+      playerLogo.onerror = function () { playerLogo.hidden = true; };
+      if (logoId) setImageSource(playerLogo, session.server + "/Items/" + encodeURIComponent(logoId) + "/Images/Logo?maxWidth=400&quality=90");
+      else playerLogo.removeAttribute("src");
+      document.getElementById("end-time").textContent = "";
       if (P.playbackTracks && video.configure)
         video.configure(P.playbackTracks(selected, sourceMetadata, playing.audioIndex, playing.subtitleIndex, subtitleCues, nativeMode));
       video.src = selected.url + (ticks ? "#t=" + ticks / 10000000 : "");
@@ -6892,7 +6918,8 @@
         (Number.isFinite(video.duration) ? video.duration : 0);
     document.getElementById("clock").textContent = playing.live
       ? "Live"
-      : formatTime(elapsed) + (duration ? " / " + formatTime(duration) : "");
+      : formatTime(elapsed);
+    document.getElementById("end-time").textContent = duration ? "Ends at " + new Date(Date.now() + Math.max(0, duration - elapsed) * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
     var timeline = document.getElementById("timeline");
     timeline.max = duration || 1;
     timeline.value = Math.min(elapsed, duration || 0);
@@ -7044,6 +7071,16 @@
   transportIcon("rewind", "rewind", "Back 30 seconds");
   transportIcon("forward", "forward", "Forward 30 seconds");
   transportIcon("next-video", "next", "Next video");
+  transportIcon("previous-video", "next", "Previous video");
+  [["player-options", "settings", "Options"], ["subtitles", "closed_caption", "Subtitles"], ["audio", "volume_up", "Audio"]].forEach(function (entry) {
+    var control = document.getElementById(entry[0]);
+    control.textContent = "";
+    var img = el("img", null, control);
+    img.src = "icons/" + entry[1] + ".svg";
+    img.alt = "";
+    control.setAttribute("aria-label", entry[2]);
+    control.title = entry[2];
+  });
   setTransportState(false);
   function closePlayerTools(restore) {
     var tools = document.getElementById("player-tools"),
@@ -7377,7 +7414,7 @@
         var buttons = Array.prototype.slice
             .call(transport.querySelectorAll("button"))
             .filter(function (node) {
-              return !node.disabled;
+              return !node.disabled && !node.hidden;
             }),
           index = buttons.indexOf(focused);
         if (key === 37 || key === 39)
@@ -7716,6 +7753,7 @@
   function updateWallClock() {
     document.getElementById("wall-clock").textContent =
       new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    document.getElementById("player-wall-clock").textContent = document.getElementById("wall-clock").textContent;
   }
   updateWallClock();
   setInterval(updateWallClock, 30000);

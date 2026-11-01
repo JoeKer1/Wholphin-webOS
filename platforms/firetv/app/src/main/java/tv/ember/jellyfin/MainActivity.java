@@ -58,6 +58,9 @@ public final class MainActivity extends Activity {
             View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         setContentView(R.layout.main);
         video = findViewById(R.id.native_player);
+        // Letterbox/pillarbox bars must remain true black, including HDR playback.
+        video.setBackgroundColor(Color.BLACK);
+        video.setShutterBackgroundColor(Color.BLACK);
         video.setDescendantFocusability(android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         web = findViewById(R.id.webview);
         web.setBackgroundColor(Color.TRANSPARENT);

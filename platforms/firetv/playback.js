@@ -15,9 +15,9 @@
       support = video && (caps.videos || []).find(function (v) { return v.codec === String(video.Codec).toLowerCase(); }),
       text = subtitle(source, index);
     if (!support || !(caps.audio || []).length) return { native: false, reason: "No matching device decoder capability" };
-    if ((video.VideoRangeType && video.VideoRangeType !== "SDR") || video.VideoRange === "HDR" ||
-        (!video.VideoRangeType && video.BitDepth > 8))
-      return { native: false, reason: "HDR uses Compatibility with the current video surface" };
+    var range = video.VideoRangeType || (video.VideoRange === "HDR" || video.BitDepth > 8 ? "UnknownHDR" : "SDR");
+    if ((caps.videoRanges || ["SDR"]).indexOf(range) < 0)
+      return { native: false, reason: "Video range is not supported by the connected display" };
     if (index >= 0 && (!text || text.IsExternal || embedded.indexOf(String(text.Codec).toLowerCase()) < 0))
       return { native: false, reason: "Selected subtitles require server conversion" };
     return { native: true, reason: "Fire TV device decoder and audio-route negotiation" };
@@ -26,14 +26,14 @@
     var videos = (caps.videos || []).filter(function (v) { return ["h264", "hevc", "vp9", "av1"].indexOf(v.codec) >= 0; }),
       audio = (caps.audio || []).filter(function (a) { return ["aac", "mp3", "flac", "opus", "vorbis", "ac3", "eac3"].indexOf(a) >= 0; }),
       channels = Math.max(2, Math.min(6, Number(caps.maxAudioChannels) || 2));
-    fallback.Name = "Fire TV Media3 (device capabilities, SDR)";
+    fallback.Name = "Fire TV Media3 (device capabilities)";
     fallback.MaxStreamingBitrate = 80000000;
     fallback.DirectPlayProfiles = [{ Container: "mkv,mp4,m4v,mov,webm,ts,mpegts", Type: "Video",
       VideoCodec: videos.map(function (v) { return v.codec; }).join(","), AudioCodec: audio.join(",") }];
     fallback.CodecProfiles = videos.map(function (v) {
       var conditions = [condition("Width", v.width), condition("Height", v.height),
         condition("VideoBitDepth", v.bitDepth), condition("VideoFramerate", v.frameRate),
-        condition("VideoBitrate", v.bitrate), condition("VideoRangeType", "SDR", "EqualsAny", false)];
+        condition("VideoBitrate", v.bitrate), condition("VideoRangeType", (v.bitDepth > 8 ? caps.videoRanges || ["SDR"] : ["SDR"]).join("|"), "EqualsAny", false)];
       if (v.codec === "h264") {
         conditions.push(condition("VideoLevel", v.level || 41));
         conditions.push(condition("VideoProfile", "baseline|constrained baseline|main|high", "EqualsAny", false));
@@ -45,7 +45,10 @@
       if (v.codec === "vp9") conditions.push(condition("VideoProfile", v.bitDepth > 8 ? "Profile0|Profile 0|Profile2|Profile 2" : "Profile0|Profile 0", "EqualsAny", false));
       return { Type: "Video", Codec: v.codec, Conditions: conditions };
     });
-    fallback.CodecProfiles.push({ Type: "VideoAudio", Codec: audio.join(","), Conditions: [condition("AudioChannels", channels)] });
+    audio.forEach(function (codec) {
+      var limit = (caps.audioChannels || {})[codec] || channels;
+      fallback.CodecProfiles.push({ Type: "VideoAudio", Codec: codec, Conditions: [condition("AudioChannels", Math.max(2, Math.min(8, limit)))] });
+    });
     var remux = videos.filter(function (v) { return v.codec === "h264" || v.codec === "hevc"; }).map(function (v) { return v.codec; });
     if (remux.length) fallback.TranscodingProfiles.unshift({ Container: "mp4", Type: "Video", VideoCodec: remux.join(","),
       AudioCodec: audio.filter(function (a) { return ["aac", "ac3", "eac3"].indexOf(a) >= 0; }).join(",") || "aac",

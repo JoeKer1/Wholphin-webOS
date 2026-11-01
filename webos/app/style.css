@@ -2009,3 +2009,27 @@ main.library-page.has-alphabet {
 .home-editor-actions button {
   margin-left: 16px;
 }
+
+/* Wholphin-style shared playback toolbar. */
+#controls { padding: 24px 64px 30px; }
+#controls h2 { margin-bottom: 6px; font-size: 30px; }
+#playing-year { margin: 0 0 20px; font-size: 23px; color: #ddd; }
+#end-time { position: absolute; right: 64px; top: 62px; margin: 0; font-size: 21px; }
+.seek-row { display: block; position: relative; padding-bottom: 30px; margin: 0 0 12px; }
+#timeline { display: block; width: 100%; margin: 12px 0; }
+#clock { position: absolute; left: 0; bottom: 0; min-width: 0; margin: 0; font-size: 21px; }
+#remaining-time { position: absolute; right: 0; bottom: 0; font-size: 21px; }
+#transport { position: relative; min-height: 72px; }
+.transport-main { position: absolute; left: 50%; transform: translateX(-50%); }
+.transport-tracks { display: flex; align-items: center; }
+#transport button { width: 64px; height: 64px; min-height: 64px; padding: 14px; border: 0; border-radius: 50%; margin: 0 10px; background: transparent; color: #eee; }
+#transport button:focus { background: var(--accent, #bb86fc); color: #171119; }
+#transport #toggle { background: var(--accent, #bb86fc); color: #171119; }
+#transport button span { display: none; }
+#transport button img { width: 32px; height: 32px; filter: invert(1); display: block; }
+#transport button:focus img { filter: none; }
+#previous-video svg { transform: rotate(180deg); }
+#player-heading { position: fixed; top: 32px; left: 64px; right: 64px; display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
+#player-logo { width: auto; height: 72px; max-width: 340px; object-fit: contain; object-position: left center; }
+#player-wall-clock { margin-left: auto; font-size: 25px; }
+#transport #toggle { width: 72px; min-width: 72px; height: 72px; min-height: 72px; padding: 18px; }

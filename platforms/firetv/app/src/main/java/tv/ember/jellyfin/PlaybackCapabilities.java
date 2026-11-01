@@ -5,6 +5,8 @@ import android.media.AudioFormat;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.os.Build;
+import android.view.Display;
+import android.view.WindowManager;
 import androidx.media3.exoplayer.audio.AudioCapabilities;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -58,6 +60,7 @@ final class PlaybackCapabilities {
                 }
             }
             JSONArray audio = new JSONArray();
+            JSONObject audioChannels = new JSONObject();
             AudioCapabilities output = AudioCapabilities.getCapabilities(context);
             String[][] formats = {{"aac","audio/mp4a-latm"}, {"mp3","audio/mpeg"},
                 {"flac","audio/flac"}, {"opus","audio/opus"}, {"vorbis","audio/vorbis"},
@@ -65,16 +68,29 @@ final class PlaybackCapabilities {
             for (String[] format : formats) {
                 boolean supported = format[0].equals("ac3") && output.supportsEncoding(AudioFormat.ENCODING_AC3) ||
                     format[0].equals("eac3") && output.supportsEncoding(AudioFormat.ENCODING_E_AC3);
+                int channels = supported ? output.getMaxChannelCount() : 2;
                 for (MediaCodecInfo decoder : decoders) {
                     if (decoder.isEncoder()) continue;
-                    for (String mime : decoder.getSupportedTypes()) if (mime.equalsIgnoreCase(format[1])) supported = true;
+                    for (String mime : decoder.getSupportedTypes()) if (mime.equalsIgnoreCase(format[1])) {
+                        supported = true;
+                        channels = Math.max(channels, decoder.getCapabilitiesForType(mime).getAudioCapabilities().getMaxInputChannelCount());
+                    }
                 }
-                if (supported) audio.put(format[0]);
+                if (supported) {
+                    audio.put(format[0]);
+                    audioChannels.put(format[0], Math.max(2, Math.min(8, channels)));
+                }
             }
             boolean surround = output.supportsEncoding(AudioFormat.ENCODING_AC3) || output.supportsEncoding(AudioFormat.ENCODING_E_AC3);
-            result.put("videos", videoCache).put("audio", audio)
+            JSONArray ranges = new JSONArray().put("SDR");
+            WindowManager manager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+            for (int type : manager.getDefaultDisplay().getHdrCapabilities().getSupportedHdrTypes()) {
+                if (type == Display.HdrCapabilities.HDR_TYPE_HDR10) ranges.put("HDR10");
+                if (type == Display.HdrCapabilities.HDR_TYPE_HLG) ranges.put("HLG");
+            }
+            result.put("videos", videoCache).put("audio", audio).put("audioChannels", audioChannels).put("videoRanges", ranges)
                 .put("maxAudioChannels", surround ? Math.min(6, output.getMaxChannelCount()) : 2)
-                .put("hdr", false); // TextureView/WebView preview composition stays SDR.
+                .put("hdr", ranges.length() > 1); // SurfaceView preserves native HDR output.
         } catch (Exception ignored) { /* Empty capabilities means compatibility playback. */ }
         return result;
     }

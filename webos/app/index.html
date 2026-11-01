@@ -33,7 +33,10 @@
       <video id="video"></video>
       <div id="live-preview-caption"></div>
       <div id="controls">
+        <div id="player-heading"><img id="player-logo" alt="" hidden /><time id="player-wall-clock"></time></div>
         <h2 id="playing-title"></h2>
+        <p id="playing-year"></p>
+        <p id="end-time"></p>
         <div class="seek-row">
           <p id="clock"></p>
           <input
@@ -48,7 +51,9 @@
           <span id="remaining-time"></span>
         </div>
         <div id="transport">
+          <div class="transport-tools"><button id="player-options" aria-expanded="false" aria-controls="player-tools">Options</button></div>
           <div class="transport-main">
+            <button id="previous-video" aria-label="Previous video" title="Previous video"></button>
             <button
               id="rewind"
               aria-label="Back 30 seconds"
@@ -66,19 +71,12 @@
               title="Next video"
             ></button>
           </div>
-          <div class="transport-tools">
-            <button
-              id="player-options"
-              aria-expanded="false"
-              aria-controls="player-tools"
-            >
-              Options
-            </button>
+          <div class="transport-tracks">
+            <button id="subtitles">Subtitles</button>
+            <button id="audio">Audio</button>
           </div>
         </div>
         <div id="player-tools" hidden>
-          <button id="audio">Audio</button>
-          <button id="subtitles">Subtitles</button>
           <button id="chapters">Chapters</button>
           <button id="queue">Queue</button>
           <button id="fit">Fill screen</button>

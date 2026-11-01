@@ -442,7 +442,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     assert.equal(
       await page.locator("#playing-title").textContent(),
-      "Episode 1",
+      "Test show · Episode 1",
     );
     failSwitch = false;
     await page.keyboard.press("Escape");
@@ -458,6 +458,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page.locator("#playing-title").textContent(),
       "Movie one",
     );
+    assert.equal(await page.locator("#previous-video").isEnabled(), true);
+    const beforePrevious = starts().length;
+    await page.locator("#previous-video").click();
+    await started(beforePrevious + 1);
+    assert.equal(await page.locator("#playing-title").textContent(), "Test show · Episode 1");
+    await page.locator("#next-video").click();
+    await started(beforePrevious + 2);
+    assert.equal(await page.locator("#playing-title").textContent(), "Movie one");
     const before = starts().length;
     await atTime(1800);
     await page
@@ -527,7 +535,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     assert.equal(
       await page.locator("#playing-title").textContent(),
-      "Episode 2",
+      "Test show · Episode 2",
     );
     await atTime(1800);
     await page
@@ -542,7 +550,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     assert.equal(infos().at(-1).body.SubtitleStreamIndex, -1);
     assert.equal(
       await page.locator("#playing-title").textContent(),
-      "Episode 3",
+      "Test show · Episode 3",
       "Autoplay crosses season boundary",
     );
     await atTime(1800);
@@ -850,7 +858,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
           .evaluate((n) => n === document.activeElement)
       )
         break;
-      await page.keyboard.press("ArrowRight");
+      await page.keyboard.press("ArrowLeft");
     }
     assert.equal(
       await page
