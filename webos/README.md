@@ -273,3 +273,7 @@ TV Recommended includes the current month’s holiday episode rows before Sugges
 ### v0.2.37 — Bottom row spacing
 
 Movie/TV libraries, category grids and details have extra bottom padding with a lower focus inset. Recommended rows have a larger trailing spacer so final posters and labels can scroll clear of the screen edge.
+
+### v0.2.38 — Bonfire profiles
+
+Optional Bonfire support adds Switch profile in Settings and, when detected, the sidebar. The picker shows avatars and requests a PIN when required by the server. Switching uses the server-issued profile session, clears content caches and keeps preferences scoped to the selected account. The original account credential is retained for profile management; full sign-out revokes both sessions. PINs are never saved. Profile creation and administration remain in Bonfire. Settings can retry discovery after the plugin is installed.

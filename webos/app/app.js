@@ -42,7 +42,8 @@
     activeListing = null,
     activeGuide = null,
     detailController = null,
-    detailRowObserver = null;
+    detailRowObserver = null,
+    bonfireAvailable = false;
   var device = localStorage.getItem("wholphin-device");
   if (!device) {
     device = "webos-" + Math.random().toString(36).slice(2) + Date.now();
@@ -134,7 +135,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.37"' +
+      '", Version="0.2.38"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -145,7 +146,7 @@
       signal = options.signal,
       timeout = setTimeout(function () {
         controller.abort();
-      }, 20000);
+      }, options.timeoutMs || 20000);
     function abort() {
       controller.abort();
     }
@@ -177,6 +178,17 @@
             : "Jellyfin request failed (" + response.status + ").",
         );
         error.status = response.status;
+        if (
+          options.profileErrors &&
+          [400, 403].indexOf(response.status) !== -1
+        ) {
+          var reason = (await response.text()).slice(0, 300);
+          try {
+            var parsed = JSON.parse(reason);
+            if (typeof parsed === "string") reason = parsed;
+          } catch (_) {}
+          if (reason) error.message = reason;
+        }
         throw error;
       }
       if (options.subtitleText) {
@@ -319,6 +331,11 @@
     if (activeGuide) activeGuide.focusChannel(playing.item.Id);
   }
   async function back() {
+    if (
+      main.classList.contains("profiles-page") &&
+      main.querySelector(".profile-pin-form")
+    )
+      return profilesPage();
     var moreMenu = document.getElementById("detail-more-options");
     if (moreMenu && !moreMenu.hidden && !playing) {
       moreMenu.hidden = true;
@@ -421,6 +438,7 @@
       session && session.token
         ? session.server +
           session.user +
+          String(bonfireAvailable) +
           JSON.stringify(
             libraryItems.map(function (item) {
               return [item.Id, item.Name, item.CollectionType];
@@ -445,6 +463,22 @@
       b.appendChild(navIcon(icon));
       el("span", label, b).className = "nav-label";
       return b;
+    }
+    if (bonfireAvailable) {
+      var profilesEntry = entry(
+        "Switch profile",
+        "settings",
+        function () {
+          return go(profilesPage);
+        },
+        "profiles",
+      );
+      var initial = el(
+        "span",
+        session.name ? session.name.charAt(0).toUpperCase() : "U",
+      );
+      initial.className = "profile-nav-initial";
+      profilesEntry.replaceChild(initial, profilesEntry.querySelector("svg"));
     }
     entry(
       "Search",
@@ -532,6 +566,13 @@
     reset("Settings");
     selectNav("settings");
     el("p", "Connected to " + session.server, main).className = "metadata";
+    button(
+      "Switch profile",
+      function () {
+        return go(profilesPage);
+      },
+      main,
+    );
     button(
       "Customize Home",
       function () {
@@ -651,10 +692,17 @@
           await stop();
         } catch (_) {}
         try {
-          await api("/Sessions/Logout", null, {}, "POST");
+          var root = profileAccount();
+          await Promise.allSettled([
+            api("/Sessions/Logout", null, {}, "POST"),
+            root.token !== session.token
+              ? api("/Sessions/Logout", null, {}, "POST", { session: root })
+              : Promise.resolve(),
+          ]);
         } catch (_) {}
         localStorage.removeItem("wholphin-session");
         session = null;
+        bonfireAvailable = false;
         stack = [];
         libraryItems = [];
         libraryUpdated = 0;
@@ -837,6 +885,239 @@
     cards(data.Items, main);
     focusFirst();
   }
+  function profileAccount() {
+    var root = session && session.profileAccount;
+    return root &&
+      root.server === session.server &&
+      typeof root.token === "string" &&
+      root.token &&
+      !/["\r\n]/.test(root.token)
+      ? root
+      : {
+          server: session.server,
+          token: session.token,
+          user: session.user,
+          name: session.name,
+        };
+  }
+  async function discoverBonfire() {
+    var current = session;
+    if (!current) return;
+    try {
+      var profiles = await api("/plugins/profiles/list", null, null, "GET", {
+        session: profileAccount(),
+        timeoutMs: 4000,
+      });
+      if (session !== current) return;
+      bonfireAvailable = Array.isArray(profiles);
+      navigation();
+    } catch (_) {
+      if (session === current) {
+        bonfireAvailable = false;
+        navigation();
+      }
+    }
+  }
+  async function profilesPage() {
+    if (playing) await stop();
+    var r = reset("Who's watching?"),
+      account = profileAccount(),
+      current = session;
+    selectNav("profiles");
+    main.className = "profiles-page";
+    var controller = new AbortController();
+    homeController = controller;
+    var content = el("div", null, main),
+      busy = false;
+    function valid() {
+      return (
+        r === revision && session === current && !controller.signal.aborted
+      );
+    }
+    async function switchTo(profile, pin, feedback, submit) {
+      if (busy || !valid()) return;
+      busy = true;
+      submit.disabled = true;
+      feedback.textContent = "Switching profile…";
+      var limited = false;
+      try {
+        var result = await api(
+          "/plugins/profiles/switch",
+          null,
+          { profileId: profile.profileUserId, pin: pin || undefined },
+          "POST",
+          { session: account, signal: controller.signal, profileErrors: true },
+        );
+        if (!valid()) return;
+        if (
+          !result ||
+          typeof result.activeProfileToken !== "string" ||
+          !result.activeProfileToken ||
+          /["\r\n]/.test(result.activeProfileToken) ||
+          typeof result.jellyfinUserId !== "string" ||
+          result.jellyfinUserId.replace(/-/g, "").toLowerCase() !==
+            profile.profileUserId.replace(/-/g, "").toLowerCase()
+        )
+          throw new Error("Bonfire returned an invalid profile session.");
+        await completeSignIn(
+          {
+            AccessToken: result.activeProfileToken,
+            User: { Id: result.jellyfinUserId, Name: profile.profileName },
+          },
+          { server: account.server, profileAccount: account },
+        );
+      } catch (error) {
+        if (!valid()) return;
+        limited = error.status === 429;
+        feedback.textContent = limited
+          ? "Too many PIN attempts. Wait 15 minutes before trying again."
+          : error.status === 401
+            ? "Your account session expired. Sign out and sign in again."
+            : error.message;
+      } finally {
+        busy = false;
+        if (valid()) submit.disabled = limited;
+      }
+    }
+    function pick(profile, card) {
+      if (busy) return;
+      if (!profile.requiresPin) {
+        switchTo(profile, "", feedback, card);
+        return;
+      }
+      grid.hidden = true;
+      feedback.textContent = "";
+      var form = el("form", null, content);
+      form.className = "profile-pin-form";
+      el("h2", profile.profileName, form);
+      var label = el("label", "Profile PIN", form),
+        input = el("input", null, form);
+      input.id = "profile-pin";
+      label.htmlFor = input.id;
+      input.type = "password";
+      input.inputMode = "numeric";
+      input.pattern = "[0-9]{4,8}";
+      input.minLength = 4;
+      input.maxLength = 8;
+      input.required = true;
+      input.autocomplete = "off";
+      var submit = el("button", "Unlock profile", form);
+      submit.type = "submit";
+      var error = el("p", "", form);
+      error.setAttribute("role", "status");
+      button(
+        "Cancel",
+        function () {
+          controller.abort();
+          return profilesPage();
+        },
+        form,
+      ).type = "button";
+      form.onsubmit = function (event) {
+        event.preventDefault();
+        var pin = input.value;
+        input.value = "";
+        if (!/^[0-9]{4,8}$/.test(pin)) {
+          error.textContent = "Enter a 4–8 digit PIN.";
+          return;
+        }
+        switchTo(profile, pin, error, submit);
+      };
+      input.focus();
+    }
+    var grid = el("div", null, content);
+    grid.className = "profile-grid";
+    var feedback = el("p", "Loading profiles…", content);
+    feedback.setAttribute("role", "status");
+    try {
+      var profiles = await api("/plugins/profiles/list", null, null, "GET", {
+        session: account,
+        signal: controller.signal,
+        timeoutMs: 5000,
+      });
+      if (!valid()) return;
+      if (!Array.isArray(profiles))
+        throw new Error("Bonfire did not return a profile list.");
+      bonfireAvailable = true;
+      navigation();
+      profiles
+        .filter(function (profile) {
+          return (
+            profile &&
+            typeof profile.profileUserId === "string" &&
+            profile.profileUserId &&
+            typeof profile.profileName === "string"
+          );
+        })
+        .forEach(function (profile) {
+          var card = button(
+            "",
+            function () {
+              pick(profile, card);
+            },
+            grid,
+          );
+          card.className = "profile-card";
+          card.setAttribute(
+            "aria-label",
+            profile.profileName + (profile.requiresPin ? ", PIN required" : ""),
+          );
+          var avatar = el(
+            "span",
+            profile.avatarInitial ||
+              profile.profileName.charAt(0).toUpperCase(),
+            card,
+          );
+          avatar.className = "profile-avatar";
+          if (/^#[0-9a-f]{6}$/i.test(profile.avatarColor || ""))
+            avatar.style.backgroundColor = profile.avatarColor;
+          if (profile.profileImage) {
+            var url = profile.profileImage;
+            if (url.indexOf("/plugins/profiles/") === 0)
+              url = account.server + url;
+            try {
+              var parsed = new URL(url);
+              if (
+                ["http:", "https:"].indexOf(parsed.protocol) !== -1 &&
+                !parsed.username &&
+                !parsed.password
+              ) {
+                var img = el("img", null, avatar);
+                img.src = parsed.href;
+                img.alt = "";
+                img.referrerPolicy = "no-referrer";
+                img.onerror = function () {
+                  img.remove();
+                };
+              }
+            } catch (_) {}
+          }
+          el("span", profile.profileName, card).className = "profile-name";
+          if (profile.requiresPin)
+            el("span", "PIN required", card).className = "profile-note";
+          if (
+            profile.profileUserId.replace(/-/g, "").toLowerCase() ===
+            session.user.replace(/-/g, "").toLowerCase()
+          )
+            el("span", "Current profile", card).className = "profile-note";
+        });
+      feedback.textContent = grid.children.length
+        ? ""
+        : "No profiles are available for this account.";
+    } catch (error) {
+      if (!valid()) return;
+      feedback.textContent =
+        [404, 405].indexOf(error.status) !== -1
+          ? "Bonfire is not available on this server. Install the plugin, then retry."
+          : error.status === 401
+            ? "Your account session expired. Sign out and sign in again."
+            : "Could not load Bonfire profiles. Try again.";
+      button("Retry profiles", profilesPage, content);
+    }
+    if (!valid()) return;
+    button("Back", back, content);
+    focusFirst();
+  }
   async function completeSignIn(result, context) {
     if (
       !result ||
@@ -854,6 +1135,7 @@
       user: result.User.Id,
       name: result.User.Name || "",
     };
+    if (context.profileAccount) session.profileAccount = context.profileAccount;
     homeCache.clear();
     previewCache.clear();
     queueItems = [];
@@ -865,6 +1147,7 @@
     navigation();
     stack = [];
     await go(home);
+    discoverBonfire();
   }
   async function quickConnect(server) {
     var context = { server: C.serverUrl(server) };
@@ -6663,7 +6946,9 @@
   }
   if (session && session.token)
     run(function () {
-      return go(home);
+      var ready = go(home);
+      discoverBonfire();
+      return ready;
     });
   else login();
 })();
