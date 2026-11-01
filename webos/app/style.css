@@ -1626,3 +1626,27 @@ body:not(.signed-in) main {
 .profiles-page {
   padding-bottom: 160px;
 }
+
+.profiles-page[data-profile-theme="harvest"] {
+  --profile-bg: #2a150b;
+  --profile-ring: #ffd9a8;
+  --profile-focus: #60371d;
+}
+.profiles-page[data-profile-theme="snowfall"] {
+  --profile-bg: #0f2238;
+  --profile-ring: #ffffff;
+  --profile-focus: #244967;
+}
+.profiles-page[data-profile-theme="bloom"] {
+  --profile-bg: #11301f;
+  --profile-ring: #ffd1e3;
+  --profile-focus: #275338;
+}
+.profiles-page[data-profile-theme]:not([data-profile-theme=""]) {
+  background: var(--profile-bg);
+}
+.profiles-page[data-profile-theme]:not([data-profile-theme=""]) button:focus {
+  outline-color: var(--profile-ring);
+  background: var(--profile-focus);
+  color: #fff;
+}

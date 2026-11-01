@@ -59,8 +59,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       if (u.pathname === "/plugins/profiles/list") {
         if (!available) return route.fulfill({ status: 404, json: {} });
         assert.ok(
-          auth.includes('Token="master-token"'),
-          "Profile management uses the parent credential",
+          auth.includes('Token="master-token"') ||
+            auth.includes('Token="kid-token"'),
+          "Profile requests use the active valid credential",
         );
         return route.fulfill({
           json: profiles.map((p) =>
@@ -76,7 +77,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       if (u.pathname.startsWith("/plugins/profiles/image/"))
         return route.fulfill({ status: 404, body: "" });
       if (u.pathname === "/plugins/profiles/switch") {
-        assert.ok(auth.includes('Token="master-token"'));
+        assert.ok(
+          auth.includes('Token="master-token"') ||
+            auth.includes('Token="kid-token"'),
+        );
         if (mode === "limited")
           return route.fulfill({ status: 429, body: "Too many attempts" });
         if (mode === "invalid")
@@ -139,6 +143,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
             user: "master",
             token: "master-token",
             name: "Parent",
+            profileAccount: {
+              server: "https://jellyfin.test",
+              user: "master",
+              token: "expired-original-token",
+            },
           }),
         ),
     );
@@ -146,12 +155,17 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       path.resolve(__dirname, "../app/index.html"),
     ).href;
     await page.goto(app);
-    await page.locator("nav [data-nav=profiles]").waitFor();
-    await page.locator("nav [data-nav=profiles]").click();
+    await page
+      .getByRole("heading", { name: "Who's watching?", exact: true })
+      .waitFor();
     await page
       .getByRole("button", { name: "Kids, PIN required", exact: true })
       .waitFor();
     assert.equal(await page.locator(".profile-card").count(), 3);
+    assert.ok(
+      !requests.some((r) => r.auth.includes("expired-original-token")),
+      "Expired legacy management token is discarded",
+    );
     assert.equal(
       await page.locator('.profile-avatar img[src^="javascript:"]').count(),
       0,
@@ -195,14 +209,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       JSON.parse(localStorage.getItem("wholphin-session")),
     );
     assert.equal(stored.token, "kid-token");
-    assert.equal(stored.profileAccount.token, "master-token");
+    assert.equal(stored.profileAccount, undefined);
     assert.ok(
       !JSON.stringify(stored).includes("9797"),
       "PIN is never persisted",
     );
     await page.reload();
-    await page.locator("nav [data-nav=profiles]").waitFor();
-    await page.locator("nav [data-nav=profiles]").click();
+    await page
+      .getByRole("heading", { name: "Who's watching?", exact: true })
+      .waitFor();
     await page
       .getByRole("button", { name: "Parent, PIN required", exact: true })
       .click();
@@ -281,9 +296,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.getByRole("button", { name: "Sign in", exact: true }).waitFor();
     const logouts = requests.filter((r) => r.path === "/Sessions/Logout");
     assert.ok(
-      logouts.some((r) => r.auth.includes("kid-token")) &&
-        logouts.some((r) => r.auth.includes("master-token")),
-      "Sign out revokes both saved sessions",
+      logouts.some((r) => r.auth.includes("kid-token")),
+      "Sign out revokes the active session",
     );
     assert.equal(
       await page.evaluate(() => localStorage.getItem("wholphin-session")),
@@ -291,7 +305,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: Bonfire detection, avatars, PIN error/rate limit, profile-scoped content, parent management credential isolation, reload, cancellation, malformed session rejection, missing plugin/retry and full sign out",
+      "PASS: Bonfire detection, avatars, PIN error/rate limit, profile-scoped content, active session management and startup picker, reload, cancellation, malformed session rejection, missing plugin/retry and full sign out",
     );
   } finally {
     await browser.close();

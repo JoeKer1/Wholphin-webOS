@@ -15,7 +15,7 @@
       url = new URL(address);
     } catch (_) {
       throw new Error(
-        "Enter a server address such as 192.168.1.20:8096 or https://media.example.com.",
+        "Enter a server address such as 192.168.50.243:8096 or https://media.example.com.",
       );
     }
     if (
@@ -1025,7 +1025,41 @@
     }
     return active.join("\n").slice(0, 2000);
   }
+  function profileHolidayTheme(now) {
+    var date = now || new Date(),
+      year = date.getFullYear(),
+      month = date.getMonth(),
+      day = date.getDate();
+    var thanksgiving = 22 + ((4 - new Date(year, 10, 22).getDay() + 7) % 7);
+    if (
+      (month === 9 && day >= 17) ||
+      (month === 10 && day <= 2) ||
+      (month === 10 && day >= thanksgiving - 14 && day <= thanksgiving + 2)
+    )
+      return "harvest";
+    if ((month === 11 && day >= 11) || (month === 0 && day <= 2))
+      return "snowfall";
+    // Gregorian Easter, using the anonymous computus.
+    var a = year % 19,
+      b = Math.floor(year / 100),
+      c = year % 100,
+      d = Math.floor(b / 4),
+      e = b % 4,
+      f = Math.floor((b + 8) / 25),
+      g = Math.floor((b - f + 1) / 3),
+      h = (19 * a + b - d - g + 15) % 30,
+      i = Math.floor(c / 4),
+      k = c % 4,
+      l = (32 + 2 * e + 2 * i - h - k) % 7,
+      m = Math.floor((a + 11 * h + 22 * l) / 451),
+      n = h + l - 7 * m + 114,
+      easter = new Date(year, Math.floor(n / 31) - 1, (n % 31) + 1),
+      today = new Date(year, month, day),
+      delta = Math.round((today - easter) / 86400000);
+    return delta >= -14 && delta <= 2 ? "bloom" : "";
+  }
   var api = {
+    profileHolidayTheme: profileHolidayTheme,
     liveProgrammes: liveProgrammes,
     liveProgress: liveProgress,
     subtitleStyle: subtitleStyle,

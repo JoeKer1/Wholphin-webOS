@@ -277,3 +277,9 @@ Movie/TV libraries, category grids and details have extra bottom padding with a 
 ### v0.2.38 — Bonfire profiles
 
 Optional Bonfire support adds Switch profile in Settings and, when detected, the sidebar. The picker shows avatars and requests a PIN when required by the server. Switching uses the server-issued profile session, clears content caches and keeps preferences scoped to the selected account. The original account credential is retained for profile management; full sign-out revokes both sessions. PINs are never saved. Profile creation and administration remain in Bonfire. Settings can retry discovery after the plugin is installed.
+
+### v0.2.39 — Startup profiles and seasonal picker
+
+Bonfire profiles appear at startup and after Jellyfin sign-in. Profile list/switch requests use the current scoped session: Bonfire resolves its household server-side. Legacy saved original credentials are discarded, fixing switching after the original token expires. PIN requirements remain enforced by Bonfire.
+
+The TV profile picker automatically uses Bonfire-inspired Harvest colors October 17–November 2 and from two weeks before US Thanksgiving through two days afterward; Snowfall December 11–January 2; Bloom two weeks before Gregorian Easter through two days afterward. Outside those windows the normal picker returns. This appearance is local to the TV app and does not overwrite server profile themes.

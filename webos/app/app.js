@@ -51,6 +51,10 @@
   }
   try {
     session = JSON.parse(localStorage.getItem("wholphin-session"));
+    if (session && session.profileAccount) {
+      delete session.profileAccount;
+      localStorage.setItem("wholphin-session", JSON.stringify(session));
+    }
   } catch (_) {}
   function el(tag, text, parent) {
     var node = document.createElement(tag);
@@ -135,7 +139,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.38"' +
+      '", Version="0.2.39"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -239,6 +243,7 @@
     if (node) node.focus();
   }
   function reset(title) {
+    main.removeAttribute("data-profile-theme");
     if (livePreview && title !== "Live TV") run(stop);
     revision++;
     if (detailController) {
@@ -894,20 +899,31 @@
     return normalized;
   }
   function profileAccount() {
-    var root = session && session.profileAccount;
-    return root &&
-      root.server === session.server &&
-      typeof root.token === "string" &&
-      root.token &&
-      !/["\r\n]/.test(root.token)
-      ? root
-      : {
-          server: session.server,
-          token: session.token,
-          user: session.user,
-          name: session.name,
-        };
+    return {
+      server: session.server,
+      token: session.token,
+      user: session.user,
+      name: session.name,
+    };
   }
+  async function startSession() {
+    var current = session;
+    reset("Loading profiles…");
+    try {
+      var profiles = await api("/plugins/profiles/list", null, null, "GET", {
+        session: profileAccount(),
+        timeoutMs: 4000,
+      });
+      if (session !== current) return;
+      bonfireAvailable = Array.isArray(profiles);
+      if (bonfireAvailable && profiles.length) return go(profilesPage);
+    } catch (_) {
+      if (session !== current) return;
+      bonfireAvailable = false;
+    }
+    return go(home);
+  }
+
   async function discoverBonfire() {
     var current = session;
     if (!current) return;
@@ -933,6 +949,7 @@
       current = session;
     selectNav("profiles");
     main.className = "profiles-page";
+    main.dataset.profileTheme = C.profileHolidayTheme();
     var controller = new AbortController();
     homeController = controller;
     var content = el("div", null, main),
@@ -1145,7 +1162,7 @@
       user: result.User.Id,
       name: result.User.Name || "",
     };
-    if (context.profileAccount) session.profileAccount = context.profileAccount;
+
     homeCache.clear();
     previewCache.clear();
     queueItems = [];
@@ -1156,8 +1173,10 @@
     localStorage.setItem("wholphin-session", JSON.stringify(session));
     navigation();
     stack = [];
-    await go(home);
-    discoverBonfire();
+    if (context.profileAccount) {
+      await go(home);
+      discoverBonfire();
+    } else await startSession();
   }
   async function quickConnect(server) {
     var context = { server: C.serverUrl(server) };
@@ -6956,9 +6975,7 @@
   }
   if (session && session.token)
     run(function () {
-      var ready = go(home);
-      discoverBonfire();
-      return ready;
+      return startSession();
     });
   else login();
 })();
