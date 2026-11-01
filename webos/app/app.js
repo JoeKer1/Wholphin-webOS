@@ -112,7 +112,13 @@
         img.alt = "";
       }
     }
-    text.textContent = label;
+    if (text.textContent !== label) {
+      text.textContent = label;
+      text.style.setProperty(
+        "--action-label-width",
+        Math.ceil(text.scrollWidth) + "px",
+      );
+    }
   }
   function message(text) {
     status.textContent = text || "";
@@ -128,7 +134,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.35"' +
+      '", Version="0.2.36"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -1553,11 +1559,23 @@
                   type: "Series",
                   filter: { IsPlayed: false, SortBy: "Random" },
                 },
-              ].map(function (row) {
-                row.parent = tvLibraryItem.Id;
-                row.key = "tv:" + tvLibraryItem.Id + ":" + row.title;
-                return row;
-              })
+              ]
+                .reduce(function (plan, row) {
+                  if (row.title === "Suggestions")
+                    plan = plan.concat(
+                      C.holidayRows().filter(function (holiday) {
+                        return holiday.type === "Episode";
+                      }),
+                    );
+                  plan.push(row);
+                  return plan;
+                }, [])
+                .map(function (row) {
+                  row.parent = tvLibraryItem.Id;
+                  row.key =
+                    "tv:" + tvLibraryItem.Id + ":" + (row.key || row.title);
+                  return row;
+                })
             : C.homeRows(libraryItems, options),
       queue = [],
       active = 0;

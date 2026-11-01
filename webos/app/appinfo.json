@@ -1,6 +1,6 @@
 {
   "id": "com.github.damontecres.wholphin.webos",
-  "version": "0.2.35",
+  "version": "0.2.36",
   "vendor": "Wholphin contributors",
   "type": "web",
   "main": "index.html",
@@ -8,5 +8,7 @@
   "icon": "icon.png",
   "resolution": "1920x1080",
   "disableBackHistoryAPI": true,
-  "requiredACG": []
+  "requiredACG": [],
+  "largeIcon": "largeIcon.png",
+  "iconColor": "#21172f"
 }

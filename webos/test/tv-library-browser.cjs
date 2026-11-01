@@ -151,6 +151,41 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.locator("nav [data-nav=tv]").waitFor();
     await page.locator("nav [data-nav=tv]").click();
     await page.locator('[data-row="tv:tv:Continue watching"] .card').waitFor();
+    const holidayTitles = await page.locator("#home-rows h2").allTextContents();
+    const month = await page.evaluate(() => new Date().getMonth() + 1);
+    const holidays = {
+      1: "New Year's Episodes",
+      2: "Valentine's Episodes",
+      10: "Halloween Episodes",
+      11: "Thanksgiving Episodes",
+      12: "Christmas Episodes",
+    };
+    if (holidays[month]) {
+      assert.ok(holidayTitles.includes(holidays[month]));
+      assert.ok(
+        holidayTitles.indexOf(holidays[month]) <
+          holidayTitles.indexOf("Suggestions"),
+      );
+      const holidayRow = page
+        .locator("#home-rows section")
+        .filter({
+          has: page.getByRole("heading", {
+            name: holidays[month],
+            exact: true,
+          }),
+        });
+      await holidayRow.scrollIntoViewIfNeeded();
+      await holidayRow.locator(".card").waitFor();
+      assert.ok(
+        requests.some(
+          (r) =>
+            r.q.ParentId === "tv" &&
+            r.q.IncludeItemTypes === "Episode" &&
+            r.q.SearchTerm,
+        ),
+      );
+    }
+
     assert.deepEqual(
       await page.locator(".tv-library-tabs button").allTextContents(),
       ["Recommended", "Library", "Genres", "Studios", "Collections"],
@@ -331,16 +366,24 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       exact: true,
     });
     await watched.focus();
-    await page.waitForTimeout(220);
+    await page.waitForTimeout(280);
     const expanded = await watched.boundingBox();
     await page
       .getByRole("button", { name: "Play from beginning", exact: true })
       .focus();
-    await page.waitForTimeout(220);
+    await page.waitForTimeout(280);
     const collapsed = await watched.boundingBox();
     assert.ok(
       expanded.width > collapsed.width + 50,
       "Focused action expands into its label",
+    );
+    assert.ok(
+      Number.parseFloat(
+        await watched
+          .locator(".action-label")
+          .evaluate((n) => n.style.getPropertyValue("--action-label-width")),
+      ) > 50,
+      "Animation target matches measured label width",
     );
     assert.equal(
       await watched.locator("img").getAttribute("src"),
