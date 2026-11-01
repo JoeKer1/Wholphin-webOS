@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.36_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.37_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.36_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.36_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.37_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -269,3 +269,7 @@ The main movie action row follows the reference order: Play/Resume, restart when
 ### v0.2.36 — New icon, TV holidays and smoother actions
 
 TV Recommended includes the current month’s holiday episode rows before Suggestions, hidden when empty. Action labels expand to their measured text width over 240ms with a gentle ease-out and a short delayed fade, rather than animating toward a fixed oversized width. Reduced-motion behavior is preserved. The launcher icon is replaced with a generated dolphin/play mark.
+
+### v0.2.37 — Bottom row spacing
+
+Movie/TV libraries, category grids and details have extra bottom padding with a lower focus inset. Recommended rows have a larger trailing spacer so final posters and labels can scroll clear of the screen edge.

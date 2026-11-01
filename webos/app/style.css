@@ -293,7 +293,7 @@ form [role="alert"] {
   bottom: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: 140px;
+  padding-bottom: 240px;
   scrollbar-width: none;
 }
 #home-rows::-webkit-scrollbar {
@@ -1562,4 +1562,11 @@ body:not(.signed-in) main {
 }
 .icon-action.favorite-heart:focus:not([aria-pressed="true"]) svg {
   stroke: #211a2b;
+}
+
+.library-page,
+.tv-category-page,
+.detail-page {
+  padding-bottom: 160px;
+  scroll-padding-bottom: 96px;
 }
