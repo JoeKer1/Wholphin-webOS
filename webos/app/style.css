@@ -1650,3 +1650,20 @@ body:not(.signed-in) main {
   background: var(--profile-focus);
   color: #fff;
 }
+
+#profile-initial[hidden] {
+  display: none;
+}
+.profile-nav-initial {
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.profile-nav-initial img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

@@ -23,6 +23,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         profileUserId: "master",
         profileName: "Parent",
         avatarInitial: "P",
+        profileImage: "/plugins/profiles/image/master",
         isMaster: true,
         requiresPin: true,
       },
@@ -74,6 +75,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
           ),
         });
       }
+      if (u.pathname === "/plugins/profiles/image/master")
+        return route.fulfill({
+          contentType: "image/png",
+          body: Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+            "base64",
+          ),
+        });
       if (u.pathname.startsWith("/plugins/profiles/image/"))
         return route.fulfill({ status: 404, body: "" });
       if (u.pathname === "/plugins/profiles/switch") {
@@ -162,6 +171,18 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .getByRole("button", { name: "Kids, PIN required", exact: true })
       .waitFor();
     assert.equal(await page.locator(".profile-card").count(), 3);
+    assert.equal(
+      await page.locator("#profile-initial").isVisible(),
+      false,
+      "Duplicate profile badge is hidden",
+    );
+    assert.equal(await page.locator("nav [data-nav=profiles]").count(), 1);
+    await page.locator(".profile-nav-initial img").waitFor();
+    assert.ok(
+      (
+        await page.locator(".profile-nav-initial img").getAttribute("src")
+      ).endsWith("/plugins/profiles/image/master"),
+    );
     assert.ok(
       !requests.some((r) => r.auth.includes("expired-original-token")),
       "Expired legacy management token is discarded",
@@ -209,6 +230,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       JSON.parse(localStorage.getItem("wholphin-session")),
     );
     assert.equal(stored.token, "kid-token");
+    await page.waitForFunction(
+      () => document.querySelector(".profile-nav-initial").textContent === "K",
+    );
+    await page.waitForFunction(
+      () => !document.querySelector(".profile-nav-initial img"),
+    );
     assert.equal(stored.profileAccount, undefined);
     assert.ok(
       !JSON.stringify(stored).includes("9797"),

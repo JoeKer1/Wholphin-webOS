@@ -283,3 +283,7 @@ Optional Bonfire support adds Switch profile in Settings and, when detected, the
 Bonfire profiles appear at startup and after Jellyfin sign-in. Profile list/switch requests use the current scoped session: Bonfire resolves its household server-side. Legacy saved original credentials are discarded, fixing switching after the original token expires. PIN requirements remain enforced by Bonfire.
 
 The TV profile picker automatically uses Bonfire-inspired Harvest colors October 17–November 2 and from two weeks before US Thanksgiving through two days afterward; Snowfall December 11–January 2; Bloom two weeks before Gregorian Easter through two days afterward. Outside those windows the normal picker returns. This appearance is local to the TV app and does not overwrite server profile themes.
+
+### v0.2.40 — Single profile control and Bonfire avatars
+
+The duplicate initial above the sidebar is hidden when Bonfire supplies the profile switcher. The remaining Switch profile control displays the current Bonfire profile picture, or its configured initial/color when there is no usable image. Profile cards share the same image validation and fallback behavior. Transparent avatars retain their transparent background.

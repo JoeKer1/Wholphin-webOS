@@ -43,7 +43,8 @@
     activeGuide = null,
     detailController = null,
     detailRowObserver = null,
-    bonfireAvailable = false;
+    bonfireAvailable = false,
+    bonfireProfile = null;
   var device = localStorage.getItem("wholphin-device");
   if (!device) {
     device = "webos-" + Math.random().toString(36).slice(2) + Date.now();
@@ -139,7 +140,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.39"' +
+      '", Version="0.2.40"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -436,14 +437,55 @@
     svg.appendChild(path);
     return svg;
   }
+  function profileAvatar(profile, host) {
+    host.textContent =
+      profile.avatarInitial ||
+      (profile.profileName || "U").charAt(0).toUpperCase();
+    if (/^#[0-9a-f]{6}$/i.test(profile.avatarColor || ""))
+      host.style.backgroundColor = profile.avatarColor;
+    if (profile.transparentAvatar) host.style.backgroundColor = "transparent";
+    if (typeof profile.profileImage !== "string") return;
+    var url = profile.profileImage;
+    if (url.indexOf("/plugins/profiles/") === 0) url = session.server + url;
+    try {
+      var parsed = new URL(url);
+      if (
+        ["http:", "https:"].indexOf(parsed.protocol) === -1 ||
+        parsed.username ||
+        parsed.password
+      )
+        return;
+      var img = el("img", null, host);
+      img.alt = "";
+      img.referrerPolicy = "no-referrer";
+      img.onerror = function () {
+        img.remove();
+      };
+      img.src = parsed.href;
+    } catch (_) {}
+  }
+  function rememberBonfireProfiles(profiles) {
+    bonfireAvailable = Array.isArray(profiles);
+    bonfireProfile = bonfireAvailable
+      ? profiles.map(bonfireFields).filter(function (profile) {
+          return (
+            typeof profile.profileUserId === "string" &&
+            profile.profileUserId.replace(/-/g, "").toLowerCase() ===
+              session.user.replace(/-/g, "").toLowerCase()
+          );
+        })[0] || null
+      : null;
+  }
   function navigation() {
     document.getElementById("profile-initial").textContent =
       session && session.name ? session.name.charAt(0).toUpperCase() : "U";
+    document.getElementById("profile-initial").hidden = bonfireAvailable;
     var signature =
       session && session.token
         ? session.server +
           session.user +
           String(bonfireAvailable) +
+          JSON.stringify(bonfireProfile) +
           JSON.stringify(
             libraryItems.map(function (item) {
               return [item.Id, item.Name, item.CollectionType];
@@ -483,6 +525,7 @@
         session.name ? session.name.charAt(0).toUpperCase() : "U",
       );
       initial.className = "profile-nav-initial";
+      profileAvatar(bonfireProfile || { profileName: session.name }, initial);
       profilesEntry.replaceChild(initial, profilesEntry.querySelector("svg"));
     }
     entry(
@@ -708,6 +751,7 @@
         localStorage.removeItem("wholphin-session");
         session = null;
         bonfireAvailable = false;
+        bonfireProfile = null;
         stack = [];
         libraryItems = [];
         libraryUpdated = 0;
@@ -915,7 +959,7 @@
         timeoutMs: 4000,
       });
       if (session !== current) return;
-      bonfireAvailable = Array.isArray(profiles);
+      rememberBonfireProfiles(profiles);
       if (bonfireAvailable && profiles.length) return go(profilesPage);
     } catch (_) {
       if (session !== current) return;
@@ -933,7 +977,7 @@
         timeoutMs: 4000,
       });
       if (session !== current) return;
-      bonfireAvailable = Array.isArray(profiles);
+      rememberBonfireProfiles(profiles);
       navigation();
     } catch (_) {
       if (session === current) {
@@ -1064,7 +1108,7 @@
       if (!valid()) return;
       if (!Array.isArray(profiles))
         throw new Error("Bonfire did not return a profile list.");
-      bonfireAvailable = true;
+      rememberBonfireProfiles(profiles);
       navigation();
       profiles
         .map(bonfireFields)
@@ -1096,29 +1140,7 @@
             card,
           );
           avatar.className = "profile-avatar";
-          if (/^#[0-9a-f]{6}$/i.test(profile.avatarColor || ""))
-            avatar.style.backgroundColor = profile.avatarColor;
-          if (profile.profileImage) {
-            var url = profile.profileImage;
-            if (url.indexOf("/plugins/profiles/") === 0)
-              url = account.server + url;
-            try {
-              var parsed = new URL(url);
-              if (
-                ["http:", "https:"].indexOf(parsed.protocol) !== -1 &&
-                !parsed.username &&
-                !parsed.password
-              ) {
-                var img = el("img", null, avatar);
-                img.src = parsed.href;
-                img.alt = "";
-                img.referrerPolicy = "no-referrer";
-                img.onerror = function () {
-                  img.remove();
-                };
-              }
-            } catch (_) {}
-          }
+          profileAvatar(profile, avatar);
           el("span", profile.profileName, card).className = "profile-name";
           if (profile.requiresPin)
             el("span", "PIN required", card).className = "profile-note";
@@ -1156,6 +1178,7 @@
       !result.User.Id
     )
       throw new Error("Jellyfin returned an invalid sign-in response.");
+    bonfireProfile = null;
     session = {
       server: context.server,
       token: result.AccessToken,
