@@ -143,7 +143,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.60"' +
+      '", Version="0.2.61"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -4777,18 +4777,27 @@
     var labels = [
       [resolution, range].filter(Boolean).join(" "),
       codecLabel,
-      audioLabel,
+      [({ eng: "English", en: "English", spa: "Spanish", es: "Spanish", fra: "French", fre: "French", fr: "French", jpn: "Japanese", ja: "Japanese", deu: "German", ger: "German", de: "German", ita: "Italian", it: "Italian", hin: "Hindi", hi: "Hindi", kor: "Korean", ko: "Korean", zho: "Chinese", chi: "Chinese", zh: "Chinese" })[String(audioStream.Language || "").toLowerCase()] || audioStream.Language || "",
+        ({ opus: "Opus", aac: "AAC", ac3: "Dolby Digital", eac3: "Dolby Digital Plus", truehd: "TrueHD", dts: "DTS", flac: "FLAC", mp3: "MP3", vorbis: "Vorbis" })[String(audioStream.Codec || "").toLowerCase()] || "", audioLabel].filter(Boolean).join(" "),
     ].filter(Boolean);
     host.textContent = "";
     host.classList.add("format-pills");
     host.setAttribute("aria-label", labels.join(" · "));
     labels.forEach(function (label) {
-      el("span", label, host).className = "format-pill";
+      var pill = el("span", label, host);
+      pill.className = "format-pill";
+      if (label === labels[labels.length - 1] && audioStreams.length) {
+        var icon = el("img", null, pill);
+        icon.src = "icons/volume_up.svg";
+        icon.alt = "";
+        pill.insertBefore(icon, pill.firstChild);
+      }
     });
   }
   function subtitleControl(item, parent, onSource) {
     var subtitleSettings = el("div", null, parent);
     subtitleSettings.className = "detail-subtitle-settings";
+    var compact = parent.classList.contains("movie-specs");
     function openDetailSubtitles() {
       subtitleMenu.hidden = !subtitleMenu.hidden;
       subtitlePicker.setAttribute(
@@ -4882,7 +4891,9 @@
         );
         function selectTrack(track, persist) {
           subtitlePicker.value = String(track.index);
-          subtitlePicker.textContent = track.label;
+          subtitlePicker.textContent = compact
+            ? (track.index < 0 ? "None" : track.label) + (tracks.length > 1 ? " (+" + (tracks.length - 1) + ")" : "")
+            : track.label;
           Array.prototype.forEach.call(
             subtitleMenu.querySelectorAll("button"),
             function (node) {
@@ -4963,23 +4974,39 @@
     }
     reset(item.Name);
     main.className =
-      "detail-page" + (item.Type === "Series" ? " series-detail" : "");
+      "detail-page" + (item.Type === "Series" ? " series-detail" : item.Type === "Movie" ? " movie-detail" : "");
+    if (item.Type === "Movie") {
+      var heading = main.querySelector("h1"), movieLogoId = C.logoItem(item);
+      heading.classList.add("detail-title");
+      if (movieLogoId) {
+        heading.textContent = "";
+        var titleText = el("span", item.Name, heading), movieLogo = el("img", null, heading);
+        titleText.className = "detail-title-text";
+        movieLogo.className = "detail-title-logo";
+        movieLogo.alt = "";
+        movieLogo.hidden = true;
+        movieLogo.onload = function () {
+          if (heading.isConnected) { movieLogo.hidden = false; heading.classList.add("has-logo"); }
+        };
+        setImageSource(movieLogo, session.server + "/Items/" + encodeURIComponent(movieLogoId) + "/Images/Logo?maxWidth=720&quality=90");
+      }
+    }
     setBackdrop(item);
     var metadata = el("p", null, main);
     metadata.className = "metadata";
     itemMetadata(item, metadata);
-    var formatHost = el("div", null, main);
-    formatPills(item, formatHost);
     if (item.Genres && item.Genres.length)
       el("p", item.Genres.join(", "), main).className = "genres";
+    var formatSection = item.Type === "Movie" ? el("div", null, main) : main;
+    if (formatSection !== main) formatSection.className = "movie-specs";
+    var formatHost = el("div", null, formatSection);
+    formatPills(item, formatHost);
     if (item.Taglines && item.Taglines.length)
       el("p", item.Taglines[0], main).className = "tagline";
     el("p", item.Overview || "", main).className = "overview";
-    var director = (item.People || []).find(function (person) {
-      return person.Type === "Director";
-    });
-    if (director)
-      el("p", "Directed by " + director.Name, main).className = "metadata";
+    var directors = (item.People || []).filter(function (person) { return person.Type === "Director"; });
+    if (directors.length)
+      el("p", "Directed by " + directors.map(function (person) { return person.Name; }).join(", "), main).className = "metadata directors";
     var actions = el("div", null, main);
     actions.className = "actions";
     if (item.IsLiveProgram) {
@@ -5021,7 +5048,7 @@
         actions,
       );
     } else if (item.MediaType === "Video") {
-      var subtitles = subtitleControl(item, main, function (full) {
+      var subtitles = subtitleControl(item, item.Type === "Movie" ? formatSection : main, function (full) {
         if (formatHost.isConnected) formatPills(full, formatHost);
       });
       var subtitlePicker = subtitles.picker;
@@ -5220,10 +5247,11 @@
         }
       });
     }
-    renderPeople(item, main, "Cast");
+    renderPeople(item, main, item.Type === "Movie" ? "People" : "Cast");
     detailRelated(item);
     var seasonCard = main.querySelector(".season-grid .card");
     if (seasonCard) seasonCard.focus();
+    else if (item.Type === "Movie" && firstAction) focusContent(firstAction);
     else focusFirst();
     main.scrollTop = 0;
     if (
@@ -7298,7 +7326,9 @@
       key <= 40
     ) {
       e.preventDefault();
-      if (key === 40 && main.querySelector(".cast-row figure"))
+      if (key === 40 && main.classList.contains("movie-detail"))
+        focusContent(main.querySelector(".actions button"));
+      else if (key === 40 && main.querySelector(".cast-row figure"))
         focusContent(main.querySelector(".cast-row figure"));
       else if (key === 40 && main.querySelector(".detail-related"))
         main.querySelector(".detail-related").requestFocus();
@@ -7555,9 +7585,13 @@
         );
       return;
     }
+    if ((!playing || livePreview) && main.classList.contains("movie-detail") && key === 38 && active.closest(".actions")) {
+      var movieSubtitles = main.querySelector("#detail-subtitles:not(:disabled)");
+      if (movieSubtitles) { focusContent(movieSubtitles); return; }
+    }
     if ((!playing || livePreview) && key === 40 && active.closest(".actions")) {
       var detailCast = main.querySelector(".cast-row");
-      var detailSubtitles = main.querySelector(
+      var detailSubtitles = main.classList.contains("movie-detail") ? null : main.querySelector(
         "#detail-subtitles:not(:disabled)",
       );
       if (detailCast) detailCast.castReturnFocus = active;

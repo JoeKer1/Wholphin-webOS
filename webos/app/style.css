@@ -2033,3 +2033,26 @@ main.library-page.has-alphabet {
 #player-logo { width: auto; height: 72px; max-width: 340px; object-fit: contain; object-position: left center; }
 #player-wall-clock { margin-left: auto; font-size: 25px; }
 #transport #toggle { width: 72px; min-width: 72px; height: 72px; min-height: 72px; padding: 18px; }
+
+/* Movie details follow the compact, artwork-led Wholphin layout. */
+.movie-detail { padding-top: 100px; transition: margin-left 180ms ease; }
+header.drawer-open ~ main.movie-detail { margin-left: 360px; }
+.movie-detail .detail-title { margin: 0 0 10px; min-height: 100px; max-width: 720px; }
+.detail-title-logo { display: block; width: auto; max-width: 680px; height: 104px; object-fit: contain; object-position: left center; }
+.detail-title.has-logo .detail-title-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+.movie-detail .metadata, .movie-detail .genres { margin: 7px 0; font-size: 24px; line-height: 1.35; }
+.movie-specs { display: flex; align-items: center; flex-wrap: wrap; margin: 12px 0 20px; }
+.movie-specs .format-pills { margin: 0; }
+.format-pill img { width: 22px; height: 22px; vertical-align: -4px; margin-right: 5px; filter: invert(1); }
+.movie-specs .detail-subtitle-settings { position: relative; margin: 0 0 6px; }
+.movie-specs .detail-subtitle-settings label { display: none; }
+.movie-specs #detail-subtitles { min-width: 0; max-width: 330px; padding: 5px 10px; background: #373146; border: 0; border-radius: 6px; font-size: 22px; line-height: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.movie-specs #detail-subtitles::before { content: ""; display: inline-block; width: 22px; height: 22px; vertical-align: -4px; margin-right: 5px; background: url("icons/closed_caption.svg") center/contain no-repeat; filter: invert(1); }
+.movie-specs #detail-subtitle-menu { position: absolute; z-index: 6; top: 100%; left: 0; width: 660px; max-width: 660px; }
+.movie-detail .tagline { margin: 24px 0 14px; font-size: 26px; }
+.movie-detail .overview { font-size: 25px; line-height: 1.4; max-width: 1060px; -webkit-line-clamp: 3; margin: 14px 0; }
+.movie-detail .directors { max-width: 1060px; }
+.movie-detail .actions { margin: 30px 0 36px; }
+.movie-detail .cast-section { margin-top: 0; }
+.movie-detail .cast-section h2 { margin-top: 24px; }
+@media (prefers-reduced-motion: reduce) { .movie-detail { transition: none; } }

@@ -878,7 +878,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.waitForFunction(
       () =>
         document.getElementById("detail-subtitles").textContent ===
-        "Spanish subtitles",
+        "Spanish subtitles (+2)",
     );
     await page
       .getByRole("combobox", { name: "Subtitles before playback" })
@@ -892,7 +892,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     assert.equal(await page.locator("#detail-subtitle-menu").isHidden(), true);
     assert.equal(
       await page.locator("#detail-subtitles").textContent(),
-      "Spanish subtitles",
+      "Spanish subtitles (+2)",
     );
 
     await page
