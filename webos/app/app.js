@@ -140,7 +140,7 @@
     return (
       'MediaBrowser Client="Ember", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.49"' +
+      '", Version="0.2.50"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -834,7 +834,7 @@
       },
     );
     vision.disabled = !decoder.native;
-    var about = section("About", "Ember for Jellyfin · v0.2.49");
+    var about = section("About", "Ember for Jellyfin · v0.2.50");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -5567,6 +5567,7 @@
       !active || active.live || !C.tracks(active.source, "Subtitle").length;
     document.getElementById("chapters").disabled =
       !active || active.live || !C.chapters(active.item).length;
+    document.getElementById("next-video").hidden = !!(active && active.live);
     document.getElementById("next-video").disabled =
       !active || active.live || (!queueItems.length && !active.episodes.length);
   }
@@ -6386,6 +6387,10 @@
       document.getElementById("rewind").disabled = !!live;
       document.getElementById("forward").disabled = !!live;
       document.getElementById("timeline").hidden = !!live;
+      document.getElementById("timeline").min = 0;
+      document
+        .getElementById("timeline")
+        .setAttribute("aria-label", "Playback position");
       showControls();
       document.getElementById("playing-title").textContent = item.Name;
       video.src = selected.url + (ticks ? "#t=" + ticks / 10000000 : "");
@@ -6459,6 +6464,41 @@
     playing.lastPositionTicks = position();
     updateUpNext();
     renderSubtitleOverlay();
+    if (playing.live) {
+      var range = liveSeekWindow(),
+        timeline = document.getElementById("timeline"),
+        behind = range ? Math.max(0, range.end - video.currentTime) : 0;
+      timeline.hidden = !range;
+      document.getElementById("rewind").disabled =
+        !range || video.currentTime <= range.start + 1;
+      document.getElementById("forward").disabled = !range || behind < 2;
+      document.getElementById("clock").textContent =
+        behind > 5 ? "−" + formatTime(behind) + " · Live" : "Live";
+      document.getElementById("remaining-time").textContent = "";
+      if (range) {
+        timeline.min = range.start;
+        timeline.max = range.end;
+        timeline.value = Math.max(
+          range.start,
+          Math.min(range.end, video.currentTime),
+        );
+        timeline.setAttribute("aria-label", "Live TV buffer");
+        timeline.setAttribute(
+          "aria-valuetext",
+          behind > 5 ? formatTime(behind) + " behind live" : "Live edge",
+        );
+        timeline.style.backgroundSize =
+          Math.max(
+            0,
+            Math.min(
+              100,
+              ((video.currentTime - range.start) / (range.end - range.start)) *
+                100,
+            ),
+          ) + "% 100%";
+      }
+      return;
+    }
     var elapsed = position() / 10000000;
     var duration = playing.live
       ? 0
@@ -6676,28 +6716,42 @@
     if (video.paused) return video.play();
     video.pause();
   }
+  function liveSeekWindow() {
+    if (!playing || !playing.live || !playing.started || !video.seekable.length)
+      return null;
+    var index = video.seekable.length - 1,
+      start = video.seekable.start(index),
+      end = video.seekable.end(index) - 1;
+    return Number.isFinite(start) && Number.isFinite(end) && end - start >= 2
+      ? { start: start, end: end }
+      : null;
+  }
   function seek(seconds) {
-    if (
-      !playing ||
-      !playing.started ||
-      playing.live ||
-      playing.awaitingWatching
-    )
+    if (!playing || !playing.started || playing.awaitingWatching) return;
+    var range = liveSeekWindow();
+    if (playing.live) {
+      if (range)
+        video.currentTime = Math.max(
+          range.start + 0.1,
+          Math.min(range.end, video.currentTime + seconds),
+        );
       return;
+    }
     var target = Math.max(0, video.currentTime + seconds);
     if (Number.isFinite(video.duration))
       target = Math.min(target, video.duration);
     video.currentTime = target;
   }
   document.getElementById("timeline").oninput = function () {
-    if (
-      !playing ||
-      !playing.started ||
-      playing.live ||
-      playing.awaitingWatching
-    )
-      return;
-    video.currentTime = Number(this.value);
+    if (!playing || !playing.started || playing.awaitingWatching) return;
+    if (playing.live) {
+      var range = liveSeekWindow();
+      if (!range) return;
+      video.currentTime = Math.max(
+        range.start + 0.1,
+        Math.min(range.end, Number(this.value)),
+      );
+    } else video.currentTime = Number(this.value);
     showControls();
   };
   document.getElementById("timeline").onchange = function () {

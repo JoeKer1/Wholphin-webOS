@@ -293,6 +293,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     });
     await page.getByRole("button", { name: "Resume", exact: true }).click();
     await page.locator("#player:not([hidden])").waitFor();
+    assert.equal(
+      await page.locator("#next-video").evaluate((x) => x.hidden),
+      false,
+      "Next video restored for on-demand playback",
+    );
     await page.waitForFunction(
       () => document.getElementById("video").readyState === 4,
     );

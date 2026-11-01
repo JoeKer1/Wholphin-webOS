@@ -360,11 +360,85 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     const negotiationsBeforePreview = requests.filter((r) =>
       r.path.endsWith("/PlaybackInfo"),
     ).length;
+    await page.locator("#video").evaluate((v) => {
+      window.testLiveRange = { start: 0, end: 120 };
+      Object.defineProperty(v, "seekable", {
+        configurable: true,
+        get() {
+          const r = window.testLiveRange;
+          return {
+            length: r ? 1 : 0,
+            start() {
+              return r.start;
+            },
+            end() {
+              return r.end;
+            },
+          };
+        },
+      });
+      v.currentTime = 119;
+      v.dispatchEvent(new Event("timeupdate"));
+    });
+    assert.equal(
+      await page.locator("#timeline").evaluate((x) => x.hidden),
+      false,
+      "Timeline exposed for a usable live buffer",
+    );
+    await page.locator("#rewind").evaluate((x) => x.click());
+    assert.equal(
+      await page.locator("#video").evaluate((v) => v.currentTime),
+      89,
+    );
+    await page
+      .locator("#video")
+      .evaluate((v) => v.dispatchEvent(new Event("timeupdate")));
+    assert.ok((await page.locator("#clock").textContent()).includes("Live"));
+    await page.locator("#forward").evaluate((x) => x.click());
+    assert.equal(
+      await page.locator("#video").evaluate((v) => v.currentTime),
+      119,
+      "Forward clamps at live edge",
+    );
+    await page.locator("#timeline").evaluate((x) => {
+      x.value = 40;
+      x.dispatchEvent(new Event("input"));
+    });
+    assert.equal(
+      await page.locator("#video").evaluate((v) => v.currentTime),
+      40,
+    );
+    await page.locator("#video").evaluate((v) => {
+      window.testLiveRange = { start: 70, end: 100 };
+      v.currentTime = 80;
+      v.dispatchEvent(new Event("timeupdate"));
+    });
+    await page.locator("#rewind").evaluate((x) => x.click());
+    assert.ok(
+      Math.abs(
+        (await page.locator("#video").evaluate((v) => v.currentTime)) - 70.1,
+      ) < 0.01,
+      "Rewind clamps to sliding buffer start",
+    );
+    await page.locator("#video").evaluate((v) => {
+      window.testLiveRange = null;
+      v.dispatchEvent(new Event("timeupdate"));
+    });
+    assert.equal(
+      await page.locator("#timeline").evaluate((x) => x.hidden),
+      true,
+      "No seeking without a buffer",
+    );
     await page.keyboard.press("Escape");
     await page.waitForFunction(() =>
       document.body.classList.contains("live-preview"),
     );
     assert.equal(await page.locator("#player").isVisible(), true);
+    assert.equal(
+      await page.locator("#next-video").evaluate((x) => x.hidden),
+      true,
+      "Next video hidden for Live TV",
+    );
     assert.equal(
       await page.locator("#video").evaluate((v) => v.paused),
       false,
