@@ -140,7 +140,7 @@
     return (
       'MediaBrowser Client="Ember", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.48"' +
+      '", Version="0.2.49"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -834,7 +834,7 @@
       },
     );
     vision.disabled = !decoder.native;
-    var about = section("About", "Ember for Jellyfin · v0.2.48");
+    var about = section("About", "Ember for Jellyfin · v0.2.49");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -2880,6 +2880,7 @@
         done: false,
         scroll: 0,
         focusId: null,
+        jumpLetter: "",
         facets: null,
       };
     }
@@ -2904,6 +2905,32 @@
     }
     var toolbar = el("div", null, main);
     toolbar.className = "library-toolbar";
+    var alphabet = el("aside", null, main);
+    alphabet.className = "library-alphabet";
+    alphabet.setAttribute("aria-label", "Jump to title letter");
+    main.classList.add("has-alphabet");
+    "#ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach(function (letter) {
+      var jump = button(
+        letter,
+        function () {
+          var replacement = fresh(
+            Object.assign({}, state.options, { sort: "title-asc" }),
+          );
+          replacement.facets = state.facets;
+          replacement.jumpLetter = letter === "#" ? "" : letter;
+          listingStates.set(key, replacement);
+          return listing(id, title, null, seasonContext, tvContext);
+        },
+        alphabet,
+      );
+      jump.dataset.letter = letter;
+      jump.setAttribute(
+        "aria-label",
+        letter === "#" ? "Jump to beginning" : "Jump to " + letter,
+      );
+      if ((state.jumpLetter || "#") === letter)
+        jump.setAttribute("aria-current", "true");
+    });
     var count = el("p", "", main);
     count.id = "library-count";
     count.setAttribute("role", "status");
@@ -3044,8 +3071,15 @@
         state.total != null
           ? state.items.length + " of " + state.total + " items"
           : state.items.length + " items loaded";
+      if (state.jumpLetter)
+        count.textContent =
+          "From " + state.jumpLetter + " · " + count.textContent;
       if (!state.items.length && state.done)
-        loader.textContent = "No items match these filters.";
+        loader.textContent = state.jumpLetter
+          ? "No titles at or after " +
+            state.jumpLetter +
+            ". Choose another letter or # to return to the beginning."
+          : "No items match these filters.";
       else if (state.done) loader.textContent = "All items loaded.";
     }
     async function loadNext(force) {
@@ -3064,6 +3098,9 @@
             C.libraryQuery(id, state.options, state.nextIndex, type),
             seasonContext ? { Fields: "Overview,PrimaryImageAspectRatio" } : {},
             tvContext ? tvContext.filter || {} : {},
+            state.jumpLetter
+              ? { NameStartsWithOrGreater: state.jumpLetter }
+              : {},
           ),
           null,
           "GET",
@@ -3303,6 +3340,36 @@
       },
       handleKey: function (key, active) {
         if (!dialog.hidden) return false;
+        if (alphabet.contains(active)) {
+          var letters = Array.prototype.slice.call(
+              alphabet.querySelectorAll("button"),
+            ),
+            at = letters.indexOf(active);
+          if (key === 38 || key === 40)
+            focusContent(
+              letters[
+                Math.max(
+                  0,
+                  Math.min(letters.length - 1, at + (key === 38 ? -1 : 1)),
+                )
+              ],
+            );
+          else if (key === 37) {
+            if (state.items.length)
+              focusIndex(
+                state.focusId
+                  ? Math.max(
+                      0,
+                      state.items.findIndex(function (item) {
+                        return item.Id === state.focusId;
+                      }),
+                    )
+                  : 0,
+              );
+            else focusContent(document.getElementById("library-sort"));
+          }
+          return true;
+        }
         if (active === main && state.items.length) {
           focusIndex(
             Math.max(
@@ -3326,7 +3393,16 @@
           }
           target--;
         } else if (key === 39) {
-          if (index % columns === columns - 1) return true;
+          if (
+            index % columns === columns - 1 ||
+            index === state.items.length - 1
+          ) {
+            focusContent(
+              alphabet.querySelector('[aria-current="true"]') ||
+                alphabet.querySelector("button"),
+            );
+            return true;
+          }
           target++;
         } else if (key === 38) target -= columns;
         else if (key === 40) target += columns;

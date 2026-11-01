@@ -1852,3 +1852,49 @@ main.settings-page {
   height: 1em;
   vertical-align: -0.12em;
 }
+
+/* Narrow collapsed navigation makes room for the library alphabet rail. */
+header {
+  width: 80px;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+main {
+  margin-left: 110px;
+}
+main.library-page.has-alphabet {
+  margin-right: 88px;
+}
+.library-alphabet {
+  position: fixed;
+  right: 20px;
+  top: 180px;
+  bottom: 44px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  width: 44px;
+}
+.library-alphabet button {
+  display: block;
+  width: 44px;
+  flex: 1 1 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  font-size: 20px;
+  line-height: 1;
+  color: #b8b0bd;
+  background: transparent;
+}
+.library-alphabet button[aria-current="true"] {
+  color: #ffb477;
+  background: #32251f;
+}
+.library-alphabet button:focus {
+  color: #24180e;
+  background: #ffb477;
+  outline: 2px solid #ffb477;
+}

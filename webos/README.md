@@ -319,3 +319,7 @@ Home/library previews, movie/show details and season episode previews display th
 ### v0.2.48 — Longer holiday seasons
 
 Holiday rows retain eleven days after Halloween, Christmas and Valentine's Day. Halloween runs October 1–November 11; Thanksgiving runs November 12 through US Thanksgiving; Christmas takes over the following day through January 5; Valentine's runs February 1–25. No New Year's rows are shown. Christmas explicitly takes precedence over Thanksgiving's tail. Row keys remain anchored to the holiday's year/month across calendar boundaries. Profile colors follow the same season, with Harvest starting October 17 and Bloom lasting eleven days after Easter. Dates use the TV's local calendar.
+
+### v0.2.49 — Alphabet rail
+
+Library grids have a fixed right-side #/A–Z rail. Selecting a letter starts a title-ascending list at that server-side alphabetical boundary and continues loading subsequent titles as you scroll; # restores the full list from its beginning. Watch status, genre, year and category filters remain applied. Letter anchors stay in the in-memory Back cache, while filter/sort/reset changes clear the anchor. Right from the last poster in a row enters the rail, Up/Down selects a letter, OK jumps, and Left returns to the grid. The collapsed sidebar is 80px wide; expanded labels retain their existing width and paint behavior.
