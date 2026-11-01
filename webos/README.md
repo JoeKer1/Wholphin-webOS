@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.21_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.22_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.21_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.21_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.22_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -207,3 +207,7 @@ Back from full-screen Live TV returns to the guide with the current stream conti
 The preview guide shows the highlighted programme title, channel, broadcast time, and description beside the video. Moving between channels or Now/Next updates these details from the bounded guide cache without changing playback or issuing extra detail requests. Missing listings and failed EPG loads show explicit placeholders.
 
 Channel numbers and logos are informational labels rather than remote focus targets. OK on a currently airing programme watches that channel. Channels without EPG data keep a Watch live programme cell, and future programmes still open details.
+
+### v0.2.22 — Collections and similar titles below Cast
+
+Movie/show details include a named poster row for each collection the title belongs to, then More like this using Jellyfin recommendations. Episodes use their series for collection membership and similar titles. Collection contents load near the viewport and fetch additional pages as the row scrolls. Posters stay lazy, empty rows disappear, and each failed row has an independent retry. D-pad Down moves from Cast into the rows; Up returns to Cast. Opening a title and pressing Back restores its card, including within later collection pages.

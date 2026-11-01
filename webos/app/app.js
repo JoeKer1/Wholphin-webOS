@@ -40,7 +40,9 @@
     infoController = null,
     listingStates = new Map(),
     activeListing = null,
-    activeGuide = null;
+    activeGuide = null,
+    detailController = null,
+    detailRowObserver = null;
   var device = localStorage.getItem("wholphin-device");
   if (!device) {
     device = "webos-" + Math.random().toString(36).slice(2) + Date.now();
@@ -76,7 +78,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.21"' +
+      '", Version="0.2.22"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -171,6 +173,14 @@
   function reset(title) {
     if (livePreview && title !== "Live TV") run(stop);
     revision++;
+    if (detailController) {
+      detailController.abort();
+      detailController = null;
+    }
+    if (detailRowObserver) {
+      detailRowObserver.disconnect();
+      detailRowObserver = null;
+    }
     if (activeGuide) {
       activeGuide.dispose();
       activeGuide = null;
@@ -200,9 +210,24 @@
     return revision;
   }
   function go(action) {
-    if (stack.length)
-      stack[stack.length - 1].focus =
-        document.activeElement && document.activeElement.dataset.item;
+    if (stack.length) {
+      var active = document.activeElement,
+        rail =
+          active &&
+          active.classList.contains("card") &&
+          active.closest(".detail-media-row"),
+        frame = stack[stack.length - 1];
+      frame.focus = active && active.dataset.item;
+      frame.related = rail
+        ? {
+            key: rail.dataset.rowKey,
+            index: Array.prototype.indexOf.call(
+              rail.querySelectorAll(".rail button"),
+              active,
+            ),
+          }
+        : null;
+    }
     stack.push({ action: action });
     return action();
   }
@@ -3184,8 +3209,223 @@
         { passive: false },
       );
     }
+    detailRelated(item);
     focusFirst();
     main.scrollTop = 0;
+  }
+  function detailRelated(item) {
+    if (
+      item.IsLiveProgram ||
+      item.Type === "TvChannel" ||
+      item.Type === "BoxSet" ||
+      (item.Type !== "Movie" &&
+        item.Type !== "Series" &&
+        item.Type !== "Episode" &&
+        item.MediaType !== "Video")
+    )
+      return;
+    var seed =
+        item.Type === "Episode" && item.SeriesId ? item.SeriesId : item.Id,
+      host = el("div", null, main),
+      collectionHost = el("div", null, host),
+      similarHost = el("div", null, host),
+      controller = new AbortController(),
+      frame = stack[stack.length - 1],
+      restore = frame && frame.related,
+      pendingFocus = null;
+    host.className = "detail-related";
+    detailController = controller;
+    function valid() {
+      return !controller.signal.aborted && host.isConnected;
+    }
+    function request(path, values) {
+      return api(path, values, null, "GET", { signal: controller.signal });
+    }
+    function notify(section, rail, state) {
+      if (!valid()) return;
+      if (restore && restore.key === section.dataset.rowKey) {
+        var target = Array.prototype.find.call(
+          rail.querySelectorAll("button"),
+          function (node) {
+            return node.dataset.item === frame.focus;
+          },
+        );
+        if (target) {
+          restore = null;
+          focusContent(target);
+        } else if (!state.error && !state.done && state.count <= restore.index)
+          section.loadPage();
+      } else if (pendingFocus && document.activeElement === pendingFocus) {
+        var first = host.querySelector(".rail button, p button");
+        if (first) {
+          pendingFocus = null;
+          focusContent(first);
+        }
+      }
+    }
+    function row(parent, title, key, path, query, collection) {
+      var section = el("section", null, parent),
+        heading = el("div", null, section);
+      section.className = "detail-media-row";
+      section.dataset.rowKey = key;
+      heading.className = "detail-row-heading";
+      el("h2", title, heading);
+      if (collection)
+        button(
+          "View collection",
+          function () {
+            return go(function () {
+              return listing(collection.Id, collection.Name);
+            });
+          },
+          heading,
+        );
+      var rail = el("div", null, section),
+        status = el("p", "", section),
+        state = { loading: false, done: false, offset: 0, count: 0 },
+        ids = new Set();
+      rail.className = "rail portrait";
+      rail.setAttribute("aria-label", title);
+      section.loadPage = async function () {
+        if (state.loading || state.done || !valid()) return;
+        state.loading = true;
+        state.error = false;
+        status.textContent = "Loading…";
+        try {
+          var data = await request(
+            path,
+            Object.assign({}, query, { StartIndex: state.offset, Limit: 24 }),
+          );
+          if (!valid()) return;
+          var batch = data.Items || [],
+            fresh = batch.filter(function (entry) {
+              if (!entry.Id || entry.Id === item.Id || ids.has(entry.Id))
+                return false;
+              ids.add(entry.Id);
+              return true;
+            });
+          state.offset += batch.length;
+          state.done =
+            !batch.length ||
+            (Number.isFinite(data.TotalRecordCount)
+              ? state.offset >= data.TotalRecordCount
+              : batch.length < 24) ||
+            (!fresh.length && batch.length > 0 && state.count > 0);
+          if (!collection) state.done = true;
+          cards(fresh, section, "portrait", rail);
+          state.count += fresh.length;
+          section.hidden = state.done && !state.count;
+          status.textContent = "";
+        } catch (error) {
+          if (!valid()) return;
+          state.error = true;
+          status.textContent = "Could not load this row. ";
+          button("Retry " + title, section.loadPage, status);
+        } finally {
+          state.loading = false;
+          if (valid()) {
+            notify(section, rail, state);
+            if (!state.done && !state.count && !status.textContent)
+              section.loadPage();
+          }
+        }
+      };
+      rail.addEventListener("focusin", function (event) {
+        if (
+          Array.prototype.indexOf.call(rail.children, event.target) >=
+          rail.children.length - 3
+        )
+          section.loadPage();
+      });
+      rail.addEventListener("scroll", function () {
+        if (rail.scrollWidth - rail.clientWidth - rail.scrollLeft < 480)
+          section.loadPage();
+      });
+      if (detailRowObserver) detailRowObserver.observe(section);
+      else section.loadPage();
+      if (restore && restore.key === key) section.loadPage();
+      return section;
+    }
+    if (window.IntersectionObserver) {
+      detailRowObserver = new IntersectionObserver(
+        function (entries) {
+          if (!valid() || !detailRowObserver) return;
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+              detailRowObserver.unobserve(entry.target);
+              entry.target.loadPage();
+            }
+          });
+        },
+        { root: main, rootMargin: "400px 240px" },
+      );
+    }
+    var membershipLoading = false,
+      membershipLoaded = false;
+    async function collections() {
+      if (membershipLoading || membershipLoaded || !valid()) return;
+      membershipLoading = true;
+      collectionHost.textContent = "";
+      try {
+        var data = await request(
+          "/Items/" + encodeURIComponent(seed) + "/Collections",
+          { UserId: session.user, Fields: "PrimaryImageAspectRatio" },
+        );
+        if (!valid()) return;
+        membershipLoaded = true;
+        var seen = new Set();
+        (data.Items || []).forEach(function (collection) {
+          if (!collection.Id || seen.has(collection.Id)) return;
+          seen.add(collection.Id);
+          row(
+            collectionHost,
+            collection.Name,
+            "collection:" + collection.Id,
+            "/Users/" + session.user + "/Items",
+            {
+              ParentId: collection.Id,
+              SortBy: "SortName",
+              SortOrder: "Ascending",
+              Fields: "Overview,PrimaryImageAspectRatio",
+              EnableTotalRecordCount: true,
+            },
+            collection,
+          );
+        });
+      } catch (error) {
+        if (!valid() || error.status === 404) return;
+        var retryMessage = el(
+          "p",
+          "Could not check collection membership. ",
+          collectionHost,
+        );
+        button("Retry collections", collections, retryMessage);
+      } finally {
+        membershipLoading = false;
+      }
+    }
+    collections();
+    row(
+      similarHost,
+      "More like this",
+      "similar:" + seed,
+      "/Items/" + encodeURIComponent(seed) + "/Similar",
+      { UserId: session.user, Fields: "Overview,PrimaryImageAspectRatio" },
+    );
+    host.requestFocus = function () {
+      var first = host.querySelector(".rail button, p button");
+      if (first) focusContent(first);
+      else {
+        pendingFocus = document.activeElement;
+        Array.prototype.forEach.call(
+          host.querySelectorAll(".detail-media-row"),
+          function (section) {
+            section.loadPage();
+          },
+        );
+        host.scrollIntoView({ block: "nearest" });
+      }
+    };
   }
   function subtitleOptions() {
     return C.subtitleStyle(readPreference("subtitle-appearance", {}));
@@ -4811,6 +5051,8 @@
       e.preventDefault();
       if (key === 40 && main.querySelector(".cast-row figure"))
         focusContent(main.querySelector(".cast-row figure"));
+      else if (key === 40 && main.querySelector(".detail-related"))
+        main.querySelector(".detail-related").requestFocus();
       else if (key !== 40) focusContent(main.querySelector(".actions button"));
       return;
     }
@@ -5007,6 +5249,10 @@
         focusContent(detailSubtitles || detailCast.querySelector("figure"));
         return;
       }
+      if (main.querySelector(".detail-related")) {
+        main.querySelector(".detail-related").requestFocus();
+        return;
+      }
     }
     var castRow = (!playing || livePreview) && active.closest(".cast-row");
     if (castRow) {
@@ -5028,6 +5274,9 @@
             nav.querySelector('[aria-current="page"]') ||
               nav.querySelector("button"),
           );
+      } else if (key === 40) {
+        var related = main.querySelector(".detail-related");
+        if (related) related.requestFocus();
       } else if (key === 38) {
         focusContent(
           castRow.castReturnFocus && castRow.castReturnFocus.isConnected
@@ -5062,11 +5311,20 @@
       if (nextRail) {
         var nextCards = nextRail.querySelectorAll("button");
         focusContent(nextCards[Math.min(cardIndex, nextCards.length - 1)]);
-      } else if (key === 38)
-        focusContent(
-          nav.querySelector('[aria-current="page"]') ||
-            nav.querySelector("button"),
-        );
+      } else if (key === 38) {
+        var cast =
+          main.classList.contains("detail-page") &&
+          main.querySelectorAll(".cast-row figure");
+        if (cast && cast.length)
+          focusContent(cast[Math.min(cardIndex, cast.length - 1)]);
+        else if (main.classList.contains("detail-page"))
+          focusContent(main.querySelector(".actions button"));
+        else
+          focusContent(
+            nav.querySelector('[aria-current="page"]') ||
+              nav.querySelector("button"),
+          );
+      }
       return;
     }
     var scope =
