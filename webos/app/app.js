@@ -2938,7 +2938,13 @@
       if (episode) {
         continueRow.hidden = false;
         el("h2", heading, continueRow);
-        cards([episode], continueRow, "landscape");
+        var content = el("div", null, continueRow);
+        content.className = "series-continue-content";
+        cards([episode], content, "landscape");
+        if (episode.Overview) {
+          var description = el("p", episode.Overview, content);
+          description.className = "series-continue-description";
+        }
       } else if (
         results.some(function (result) {
           return result.status === "rejected";

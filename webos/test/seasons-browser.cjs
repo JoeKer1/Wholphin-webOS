@@ -57,6 +57,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       SeriesName: shows.find((s) => s.Id === SeriesId).Name,
       Type: "Episode",
       MediaType: "Video",
+      Overview: "Episode synopsis for " + Name,
       ParentIndexNumber: 1,
       IndexNumber: n,
       RunTimeTicks: 18000000000,
@@ -210,6 +211,21 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       0,
     );
     await page.locator(".series-continue [data-item=progress]").waitFor();
+    assert.equal(
+      await page.locator(".series-continue-description").textContent(),
+      "Episode synopsis for In progress episode",
+    );
+    const previewBounds = await page
+      .locator(".series-continue .card")
+      .boundingBox();
+    const descriptionBounds = await page
+      .locator(".series-continue-description")
+      .boundingBox();
+    assert.ok(
+      descriptionBounds.x > previewBounds.x + previewBounds.width,
+      "Synopsis appears to the right of the episode",
+    );
+
     assert.equal(
       await page.locator(".series-continue h2").textContent(),
       "Continue watching",

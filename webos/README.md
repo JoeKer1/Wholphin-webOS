@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.26_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.27_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.26_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.26_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.27_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -227,3 +227,7 @@ Below Cast, one Collections row shows a card for each collection containing the 
 ### v0.2.26 — Episode stills in seasons
 
 Season episode grids use landscape episode stills with the same proportions as Start watching. Four cards fit each row, and virtual scrolling uses their shorter height. Episodes without a still show a placeholder instead of a series poster.
+
+### v0.2.27 — Start/Continue episode description
+
+The Start watching and Continue watching episode cards show the episode synopsis to their right, when available. The synopsis is plain text and the episode card keeps its existing remote navigation.

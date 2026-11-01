@@ -1330,3 +1330,22 @@ body:not(.signed-in) main {
 .library-grid.episode-grid .art {
   padding-top: 56.25%;
 }
+
+.series-continue-content {
+  display: flex;
+  align-items: flex-start;
+}
+.series-continue-content .rail {
+  flex: 0 0 390px;
+  min-width: 0;
+}
+.series-continue-description {
+  flex: 1;
+  margin: 12px 32px 0 28px;
+  font-size: 26px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  overflow: hidden;
+}
