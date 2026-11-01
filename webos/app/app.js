@@ -2728,6 +2728,13 @@
         jobs = [];
       },
       handleKey: function (key, node) {
+        if (
+          (key === 40 && toolbar.contains(node)) ||
+          (key === 39 && nav.contains(node))
+        ) {
+          focusRow(0, 1);
+          return true;
+        }
         if (!node.dataset.channel) return false;
         var index = state.channels.findIndex(function (c) {
             return c.Id === node.dataset.channel;
@@ -2770,8 +2777,9 @@
       var index = state.channels.findIndex(function (c) {
         return c.Id === state.focusChannel;
       });
-      if (index >= 0) focusRow(index, state.focusColumn || 0);
-    } else focusFirst();
+      if (index >= 0) focusRow(index, state.focusColumn || 1);
+      else focusRow(0, 1);
+    } else focusRow(0, 1);
     if (!state.channels.length) await loadChannels();
   }
   async function seasonChoices(seriesId) {

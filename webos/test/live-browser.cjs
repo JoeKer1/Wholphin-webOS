@@ -236,6 +236,20 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page.locator("#guide-count").textContent(),
       "24 of 83 channels",
     );
+    assert.equal(
+      await page.locator(":focus").getAttribute("data-column"),
+      "1",
+      "Guide starts on the current programme",
+    );
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(
+      await page.locator(":focus").getAttribute("data-column"),
+      "3",
+      "Favorite remains reachable to the left",
+    );
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await page.locator(":focus").getAttribute("data-column"), "1");
+
     assert.ok(
       (await page.locator(".guide-channel-row").count()) < 20,
       "Guide DOM stays bounded",
