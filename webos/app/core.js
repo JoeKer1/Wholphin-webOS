@@ -43,7 +43,7 @@
   }
   function profile(options) {
     var base = {
-      Name: "Wholphin webOS (H.264 / AAC)",
+      Name: "Ember (H.264 / AAC)",
       MaxStreamingBitrate: 20000000,
       DirectPlayProfiles: [
         {

@@ -321,7 +321,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     });
     await waitFor(() => starts().length > before);
     request = infos().at(-1).body;
-    assert.equal(request.DeviceProfile.Name, "Wholphin webOS (H.264 / AAC)");
+    assert.equal(request.DeviceProfile.Name, "Ember (H.264 / AAC)");
     assert.equal(request.StartTimeTicks, 3215000000);
     assert.equal(request.AllowVideoStreamCopy, false);
     assert.equal(
@@ -358,7 +358,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await waitFor(() => starts().at(-1).body.SubtitleStreamIndex === 9);
     assert.equal(
       infos().at(-1).body.DeviceProfile.Name,
-      "Wholphin webOS (H.264 / AAC)",
+      "Ember (H.264 / AAC)",
       "Subtitle burn-in leaves the native HDR path",
     );
     await control("subtitles");
@@ -393,7 +393,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await waitFor(
       () =>
         infos().at(-1).body.DeviceProfile.Name ===
-          "Wholphin webOS (H.264 / AAC)" &&
+          "Ember (H.264 / AAC)" &&
         starts().at(-1).body.PositionTicks === 1200000000,
     );
     assert.equal(await page.locator("#video").evaluate((v) => v.paused), true);
@@ -407,7 +407,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await play();
     assert.equal(
       infos().at(-1).body.DeviceProfile.Name,
-      "Wholphin webOS (H.264 / AAC)",
+      "Ember (H.264 / AAC)",
     );
     await stopped();
     container = "mp4";
@@ -415,7 +415,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await play();
     assert.equal(
       infos().at(-1).body.DeviceProfile.Name,
-      "Wholphin webOS (H.264 / AAC)",
+      "Ember (H.264 / AAC)",
     );
     await stopped();
     range = "HDR10";
@@ -431,7 +431,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await play();
     assert.equal(
       infos().at(-1).body.DeviceProfile.Name,
-      "Wholphin webOS (H.264 / AAC)",
+      "Ember (H.264 / AAC)",
     );
     assert.equal(infos().at(-1).body.AllowVideoStreamCopy, false);
     await stopped();

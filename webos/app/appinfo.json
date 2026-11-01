@@ -1,14 +1,14 @@
 {
   "id": "com.github.damontecres.wholphin.webos",
-  "version": "0.2.40",
-  "vendor": "Wholphin contributors",
+  "version": "0.2.41",
+  "vendor": "Ember contributors",
   "type": "web",
   "main": "index.html",
-  "title": "Wholphin",
+  "title": "Ember",
   "icon": "icon.png",
   "resolution": "1920x1080",
   "disableBackHistoryAPI": true,
   "requiredACG": [],
   "largeIcon": "largeIcon.png",
-  "iconColor": "#21172f"
+  "iconColor": "#191310"
 }

@@ -138,9 +138,9 @@
   }
   function auth(context) {
     return (
-      'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
+      'MediaBrowser Client="Ember", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.40"' +
+      '", Version="0.2.41"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -408,7 +408,7 @@
     } else if (window.webOS && window.webOS.platformBack)
       window.webOS.platformBack();
     else if (window.PalmSystem) {
-      if (window.confirm("Exit Wholphin?")) window.close();
+      if (window.confirm("Exit Ember?")) window.close();
     } else message("You are on the home screen.");
   }
   function navIcon(name) {
@@ -613,6 +613,7 @@
   function settings() {
     reset("Settings");
     selectNav("settings");
+    el("p", "Ember for Jellyfin · v0.2.41", main).className = "metadata";
     el("p", "Connected to " + session.server, main).className = "metadata";
     button(
       "Switch profile",

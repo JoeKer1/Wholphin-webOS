@@ -1,6 +1,6 @@
-# Wholphin for LG webOS — initial port
+# Ember for Jellyfin — LG webOS
 
-A standalone webOS TV app alongside the Android client. This is an early implementation, not feature parity with Android Wholphin. No Android build or Jellyfin Web deployment is required. The UI follows the home and movie-detail screenshots in the root README and the Android Compose implementation.
+Ember is a standalone Jellyfin player for webOS TV, originally inspired by Wholphin for Android TV. This is an early implementation, not feature parity with Android Wholphin. No Android build or Jellyfin Web deployment is required. The UI follows the home and movie-detail screenshots in the root README and the Android Compose implementation.
 
 Implemented: Wholphin-style focused-item backdrops and summaries, collapsible navigation drawer, poster rows, favorites browsing/toggle, cast details, server URL/password login, saved session and sign out, continuous library/folder browsing with sorting and filters, continue watching, next up, recently added, title search, item details, resume, playback controls, remote directional navigation, and Jellyfin playback progress/stopped reporting. Magic Remote pointer clicks use standard buttons and inputs.
 
@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.37_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.41_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.37_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.37_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.41_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -287,3 +287,7 @@ The TV profile picker automatically uses Bonfire-inspired Harvest colors October
 ### v0.2.40 — Single profile control and Bonfire avatars
 
 The duplicate initial above the sidebar is hidden when Bonfire supplies the profile switcher. The remaining Switch profile control displays the current Bonfire profile picture, or its configured initial/color when there is no usable image. Profile cards share the same image validation and fallback behavior. Transparent avatars retain their transparent background.
+
+### v0.2.41 — Ember
+
+The app is now Ember for Jellyfin, with a new flame/play launcher icon and Ember branding in the launcher, sidebar, Settings and Jellyfin sessions. The existing webOS application ID, device identifier and local storage keys are preserved so this installs as an update and retains sign-in, settings and preferences.
