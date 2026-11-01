@@ -114,8 +114,7 @@
       if (icon === "heart") art.appendChild(navIcon("favorites"));
       else {
         var img = el("img", null, art);
-        img.src =
-          "icons/" + (icon === "movie" ? "local_movies" : icon) + ".svg";
+        setImageSource(img, "icons/" + (icon === "movie" ? "local_movies" : icon) + ".svg");
         img.alt = "";
       }
     }
@@ -463,7 +462,7 @@
       img.onerror = function () {
         img.remove();
       };
-      img.src = parsed.href;
+      setImageSource(img, parsed.href);
     } catch (_) {}
   }
   function rememberBonfireProfiles(profiles) {
@@ -1913,7 +1912,7 @@
       backdropLoading = loading;
       loading.onload = function () {
         if (request === backdropRequest) {
-          backdrop.src = url;
+          setImageSource(backdrop, url);
           backdrop.hidden = false;
           backdropLoading = null;
         }
@@ -1924,7 +1923,7 @@
           backdropLoading = null;
         }
       };
-      loading.src = url;
+      setImageSource(loading, url);
     }, 180);
   }
   function itemMetadata(item, host) {
@@ -2007,11 +2006,10 @@
           title.classList.remove("has-logo");
         }
       };
-      image.src =
-        session.server +
+      setImageSource(image, session.server +
         "/Items/" +
         encodeURIComponent(id) +
-        "/Images/Logo?maxWidth=600&quality=90";
+        "/Images/Logo?maxWidth=600&quality=90");
     }, 150);
   }
   function updatePreview(item) {
@@ -2084,9 +2082,13 @@
       (landscape ? "?maxWidth=720&quality=80" : "?maxWidth=450&quality=80")
     );
   }
+  function setImageSource(img, url) {
+    if (P.loadImage) P.loadImage(img, url);
+    else img.src = url;
+  }
   function loadPoster(img) {
     if (!img || !img.dataset.src) return;
-    img.src = img.dataset.src;
+    setImageSource(img, img.dataset.src);
     delete img.dataset.src;
     if (posterObserver) posterObserver.unobserve(img);
   }
@@ -4239,7 +4241,7 @@
       var logo = image(channel, true);
       if (logo) {
         var img = el("img", null, watch);
-        img.src = logo;
+        setImageSource(img, logo);
         img.alt = "";
         img.loading = "lazy";
         img.width = 56;
@@ -6258,7 +6260,7 @@
       var artwork = image(next, true);
       if (artwork) {
         var img = el("img", null, upNext);
-        img.src = artwork;
+        setImageSource(img, artwork);
         img.alt = "";
         img.onerror = function () {
           img.hidden = true;

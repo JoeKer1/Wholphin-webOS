@@ -37,3 +37,19 @@ test('Fire TV native view follows preview geometry and exposes only a real seeka
  const rect=f.commands.findLast(c=>c.action==='rect');assert.equal(rect.left,1400);assert.equal(rect.width,480);
  assert.equal(f.p.seekable.length,0);
 });
+test('Fire TV HTTP artwork uses local blobs, releases them, and ignores replaced requests',async()=>{
+ const {context:c}=fixture(), pending=[], released=[];
+ c.fetch=(url,options)=>new Promise(resolve=>pending.push({url,options,resolve}));
+ c.URL={createObjectURL:()=> 'blob:artwork',revokeObjectURL:url=>released.push(url)};
+ const listeners={},img={addEventListener:(t,f)=>listeners[t]=f,removeEventListener:t=>delete listeners[t],dispatchEvent(){}};
+ c.EmberPlatform.loadImage(img,'http://lan.test/poster');
+ assert.equal(pending[0].options.credentials,'omit');
+ pending[0].resolve({ok:true,blob:async()=>({})});
+ await new Promise(r=>setImmediate(r));
+ assert.equal(img.src,'blob:artwork');listeners.load();assert.deepEqual(released,['blob:artwork']);
+ c.EmberPlatform.loadImage(img,'http://lan.test/old');
+ c.EmberPlatform.loadImage(img,'https://secure.test/new');
+ pending[1].resolve({ok:true,blob:async()=>({})});
+ await new Promise(r=>setImmediate(r));
+ assert.equal(img.src,'https://secure.test/new');
+});

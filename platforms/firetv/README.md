@@ -53,7 +53,7 @@ The bridge tests cover asynchronous start, resume seek units, cancellation/stale
 
 ## Security and lifecycle
 
-Only the bundled `appassets.androidplatform.net/assets/index.html` page can navigate in the WebView. Local file/content access and popups are disabled; default TLS validation stays enabled. The native bridge checks the current page before handling commands, allows only HTTP(S) media sources, keeps credentials out of playback errors, and ignores commands/events from replaced streams. HTTP/mixed content is deliberately enabled for user-configured Jellyfin LAN servers. The existing UI CSP and inert metadata rendering remain in effect.
+Only the bundled `appassets.androidplatform.net/assets/index.html` page can navigate in the WebView. Local file/content access and popups are disabled; default TLS validation stays enabled. The native bridge checks the current page before handling commands, allows only HTTP(S) media sources, keeps credentials out of playback errors, and ignores commands/events from replaced streams. HTTP/mixed content is deliberately enabled for user-configured Jellyfin LAN servers. LAN HTTP artwork is fetched as blobs to avoid Chromium mixed-image blocking; temporary blob URLs are released after decoding. The Fire TV CSP permits these local image blobs. The existing UI CSP and inert metadata rendering remain in effect.
 
 On backgrounding, Ember stops its session/tuner and pauses native playback. Audio focus is handled by Media3. App data backup/transfer is disabled; sessions and settings remain local to this APK. WebView inspection is enabled only in debug builds.
 

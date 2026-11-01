@@ -17,7 +17,36 @@
   function capabilities() {
     try { return JSON.parse(root.EmberAndroid.capabilities()); } catch (_) { return {}; }
   }
+  // HTTPS WebViews block HTTP <img> requests even with mixed-content enabled.
+  // Fetch keeps LAN HTTP support, while blob URLs remain local to this page.
+  var imageRequests = new WeakMap();
+  function loadImage(img, url) {
+    var request = {};
+    imageRequests.set(img, request);
+    if (!/^http:\/\//i.test(url)) { img.src = url; return; }
+    fetch(url, { credentials: "omit", referrerPolicy: "no-referrer" })
+      .then(function (response) {
+        if (!response.ok) throw new Error("Image unavailable");
+        return response.blob();
+      })
+      .then(function (blob) {
+        if (imageRequests.get(img) !== request) return;
+        var source = URL.createObjectURL(blob);
+        function release() {
+          URL.revokeObjectURL(source);
+          img.removeEventListener("load", release);
+          img.removeEventListener("error", release);
+        }
+        img.addEventListener("load", release);
+        img.addEventListener("error", release);
+        img.src = source;
+      })
+      .catch(function () {
+        if (imageRequests.get(img) === request) img.dispatchEvent(new Event("error"));
+      });
+  }
   root.EmberPlatform = {
+    loadImage: loadImage,
     playbackPolicy: function (source, options, index) { return root.EmberFirePlayback.policy(source, options, index, capabilities()); },
     playbackProfile: function (fallback) { return root.EmberFirePlayback.profile(capabilities(), fallback); },
     playbackTracks: function () { return root.EmberFirePlayback.tracks.apply(null, arguments); },
