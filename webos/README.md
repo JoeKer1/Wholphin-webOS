@@ -295,3 +295,7 @@ The app is now Ember for Jellyfin, with a new flame/play launcher icon and Ember
 ### v0.2.42 — Profile picker without sidebar
 
 The sidebar stays hidden while startup profiles load and throughout profile/PIN selection. It returns after successful selection. Remote focus remains within visible picker controls; Back cancels a pending startup switch and returns to the picker.
+
+### v0.2.43 — One Continue watching entry per show
+
+Continue watching groups in-progress episodes by series, retaining the episode with the newest LastPlayedDate (or the first server result when timestamps are absent). Next Up does not add another entry for that series. This applies to Home and TV Recommended and leaves all server resume points intact.

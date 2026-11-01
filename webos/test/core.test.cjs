@@ -87,8 +87,8 @@ test("baseline requests server HLS transcoding rather than unsupported direct st
 
 test("accepts server addresses without a scheme", () => {
   assert.equal(
-    C.serverUrl("192.168.1.20:8096"),
-    "http://192.168.1.20:8096",
+    C.serverUrl("192.168.50.243:8096"),
+    "http://192.168.50.243:8096",
   );
   assert.equal(
     C.serverUrl("media.example.com/jellyfin/"),
@@ -100,7 +100,7 @@ test("accepts server addresses without a scheme", () => {
 });
 
 test("uses Jellyfin port for bare hosts and preserves explicit reverse proxy URLs", () => {
-  assert.equal(C.serverUrl("192.168.1.20"), "http://192.168.1.20:8096");
+  assert.equal(C.serverUrl("192.168.50.243"), "http://192.168.50.243:8096");
   assert.equal(
     C.serverUrl("media.local/jellyfin"),
     "http://media.local:8096/jellyfin",
@@ -114,8 +114,8 @@ test("uses Jellyfin port for bare hosts and preserves explicit reverse proxy URL
     "https://media.example.com",
   );
   assert.equal(
-    C.serverUrl("192.168.1.20:9000"),
-    "http://192.168.1.20:9000",
+    C.serverUrl("192.168.50.243:9000"),
+    "http://192.168.50.243:9000",
   );
 });
 
@@ -231,11 +231,19 @@ test("logos prefer item artwork, then inherited and series logos", () => {
   assert.equal(C.logoItem({ Id: "episode", SeriesId: "series" }), "series");
   assert.equal(C.logoItem({ Id: "movie" }), null);
 });
-test("keep multiple resumed episodes, while avoiding duplicate Next up entries", () => {
+test("Continue watching keeps one most recently played episode per series", () => {
   const rows = C.combineResume(
     [
-      { Id: "e1", SeriesId: "show" },
-      { Id: "e2", SeriesId: "show" },
+      {
+        Id: "e1",
+        SeriesId: "show",
+        UserData: { LastPlayedDate: "2026-10-30T12:00:00Z" },
+      },
+      {
+        Id: "e2",
+        SeriesId: "show",
+        UserData: { LastPlayedDate: "2026-11-01T12:00:00Z" },
+      },
     ],
     [
       { Id: "e3", SeriesId: "show" },
@@ -244,7 +252,7 @@ test("keep multiple resumed episodes, while avoiding duplicate Next up entries",
   );
   assert.deepEqual(
     rows.map((i) => i.Id),
-    ["e1", "e2", "other"],
+    ["e2", "other"],
   );
   const plan = C.homeRows(
     [

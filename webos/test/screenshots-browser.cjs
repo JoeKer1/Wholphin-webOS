@@ -202,8 +202,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .waitFor();
     assert.equal(
       await page.locator("[data-row=continue] .card").count(),
-      2,
-      "Keep both in-progress Daily Show episodes",
+      1,
+      "One in-progress episode per series",
     );
     assert.equal(
       await page.locator("#preview-episode").textContent(),
@@ -281,7 +281,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "tuner",
     );
     encoderFails = true;
-    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { keyCode: 413, bubbles: true })));
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+      ),
+    );
     await wait(() => calls.some((c) => c.path === "/LiveStreams/Close"));
     assert.equal(
       calls.find((c) => c.path === "/LiveStreams/Close").body.LiveStreamId,

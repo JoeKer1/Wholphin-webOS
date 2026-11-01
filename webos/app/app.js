@@ -140,7 +140,7 @@
     return (
       'MediaBrowser Client="Ember", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.42"' +
+      '", Version="0.2.43"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -614,7 +614,7 @@
   function settings() {
     reset("Settings");
     selectNav("settings");
-    el("p", "Ember for Jellyfin · v0.2.42", main).className = "metadata";
+    el("p", "Ember for Jellyfin · v0.2.43", main).className = "metadata";
     el("p", "Connected to " + session.server, main).className = "metadata";
     button(
       "Switch profile",
@@ -1723,7 +1723,7 @@
             return item;
           });
       });
-    if (row.kind === "resume") return resume();
+    if (row.kind === "resume") return C.combineResume(await resume(), []);
     if (row.kind === "next") return next();
     if (row.kind === "combined") {
       var both = await Promise.all([resume(), next()]);

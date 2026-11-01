@@ -790,11 +790,29 @@
   function combineResume(resume, next) {
     var seenIds = {},
       seenSeries = {},
-      result = [];
+      result = [],
+      seriesPositions = {};
     (resume || []).forEach(function (item) {
       if (seenIds[item.Id]) return;
       seenIds[item.Id] = true;
-      if (item.SeriesId) seenSeries[item.SeriesId] = true;
+      if (item.SeriesId && seenSeries[item.SeriesId]) {
+        var position = seriesPositions[item.SeriesId],
+          previous = result[position],
+          played = Date.parse(item.UserData && item.UserData.LastPlayedDate),
+          prior = Date.parse(
+            previous.UserData && previous.UserData.LastPlayedDate,
+          );
+        if (
+          Number.isFinite(played) &&
+          (!Number.isFinite(prior) || played > prior)
+        )
+          result[position] = item;
+        return;
+      }
+      if (item.SeriesId) {
+        seenSeries[item.SeriesId] = true;
+        seriesPositions[item.SeriesId] = result.length;
+      }
       result.push(item);
     });
     (next || []).forEach(function (item) {
