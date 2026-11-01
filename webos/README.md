@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.23_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.24_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.23_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.23_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.24_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -215,3 +215,7 @@ Movie/show details include a named poster row for each collection the title belo
 ### v0.2.23 — Channel label layout and fullscreen switching
 
 Channel labels stack a centred logo above the channel number/name, allowing up to two text lines within the existing guide row height. Selecting a different channel from preview starts it fullscreen. Back returns the new channel to guide preview, and selecting the already-playing channel still expands its existing stream without restarting.
+
+### v0.2.24 — Show overview and Start/Continue
+
+Multi-season shows open a season poster grid, one card per available season. The first content row shows an in-progress episode, otherwise the next episode for watched shows, or Start watching at S1E1 for an unwatched show. Specials are not chosen ahead of season 1. A show with exactly one season opens that season’s episodes directly and keeps the Start/Continue row. Episode lists use All seasons to return to the overview rather than a strip of season buttons.

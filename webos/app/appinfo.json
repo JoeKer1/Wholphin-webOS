@@ -1,6 +1,6 @@
 {
   "id": "com.github.damontecres.wholphin.webos",
-  "version": "0.2.23",
+  "version": "0.2.24",
   "vendor": "Wholphin contributors",
   "type": "web",
   "main": "index.html",

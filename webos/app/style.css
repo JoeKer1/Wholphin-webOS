@@ -624,12 +624,10 @@ body:not(.signed-in) main {
 #player-tools button {
   font-size: 24px;
 }
-.season-choices,
 .season-picker {
   display: flex;
   flex-wrap: wrap;
 }
-.season-choices button,
 .season-picker button {
   margin: 0 16px 16px 0;
 }

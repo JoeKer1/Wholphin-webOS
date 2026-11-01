@@ -78,7 +78,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.23"' +
+      '", Version="0.2.24"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -1196,13 +1196,14 @@
       if (node) loadPoster(node.querySelector("img[data-src]"));
     });
   }
-  function cards(items, parent, layout, existing) {
+  function cards(items, parent, layout, existing, onSelect) {
     var grid = existing || el("div", null, parent);
     if (!existing) grid.className = layout ? "rail " + layout : "grid";
     items.forEach(function (item) {
       var b = button(
         "",
         function () {
+          if (onSelect) return onSelect(item);
           return go(function () {
             return detail(item.Id, !!item.IsLiveProgram);
           });
@@ -1602,29 +1603,15 @@
     listingStates.set(key, state);
     while (listingStates.size > 3)
       listingStates.delete(listingStates.keys().next().value);
-    if (seasonContext) {
+    if (seasonContext && seasonContext.seriesId)
+      seriesContinue(
+        { Id: seasonContext.seriesId, Name: seasonContext.title },
+        seasonContext.seasons,
+      );
+    if (seasonContext && seasonContext.seasons.length > 1) {
       var picker = el("div", null, main);
       picker.className = "season-picker";
-      picker.setAttribute("aria-label", "Season selection");
-      seasonContext.seasons.forEach(function (season) {
-        var choice = button(
-          season.Name || "Season " + season.IndexNumber,
-          function () {
-            var action = function () {
-              return listing(
-                season.Id,
-                seasonContext.title + " · " + season.Name,
-                false,
-                seasonContext,
-              );
-            };
-            stack[stack.length - 1].action = action;
-            return action();
-          },
-          picker,
-        );
-        choice.setAttribute("aria-pressed", String(season.Id === id));
-      });
+      button("All seasons", back, picker);
     }
     var toolbar = el("div", null, main);
     toolbar.className = "library-toolbar";
@@ -2044,8 +2031,12 @@
           target++;
         } else if (key === 38) target -= columns;
         else if (key === 40) target += columns;
-        if (target < 0) document.getElementById("library-sort").focus();
-        else if (target < state.items.length || state.done) focusIndex(target);
+        if (target < 0) {
+          var continueCard = main.querySelector(".series-continue .card");
+          if (continueCard) focusContent(continueCard);
+          else document.getElementById("library-sort").focus();
+        } else if (target < state.items.length || state.done)
+          focusIndex(target);
         else {
           pendingFocus = { index: target, from: active.dataset.item };
           if (failed) loader.querySelector("button").focus();
@@ -2796,42 +2787,164 @@
         );
       });
   }
-  async function seasonsPage(seriesId, title) {
-    var r = reset(title + " · Seasons");
+  async function seasonsPage(seriesId) {
+    return detail(seriesId);
+  }
+  function seriesRows(item, seasons, error) {
+    var ready = seriesContinue(item, seasons);
     var holder = el("section", null, main);
     holder.className = "season-choices";
-    el("p", "Loading seasons…", holder);
-    async function load() {
-      holder.textContent = "";
-      el("p", "Loading seasons…", holder);
-      try {
-        var seasons = await seasonChoices(seriesId);
-        if (r !== revision) return;
-        holder.textContent = "";
-        if (!seasons.length) el("p", "No seasons available.", holder);
-        seasons.forEach(function (season) {
-          button(
-            season.Name || "Season " + season.IndexNumber,
-            function () {
-              return go(function () {
-                return listing(season.Id, title + " · " + season.Name, false, {
-                  title: title,
-                  seasons: seasons,
-                });
-              });
+    if (error) {
+      el("p", "Could not load seasons. " + error.message, holder);
+      button(
+        "Retry seasons",
+        function () {
+          return detail(item.Id);
+        },
+        holder,
+      );
+    } else if (!seasons.length) el("p", "No seasons available.", holder);
+    else {
+      el("h2", "Seasons", holder);
+      var grid = cards(
+        seasons.map(function (season) {
+          return Object.assign({}, season, {
+            Name: season.Name || "Season " + season.IndexNumber,
+            SeriesName: null,
+          });
+        }),
+        holder,
+        null,
+        null,
+        function (season) {
+          return go(function () {
+            return listing(season.Id, item.Name + " · " + season.Name, false, {
+              seriesId: item.Id,
+              title: item.Name,
+              seasons: seasons,
+            });
+          });
+        },
+      );
+      grid.classList.add("season-grid");
+    }
+    return ready;
+  }
+  function seriesContinue(item, seasons) {
+    var controller = new AbortController();
+    detailController = controller;
+    var continueRow = el("section", null, main);
+    continueRow.className = "series-continue";
+    continueRow.hidden = true;
+    async function loadContinue() {
+      continueRow.textContent = "";
+      continueRow.hidden = true;
+      function request(path, query) {
+        return api(path, query, null, "GET", { signal: controller.signal });
+      }
+      var results = await Promise.allSettled([
+        request("/Users/" + session.user + "/Items/Resume", {
+          ParentId: item.Id,
+          IncludeItemTypes: "Episode",
+          Limit: 1,
+          Fields: "Overview",
+        }),
+        request("/Shows/NextUp", {
+          UserId: session.user,
+          SeriesId: item.Id,
+          Limit: 1,
+          EnableResumable: true,
+          EnableRewatching: false,
+          Fields: "Overview",
+        }),
+        request("/Users/" + session.user + "/Items", {
+          ParentId: item.Id,
+          Recursive: true,
+          IncludeItemTypes: "Episode",
+          IsPlayed: true,
+          Limit: 1,
+          Fields: "UserData",
+        }),
+      ]);
+      if (controller.signal.aborted || !continueRow.isConnected) return;
+      function entries(index) {
+        return results[index].status === "fulfilled"
+          ? (results[index].value.Items || []).filter(function (entry) {
+              return entry.SeriesId === item.Id;
+            })
+          : [];
+      }
+      var resume = entries(0).find(function (entry) {
+          return entry.UserData && entry.UserData.PlaybackPositionTicks > 0;
+        }),
+        watched = entries(2).some(function (entry) {
+          return entry.UserData && entry.UserData.Played;
+        }),
+        next = watched ? entries(1)[0] : null,
+        episode = resume || next,
+        heading = "Continue watching";
+      if (
+        !episode &&
+        !results.some(function (result) {
+          return result.status === "rejected";
+        })
+      ) {
+        var firstSeason =
+          (seasons || []).find(function (season) {
+            return season.IndexNumber === 1;
+          }) ||
+          (seasons || []).find(function (season) {
+            return season.IndexNumber > 0;
+          }) ||
+          (seasons || [])[0];
+        try {
+          var first = await request(
+            "/Shows/" + encodeURIComponent(item.Id) + "/Episodes",
+            {
+              UserId: session.user,
+              SeasonId: firstSeason && firstSeason.Id,
+              Season: firstSeason ? undefined : 1,
+              SortBy: "IndexNumber",
+              IsMissing: false,
+              Limit: 24,
+              Fields: "Overview",
             },
-            holder,
           );
-        });
-        focusFirst();
-      } catch (error) {
-        if (r !== revision) return;
-        holder.textContent = "";
-        el("p", "Could not load seasons. " + error.message, holder);
-        button("Retry seasons", load, holder).focus();
+          if (controller.signal.aborted || !continueRow.isConnected) return;
+          var episodes = (first.Items || []).filter(function (entry) {
+            return entry.SeriesId === item.Id && !entry.IsMissing;
+          });
+          episode =
+            episodes.find(function (entry) {
+              return entry.IndexNumber === 1;
+            }) ||
+            episodes.find(function (entry) {
+              return entry.IndexNumber > 0;
+            }) ||
+            episodes[0];
+          heading = watched ? "Watch again" : "Start watching";
+        } catch (error) {
+          if (controller.signal.aborted || !continueRow.isConnected) return;
+          results.push({ status: "rejected" });
+        }
+      }
+      if (episode) {
+        continueRow.hidden = false;
+        el("h2", heading, continueRow);
+        cards([episode], continueRow, "landscape");
+      } else if (
+        results.some(function (result) {
+          return result.status === "rejected";
+        })
+      ) {
+        continueRow.hidden = false;
+        el("p", "Could not check your next episode.", continueRow);
+        button("Retry continue watching", loadContinue, continueRow);
       }
     }
-    await load();
+    return loadContinue().then(function () {
+      return continueRow.querySelector(".card,button");
+    });
   }
   async function detail(id, liveProgram) {
     var r = reset("Loading…");
@@ -2842,6 +2955,24 @@
     );
     if (liveProgram) item.IsLiveProgram = true;
     if (r !== revision) return;
+    var showSeasons = [],
+      seasonsError = null,
+      seriesReady = null;
+    if (item.Type === "Series") {
+      try {
+        showSeasons = await seasonChoices(item.Id);
+      } catch (error) {
+        seasonsError = error;
+      }
+      if (r !== revision) return;
+      if (!seasonsError && showSeasons.length === 1)
+        return listing(
+          showSeasons[0].Id,
+          item.Name + " · " + showSeasons[0].Name,
+          false,
+          { seriesId: item.Id, title: item.Name, seasons: showSeasons },
+        );
+    }
     reset(item.Name);
     main.className = "detail-page";
     setBackdrop(item);
@@ -2870,15 +3001,7 @@
         actions,
       );
     } else if (item.Type === "Series") {
-      button(
-        "Choose season",
-        function () {
-          return go(function () {
-            return seasonsPage(item.Id, item.Name);
-          });
-        },
-        actions,
-      );
+      // Season cards and Continue are rendered below the actions.
     } else if (item.IsFolder) {
       button(
         "Browse " + item.Name,
@@ -3132,6 +3255,8 @@
     }
     updateFavorite();
     button("Back", back, actions);
+    if (item.Type === "Series")
+      seriesReady = seriesRows(item, showSeasons, seasonsError);
     var people = (item.People || []).filter(function (person) {
       return person.Type === "Actor";
     });
@@ -3210,8 +3335,24 @@
       );
     }
     detailRelated(item);
-    focusFirst();
+    var seasonCard = main.querySelector(".season-grid .card");
+    if (seasonCard) seasonCard.focus();
+    else focusFirst();
     main.scrollTop = 0;
+    if (
+      seriesReady &&
+      !(stack[stack.length - 1] && stack[stack.length - 1].focus)
+    )
+      seriesReady.then(function (target) {
+        if (
+          target &&
+          target.isConnected &&
+          document.activeElement === seasonCard
+        ) {
+          target.focus();
+          main.scrollTop = 0;
+        }
+      });
   }
   function detailRelated(item) {
     if (
@@ -3229,7 +3370,7 @@
       host = el("div", null, main),
       collectionHost = el("div", null, host),
       similarHost = el("div", null, host),
-      controller = new AbortController(),
+      controller = detailController || new AbortController(),
       frame = stack[stack.length - 1],
       restore = frame && frame.related,
       pendingFocus = null;
@@ -4990,7 +5131,10 @@
       return;
     }
     node.scrollIntoView({ block: "nearest", inline: "nearest" });
-    if (main.classList.contains("detail-page") && node.closest(".actions"))
+    if (
+      (main.classList.contains("detail-page") && node.closest(".actions")) ||
+      node.closest(".series-continue")
+    )
       main.scrollTop = 0;
     var rows = document.getElementById("home-rows");
     if (rows && rows.contains(node)) {
@@ -5254,6 +5398,31 @@
         return;
       }
     }
+    var seasonGrid = !playing && active.closest(".season-grid");
+    if (seasonGrid && (key === 38 || key === 40)) {
+      var y = active.getBoundingClientRect().top,
+        seasonNodes = Array.prototype.slice.call(
+          seasonGrid.querySelectorAll(".card"),
+        ),
+        hasRow = seasonNodes.some(function (node) {
+          return key === 38
+            ? node.getBoundingClientRect().top < y - 4
+            : node.getBoundingClientRect().top > y + 4;
+        });
+      if (!hasRow) {
+        if (key === 38)
+          focusContent(
+            main.querySelector(".series-continue .card") ||
+              main.querySelector(".actions button"),
+          );
+        else if (main.querySelector(".cast-row")) {
+          main.querySelector(".cast-row").castReturnFocus = active;
+          focusContent(main.querySelector(".cast-row figure"));
+        } else if (main.querySelector(".detail-related"))
+          main.querySelector(".detail-related").requestFocus();
+        return;
+      }
+    }
     var castRow = (!playing || livePreview) && active.closest(".cast-row");
     if (castRow) {
       var castCards = Array.prototype.slice.call(
@@ -5303,15 +5472,24 @@
         return;
       }
       var rails = Array.prototype.slice
-          .call(main.querySelectorAll(".rail"))
+          .call(
+            main.querySelectorAll(".rail,.season-grid,.cast-row,.library-grid"),
+          )
           .filter(function (node) {
             return node.getClientRects().length;
           }),
         nextRail = rails[rails.indexOf(rail) + (key === 38 ? -1 : 1)];
       if (nextRail) {
-        var nextCards = nextRail.querySelectorAll("button");
+        var nextCards = nextRail.querySelectorAll("button,figure[tabindex]");
         focusContent(nextCards[Math.min(cardIndex, nextCards.length - 1)]);
       } else if (key === 38) {
+        if (rail.closest(".series-continue")) {
+          focusContent(
+            main.querySelector(".actions button") ||
+              main.querySelector("#library-sort"),
+          );
+          return;
+        }
         var cast =
           main.classList.contains("detail-page") &&
           main.querySelectorAll(".cast-row figure");

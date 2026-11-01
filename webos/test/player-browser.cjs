@@ -786,9 +786,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       ),
     );
     await page.locator("nav [data-nav=home]").click();
-    await click("Test show");
     failSeasons = true;
-    await click("Choose season");
+    await click("Test show");
     await page
       .getByRole("button", { name: "Retry seasons", exact: true })
       .waitFor();
@@ -799,29 +798,26 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .filter({ hasText: "Specials" })
       .waitFor();
     assert.deepEqual(
-      await page.locator(".season-choices button").allTextContents(),
+      await page
+        .locator(".season-choices .card")
+        .evaluateAll((nodes) => nodes.map((n) => n.getAttribute("aria-label"))),
       ["Specials", "Season 1", "Season 2"],
     );
     await click("Season 1");
     await page.locator('[data-item="e2"]').waitFor();
-    assert.equal(
-      await page.locator('.season-picker [aria-pressed="true"]').textContent(),
-      "Season 1",
-    );
     await page
-      .locator(".season-picker button")
-      .filter({ hasText: "Season 2" })
-      .click();
+      .getByRole("heading", { name: "Test show · Season 1", exact: true })
+      .waitFor();
+    await click("All seasons");
+    await click("Season 2");
     await page.locator('[data-item="e3"]').waitFor();
-    assert.equal(await page.locator('[data-item="e1"]').count(), 0);
+    assert.equal(await page.locator('.library-grid [data-item="e1"]').count(), 0);
     await page.locator('[data-item="e3"]').click();
     await page.keyboard.press("Escape");
     await page.locator('[data-item="e3"]').waitFor();
-    assert.equal(
-      await page.locator('.season-picker [aria-pressed="true"]').textContent(),
-      "Season 2",
-      "Back restores selected season",
-    );
+    await page
+      .getByRole("heading", { name: "Test show · Season 2", exact: true })
+      .waitFor();
     await page.locator('[data-item="e3"]').click();
     await click("View seasons");
     await page
