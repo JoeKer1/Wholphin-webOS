@@ -140,7 +140,7 @@
     return (
       'MediaBrowser Client="Ember", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.45"' +
+      '", Version="0.2.46"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -610,54 +610,130 @@
   function settings() {
     reset("Settings");
     selectNav("settings");
-    el("p", "Ember for Jellyfin · v0.2.45", main).className = "metadata";
-    el("p", "Connected to " + session.server, main).className = "metadata";
-    button(
+    main.className = "settings-page";
+    var layout = el("div", null, main),
+      categories,
+      pane;
+    layout.className = "settings-layout";
+    categories = el("div", null, layout);
+    categories.className = "settings-categories";
+    categories.setAttribute("aria-label", "Settings categories");
+    pane = el("div", null, layout);
+    pane.className = "settings-pane";
+    function section(title, description) {
+      var area = el("section", null, pane);
+      area.className = "settings-section";
+      el("h2", title, area);
+      el("p", description, area).className = "settings-description";
+      var category = button(
+        title,
+        function () {
+          focusContent(area.querySelector("button"));
+        },
+        categories,
+      );
+      category.className = "settings-category";
+      area.categoryButton = category;
+      category.settingsSection = area;
+      return area;
+    }
+    function row(area, title, value, description, action, accessible) {
+      var control = button(
+        "",
+        function () {
+          return action(control);
+        },
+        area,
+      );
+      control.className = "setting-row";
+      function render() {
+        control.textContent = "";
+        control.setAttribute(
+          "aria-label",
+          typeof accessible === "function" ? accessible() : accessible || title,
+        );
+        var copy = el("span", null, control);
+        copy.className = "setting-copy";
+        el("span", title, copy).className = "setting-title";
+        if (description)
+          el("span", description, copy).className = "setting-description";
+        var current = typeof value === "function" ? value() : value;
+        if (current) el("span", current, control).className = "setting-value";
+        else {
+          var arrow = el("span", "›", control);
+          arrow.className = "setting-chevron";
+          arrow.setAttribute("aria-hidden", "true");
+        }
+      }
+      control.refreshSetting = render;
+      render();
+      return control;
+    }
+    var profile = section(
+      "Profile & Home",
+      "Personalize Ember for " + (session.name || "your profile") + ".",
+    );
+    row(
+      profile,
       "Switch profile",
+      "",
+      "Choose a Bonfire profile.",
       function () {
         return go(profilesPage);
       },
-      main,
     );
-    button(
+    row(
+      profile,
       "Customize Home",
+      "",
+      "Choose rows, libraries and poster titles.",
       function () {
         return go(customizeHome);
       },
-      main,
     );
-    button(
-      "Playback queue",
+    var playback = section(
+      "Playback",
+      "Control what happens between episodes.",
+    );
+    row(
+      playback,
+      "Autoplay next episode",
       function () {
-        return go(queuePage);
+        return playbackOptions().autoplay ? "On" : "Off";
       },
-      main,
-    );
-    var autoplay = button(
-      autoplayLabel(),
-      function () {
+      "Continue to the next episode automatically.",
+      function (control) {
         setAutoplay(!playbackOptions().autoplay);
-        autoplay.textContent = autoplayLabel();
+        control.refreshSetting();
       },
-      main,
+      autoplayLabel,
     );
     [
-      ["countdown", "Up Next countdown", [0, 15, 30, 60]],
-      ["stillWatching", "Still watching prompt", [0, 3, 5]],
+      [
+        "countdown",
+        "Up Next countdown",
+        [0, 15, 30, 60],
+        "How long to show the next episode before it starts.",
+      ],
+      [
+        "stillWatching",
+        "Still watching prompt",
+        [0, 3, 5],
+        "Ask before continuing after several episodes.",
+      ],
     ].forEach(function (setting) {
-      function label() {
-        var value = playbackOptions()[setting[0]];
-        return (
-          setting[1] +
-          ": " +
-          (value
-            ? value + (setting[0] === "countdown" ? " seconds" : " episodes")
-            : "Off")
-        );
+      function value() {
+        var v = playbackOptions()[setting[0]];
+        return v
+          ? v + (setting[0] === "countdown" ? " seconds" : " episodes")
+          : "Off";
       }
-      var control = button(
-        label(),
-        function () {
+      row(
+        playback,
+        setting[1],
+        value,
+        setting[3],
+        function (control) {
           var options = playbackOptions(),
             values = setting[2];
           options[setting[0]] =
@@ -666,13 +742,28 @@
             accountKey("playback-options"),
             JSON.stringify(options),
           );
-          control.textContent = label();
+          control.refreshSetting();
         },
-        main,
+        function () {
+          return setting[1] + ": " + value();
+        },
       );
     });
-    button(
+    row(
+      playback,
+      "Playback queue",
+      "",
+      "View and reorder what plays next.",
+      function () {
+        return go(queuePage);
+      },
+    );
+    var subtitles = section("Subtitles", "Keep dialogue comfortable to read.");
+    row(
+      subtitles,
       "Subtitle appearance",
+      "",
+      "Text size, color, background and timing.",
       function () {
         return go(function () {
           reset("Subtitle appearance");
@@ -680,10 +771,12 @@
           focusFirst();
         });
       },
-      main,
     );
-    button(
+    row(
+      subtitles,
       "Reset track preferences",
+      "",
+      "Clear remembered audio and subtitle choices for this profile.",
       function () {
         localStorage.removeItem(accountKey("track-preferences"));
         localStorage.removeItem(accountKey("subtitle-choices"));
@@ -691,48 +784,64 @@
           "Remembered audio/subtitle choices cleared. New videos will use Jellyfin defaults.",
         );
       },
-      main,
     );
-    var decoder = decoderOptions();
-    var nativeMode = button(
-      "Playback mode: " +
-        (decoder.native ? "LG C1 native (experimental)" : "Compatibility"),
-      function () {
+    var device = section(
+        "Device",
+        "Choose the playback format for this television.",
+      ),
+      decoder = decoderOptions();
+    function modeValue() {
+      return decoder.native ? "LG C1 native (experimental)" : "Compatibility";
+    }
+    row(
+      device,
+      "Playback mode",
+      modeValue,
+      "Compatibility works with the widest range of files. Native enables supported C1 formats.",
+      function (control) {
         decoder.native = !decoder.native;
         localStorage.setItem(
           accountKey("decoder-options"),
           JSON.stringify(decoder),
         );
-        nativeMode.textContent =
-          "Playback mode: " +
-          (decoder.native ? "LG C1 native (experimental)" : "Compatibility");
+        control.refreshSetting();
         vision.disabled = !decoder.native;
       },
-      main,
-    );
-    var vision = button(
-      "Dolby Vision MP4 (experimental): " +
-        (decoder.dolbyVision ? "On" : "Off"),
       function () {
+        return "Playback mode: " + modeValue();
+      },
+    );
+    var vision = row(
+      device,
+      "Dolby Vision MP4",
+      function () {
+        return decoder.dolbyVision ? "On" : "Off";
+      },
+      "Experimental. Requires native mode and a compatible MP4 file.",
+      function (control) {
         decoder.dolbyVision = !decoder.dolbyVision;
         localStorage.setItem(
           accountKey("decoder-options"),
           JSON.stringify(decoder),
         );
-        vision.textContent =
-          "Dolby Vision MP4 (experimental): " +
-          (decoder.dolbyVision ? "On" : "Off");
+        control.refreshSetting();
       },
-      main,
+      function () {
+        return (
+          "Dolby Vision MP4 (experimental): " +
+          (decoder.dolbyVision ? "On" : "Off")
+        );
+      },
     );
     vision.disabled = !decoder.native;
-    el(
-      "p",
-      "C1 native mode enables supported 4K/HEVC, HDR10 and Dolby Digital audio, with compatible HLS remuxing. Compatibility uses the existing H.264/AAC path. Native formats still need TV testing; Dolby Vision is limited to compatible MP4 variants. Audio passthrough depends on the TV and sound system.",
-      main,
-    ).className = "metadata";
-    button(
+    var about = section("About", "Ember for Jellyfin · v0.2.46");
+    var server = el("p", "Connected to " + session.server, about);
+    server.className = "settings-description";
+    row(
+      about,
       "Sign out",
+      "",
+      "Disconnect this TV from the current account.",
       async function () {
         try {
           await stop();
@@ -761,9 +870,36 @@
         navigation();
         login();
       },
-      main,
     );
-    focusFirst();
+    pane.addEventListener("focusin", function (event) {
+      var area = event.target.closest(".settings-section");
+      if (!area) return;
+      Array.prototype.forEach.call(
+        categories.querySelectorAll("button"),
+        function (category) {
+          if (category === area.categoryButton)
+            category.setAttribute("aria-current", "true");
+          else category.removeAttribute("aria-current");
+        },
+      );
+    });
+    categories.addEventListener("focusin", function (event) {
+      var category = event.target.closest(".settings-category");
+      if (!category) return;
+      Array.prototype.forEach.call(
+        categories.querySelectorAll("button"),
+        function (item) {
+          if (item === category) item.setAttribute("aria-current", "true");
+          else item.removeAttribute("aria-current");
+        },
+      );
+      pane.scrollTop +=
+        category.settingsSection.getBoundingClientRect().top -
+        pane.getBoundingClientRect().top -
+        5;
+    });
+    categories.querySelector("button").setAttribute("aria-current", "true");
+    focusContent(categories.querySelector("button"));
   }
   function accountKey(suffix) {
     return "wholphin-" + suffix + ":" + session.server + ":" + session.user;
@@ -6740,6 +6876,36 @@
         ],
       );
       return;
+    }
+    if ((!playing || livePreview) && main.classList.contains("settings-page")) {
+      var category = active.closest(".settings-category"),
+        setting = active.closest(".setting-row");
+      if (category) {
+        var cats = Array.prototype.slice.call(
+            main.querySelectorAll(".settings-category"),
+          ),
+          index = cats.indexOf(category);
+        if (key === 38 || key === 40)
+          focusContent(cats[index + (key === 38 ? -1 : 1)]);
+        else if (key === 39)
+          focusContent(
+            category.settingsSection.querySelector("button:not(:disabled)"),
+          );
+        else if (key === 37)
+          focusContent(nav.querySelector('[aria-current="page"]'));
+        return;
+      }
+      if (setting) {
+        var rows = Array.prototype.slice.call(
+            main.querySelectorAll(".setting-row:not(:disabled)"),
+          ),
+          pos = rows.indexOf(setting);
+        if (key === 38 || key === 40)
+          focusContent(rows[pos + (key === 38 ? -1 : 1)]);
+        else if (key === 37)
+          focusContent(setting.closest(".settings-section").categoryButton);
+        return;
+      }
     }
     var tvTab = active.closest(".tv-library-tabs");
     if ((!playing || livePreview) && tvTab) {

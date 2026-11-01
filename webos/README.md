@@ -307,3 +307,7 @@ Profile selection fills the entire viewport with centered profile cards, without
 ### v0.2.45 — Refresh launcher icon paths
 
 Ember launcher artwork uses new Ember-specific filenames to avoid reusing cached Wholphin icon paths. The installed image bytes were already correct; this updates the image references without uninstalling the app.
+
+### v0.2.46 — Settings for TV
+
+Settings uses a fixed category column and a separately scrolling list of full-width rows. Profile & Home, Playback, Subtitles, Device and About organize existing controls. Rows separate their title, explanation and current value, with a warm Ember focus treatment. D-pad Up/Down moves within a column; Right opens a category's controls; Left returns to the category, then the main sidebar. Categories align their heading at the top of the content pane. Current values update immediately and preserve the existing account-scoped preferences. No unsupported Android-only settings are shown.
