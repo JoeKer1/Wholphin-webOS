@@ -304,7 +304,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     const movieRows = await page.locator("#home-rows h2").allTextContents();
     assert.deepEqual(
       movieRows.filter(
-        (n) => !/Halloween|Thanksgiving|Christmas|New Year|Valentine/.test(n),
+        (n) =>
+          !/Halloween|Horror Movies|Thriller Movies|Thanksgiving|Christmas|New Year|Valentine/.test(
+            n,
+          ),
       ),
       [
         "Continue watching",

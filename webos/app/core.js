@@ -683,7 +683,6 @@
     } else if (month === 1 && day <= 12) key = 1;
     else if (month === 2 && day <= 25) key = 2;
     var holiday = {
-      1: ["new-years", "New Year's", "new year's eve", "new year"],
       2: ["valentines", "Valentine's", "valentine's day", "valentine"],
       10: ["halloween", "Halloween", "halloween", "halloween"],
       11: ["thanksgiving", "Thanksgiving", "thanksgiving", "thanksgiving"],

@@ -329,8 +329,8 @@ test("holiday rows retain eleven days after holidays and Christmas follows Thank
   assert.equal(rows(11, 24, 2023)[0].title, "Christmas Movies");
   assert.equal(rows(1, 5, 2027)[0].title, "Christmas Movies");
   assert.equal(rows(1, 5, 2027)[0].key, rows(12, 25, 2026)[0].key);
-  assert.equal(rows(1, 6)[0].title, "New Year's Movies");
-  assert.equal(rows(1, 12)[0].title, "New Year's Movies");
+  assert.deepEqual(rows(1, 6), []);
+  assert.deepEqual(rows(1, 12), []);
   assert.deepEqual(rows(1, 13), []);
   assert.equal(rows(2, 25)[0].title, "Valentine's Movies");
   assert.deepEqual(rows(2, 26), []);
