@@ -25,6 +25,10 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
+import androidx.media3.common.Tracks;
+import androidx.media3.common.TrackSelectionOverride;
+import androidx.media3.common.TrackSelectionParameters;
+import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
@@ -42,6 +46,8 @@ public final class MainActivity extends Activity {
     private int generation;
     private boolean destroyed, metadataSent, seeking;
     private boolean foreground;
+    private int audioTrack = -1, subtitleTrack = -1;
+    private boolean tracksApplied;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -105,6 +111,9 @@ public final class MainActivity extends Activity {
         }
     };
     private final class Bridge {
+        @JavascriptInterface public String capabilities() {
+            return PlaybackCapabilities.read(MainActivity.this).toString();
+        }
         @JavascriptInterface public void command(String raw) {
             if (raw == null || raw.length() > 32768) return;
             handler.post(() -> {
@@ -125,23 +134,33 @@ public final class MainActivity extends Activity {
             Uri uri = Uri.parse(command.getString("url"));
             if ((!"http".equals(uri.getScheme()) && !"https".equals(uri.getScheme())) ||
                 uri.getHost() == null || uri.getUserInfo() != null) { send("error"); return; }
-            player = new ExoPlayer.Builder(this).build();
+            JSONObject tracks = command.optJSONObject("tracks");
+            if (tracks != null && tracks.optBoolean("unavailable")) { send("error"); return; }
+            audioTrack = tracks == null ? -1 : tracks.optInt("audio", -1);
+            subtitleTrack = tracks == null ? -1 : tracks.optInt("subtitle", -1);
+            tracksApplied = false;
+            DefaultRenderersFactory renderers = new DefaultRenderersFactory(this).setEnableDecoderFallback(true);
+            player = new ExoPlayer.Builder(this, renderers).build();
             player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA)
                 .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true);
             player.setHandleAudioBecomingNoisy(true);
             player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitleTrack < 0).build());
             final int token = generation;
             player.addListener(new Player.Listener() {
                 private boolean current() { return player != null && token == generation; }
                 @Override public void onPlaybackStateChanged(int state) {
                     if (!current()) return;
                     if (state == Player.STATE_READY) {
+                        if (!applyTracks(player.getCurrentTracks())) { send("error"); return; }
                         if (!metadataSent) { metadataSent = true; send("loadedmetadata"); }
                         if (seeking) { seeking = false; send("seeked"); }
                         if (player.getPlayWhenReady()) send("playing");
                     } else if (state == Player.STATE_ENDED) send("ended");
                     else if (state == Player.STATE_BUFFERING) send("waiting");
+                }
+                @Override public void onTracksChanged(Tracks tracks) {
+                    if (current()) applyTracks(tracks);
                 }
                 @Override public void onPlayWhenReadyChanged(boolean ready, int reason) {
                     if (current()) send(ready ? "play" : "pause");
@@ -194,6 +213,28 @@ public final class MainActivity extends Activity {
                     AspectRatioFrameLayout.RESIZE_MODE_ZOOM : AspectRatioFrameLayout.RESIZE_MODE_FIT);
                 break;
         }
+    }
+    private boolean applyTracks(Tracks tracks) {
+        if (tracksApplied || player == null) return true;
+        TrackSelectionParameters.Builder selection = player.getTrackSelectionParameters().buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_AUDIO).clearOverridesOfType(C.TRACK_TYPE_TEXT)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitleTrack < 0);
+        boolean audioFound = audioTrack < 0, subtitleFound = subtitleTrack < 0;
+        int audio = 0, subtitles = 0;
+        for (Tracks.Group group : tracks.getGroups()) {
+            for (int i = 0; i < group.length; i++) {
+                if (group.getType() == C.TRACK_TYPE_AUDIO && audio++ == audioTrack && group.isTrackSupported(i)) {
+                    selection.addOverride(new TrackSelectionOverride(group.getMediaTrackGroup(), i)); audioFound = true;
+                }
+                if (group.getType() == C.TRACK_TYPE_TEXT && subtitles++ == subtitleTrack && group.isTrackSupported(i)) {
+                    selection.addOverride(new TrackSelectionOverride(group.getMediaTrackGroup(), i)); subtitleFound = true;
+                }
+            }
+        }
+        if (!audioFound || !subtitleFound) return false;
+        tracksApplied = true;
+        player.setTrackSelectionParameters(selection.build());
+        return true;
     }
     private void send(String type) {
         if (destroyed || web == null) return;

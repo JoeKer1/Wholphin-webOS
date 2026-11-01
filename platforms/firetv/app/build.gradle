@@ -4,7 +4,7 @@ def emberVersion = new groovy.json.JsonSlurper().parse(file('../../../package.js
 def parts = emberVersion.tokenize('.').collect { it.toInteger() }
 android {
     namespace 'tv.ember.jellyfin'
-    compileSdk 35
+    compileSdk 36
     buildFeatures { buildConfig true }
     defaultConfig {
         applicationId 'tv.ember.jellyfin'
@@ -22,7 +22,7 @@ android {
 }
 dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'
-    implementation 'androidx.media3:media3-exoplayer:1.5.1'
-    implementation 'androidx.media3:media3-exoplayer-hls:1.5.1'
-    implementation 'androidx.media3:media3-ui:1.5.1'
+    implementation 'androidx.media3:media3-exoplayer:1.11.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.11.1'
+    implementation 'androidx.media3:media3-ui:1.11.1'
 }

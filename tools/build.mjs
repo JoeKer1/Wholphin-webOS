@@ -17,7 +17,7 @@ if (target !== "webos") {
   await fs.rm(path.join(out, "appinfo.json"));
   const platformFiles = target === "tizen"
     ? ["platform.js", "avplay.js", "config.xml", "tizen.css"]
-    : ["platform.js", "firetv.css"];
+    : ["platform.js", "playback.js", "firetv.css"];
   for (const file of platformFiles)
     await fs.copyFile(
       path.join(root, "platforms", target, file),
@@ -33,7 +33,7 @@ if (target !== "webos") {
   html = html.replace(
     '<script src="platform.js"></script>',
     '<script src="compat.js"></script>\n' +
-      (target === "tizen" ? '<script src="$WEBAPIS/webapis/webapis.js"></script>\n<script src="avplay.js"></script>\n' : '') +
+      (target === "tizen" ? '<script src="$WEBAPIS/webapis/webapis.js"></script>\n<script src="avplay.js"></script>\n' : '<script src="playback.js"></script>\n') +
       '<script src="platform.js"></script>',
   );
   if (target === "firetv") html = html.replace('width=device-width,initial-scale=1', 'width=1920');

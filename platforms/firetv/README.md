@@ -2,11 +2,22 @@
 
 An isolated APK project for **Android-based Fire OS 6 and later** (Android API 25+), including Fire TV Stick 4K and compatible Fire TV televisions. Vega OS devices cannot install this APK.
 
-The APK bundles Ember's shared UI from `webos/app` with a Fire TV platform adapter. AndroidX Media3 plays video underneath a transparent WebView, with Ember's remote controls, subtitle overlay and live-guide preview on top. The initial playback policy uses Jellyfin's H.264/AAC compatibility negotiation. Native 4K/HDR passthrough has not been enabled or verified.
+The APK bundles Ember's shared UI from `webos/app` with a Fire TV platform adapter. AndroidX Media3 1.11.1 (matching upstream Wholphin) plays video underneath a transparent WebView, with Ember's remote controls, subtitle overlay and live-guide preview on top. Automatic playback now builds a Jellyfin profile from detected hardware video decoders and Media3's current Fire OS/HDMI audio capabilities. Supported SDR files can direct-play (including 4K when reported by the decoder); unsupported audio can be converted while copying supported video. Compatibility remains selectable in Settings → Device and is retried automatically on playback errors. HDR/Dolby Vision remain on compatibility playback because the current preview composition uses a TextureView.
+
+## Playback integration
+
+- Hardware decoder probing bounds codec, resolution, frame rate, bit depth, bitrate and AVC/HEVC level. Missing capabilities retain conservative compatibility playback.
+- Dolby AC-3/E-AC-3 are advertised only when decoding or the current audio route supports them. Output channels are bounded by that route; DTS/TrueHD are not advertised.
+- Media3 decoder initialization fallback is enabled. Runtime failures retry Jellyfin compatibility negotiation at the same position, with the selected tracks and paused state retained.
+- Direct-play audio and embedded subtitle selection maps Jellyfin stream indices to native track ordinals. Unsupported/mismatched native tracks fail into compatibility instead of silently selecting a different language.
+- Embedded SSA/ASS, PGS, SRT/WebVTT and MOV text can use native Media3 subtitle rendering. Styled SRT/WebVTT web overlays remain available. External or unsupported subtitles use the existing overlay or server conversion path. Full libass font/animation rendering and MPV are not bundled.
+- Live TV keeps its existing compatibility HLS and preview/tuner lifecycle.
+
+These changes follow the device-profile and renderer-fallback approach in upstream Wholphin's `PlayerFactory` and `DeviceProfileService`; the bundled interface stays shared across platforms. Physical Fire TV decoding, passthrough and subtitle rendering still need device validation.
 
 ## Build
 
-Install JDK 17 and the official Android SDK with platform 35 and build-tools 35.0.0, and set `JAVA_HOME` and `ANDROID_HOME`. From the repository root:
+Install JDK 17 and the official Android SDK with platform 36 and build-tools 35.0.0, and set `JAVA_HOME` and `ANDROID_HOME`. From the repository root:
 
 ```sh
 npm ci
@@ -38,7 +49,7 @@ node test/navigation-browser.cjs
 platforms/firetv/gradlew -p platforms/firetv lintDebug
 ```
 
-The bridge tests cover asynchronous start, resume seek units, cancellation/stale events, preview bounds and live seek ranges. Browser tests cover app startup, server negotiation, remote pause, background cleanup, platform settings and shared sidebar order. APK assembly/signature checks and Android lint pass. Physical Fire TV playback and remote/keyboard behavior still need device validation.
+The bridge tests cover asynchronous start, resume seek units, cancellation/stale events, preview bounds and live seek ranges. Browser tests cover app startup, server negotiation, remote pause, background cleanup, native ASS selection, audio switching, device-profile negotiation, same-position compatibility retry, platform settings and shared sidebar order. APK assembly/signature checks and Android lint pass. Physical Fire TV playback and remote/keyboard behavior still need device validation.
 
 ## Security and lifecycle
 

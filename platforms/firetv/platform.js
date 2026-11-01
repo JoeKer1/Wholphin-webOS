@@ -14,7 +14,13 @@
       document.dispatchEvent(new KeyboardEvent("keydown", { keyCode: code, which: code, bubbles: true, cancelable: true }));
     },
   };
+  function capabilities() {
+    try { return JSON.parse(root.EmberAndroid.capabilities()); } catch (_) { return {}; }
+  }
   root.EmberPlatform = {
+    playbackPolicy: function (source, options, index) { return root.EmberFirePlayback.policy(source, options, index, capabilities()); },
+    playbackProfile: function (fallback) { return root.EmberFirePlayback.profile(capabilities(), fallback); },
+    playbackTracks: function () { return root.EmberFirePlayback.tracks.apply(null, arguments); },
     id: "firetv",
     deviceName: "Fire TV",
     playbackName: "Fire TV Media3",
@@ -24,7 +30,7 @@
     createPlayer: function (element) {
       var source = "", id = 0, ready = false, paused = true, seeking = false,
         time = 0, duration = NaN, width = 0, height = 0, error = null,
-        range = null, pending = [], lastRect = "";
+        range = null, pending = [], lastRect = "", tracks = { audio: -1, subtitle: -1 };
       function emit(type) { element.dispatchEvent(new Event(type)); }
       function settle(reason) {
         var jobs = pending;
@@ -62,13 +68,14 @@
         style: element.style,
         addEventListener: element.addEventListener.bind(element),
         removeEventListener: element.removeEventListener.bind(element),
+        configure: function (value) { tracks = value; },
         load: function () {
           settle(new Error("Playback cancelled."));
           send("close");
           id++;
           ready = false; paused = true; seeking = false;
           time = 0; duration = NaN; range = null; error = null; lastRect = "";
-          if (source) { send("load", { url: source.split("#")[0] }); rect(); }
+          if (source) { send("load", { url: source.split("#")[0], tracks: tracks }); rect(); }
         },
         play: function () {
           return new Promise(function (resolve, reject) {

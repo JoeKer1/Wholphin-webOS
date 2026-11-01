@@ -143,7 +143,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.56"' +
+      '", Version="0.2.57"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -803,6 +803,7 @@
       ),
       decoder = decoderOptions();
     function modeValue() {
+      if (P.playbackPolicy) return P.playbackName + (decoder.native ? " (Automatic)" : " (Compatibility)");
       return P.nativePlayback === false
         ? (P.playbackName || "Samsung AVPlay") + " (Compatibility)"
         : decoder.native
@@ -813,7 +814,9 @@
       device,
       "Playback mode",
       modeValue,
-      P.nativePlayback === false
+      P.playbackPolicy
+        ? "Detect device decoders and audio output for direct play; fall back to Compatibility on errors."
+        : P.nativePlayback === false
         ? (P.playbackName || "Samsung AVPlay") + " with Jellyfin compatibility transcoding."
         : "Compatibility works with the widest range of files. Native enables supported C1 formats.",
       function (control) {
@@ -853,10 +856,10 @@
     );
     vision.disabled = !decoder.native;
     if (P.nativePlayback === false) {
-      modeControl.disabled = true;
+      modeControl.disabled = !P.playbackPolicy;
       vision.hidden = true;
     }
-    var about = section("About", "Ember for Jellyfin · v0.2.56");
+    var about = section("About", "Ember for Jellyfin · v0.2.57");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -5767,7 +5770,7 @@
   }
   function decoderOptions() {
     return readPreference("decoder-options", {
-      native: false,
+      native: !!P.playbackPolicy,
       dolbyVision: false,
     });
   }
@@ -6364,13 +6367,13 @@
         ? active.lastPositionTicks
         : position();
     if (automatic) active.failurePositionTicks = ticks;
-    var paused = video.paused;
+    var paused = P.playbackPolicy && !active.hasPlayed ? active.pauseOnReady : video.paused;
     video.pause();
     try {
       await play(active.item, ticks, false, false, {
         compatibility: true,
         trackChange: true,
-        paused: automatic ? false : paused,
+        paused: P.playbackPolicy ? paused : automatic ? false : paused,
         mediaSourceId: active.source.Id,
         audioIndex: active.audioIndex,
         subtitleIndex: active.subtitleIndex,
@@ -6638,6 +6641,8 @@
         ? { native: false, reason: "Live TV uses compatibility HLS" }
         : options.compatibility
           ? { native: false, reason: options.policyReason }
+          : P.playbackPolicy
+            ? P.playbackPolicy(sourceMetadata, decoder, deliveredSubtitleIndex)
           : P.nativePlayback === false
             ? { native: false, reason: P.deviceName + " compatibility playback" }
             : C.nativePolicy(sourceMetadata, decoder, deliveredSubtitleIndex);
@@ -6646,12 +6651,10 @@
         native: nativeMode,
         dolbyVision: decoder.dolbyVision,
       });
+      if (nativeMode && P.playbackProfile) deviceProfile = P.playbackProfile(C.profile());
       var forceTranscode =
-        !!live ||
-        !!options.trackChange ||
-        !!subtitleCues ||
-        !!options.applyPreferences ||
-        !!options.compatibility;
+        !!live || !!options.compatibility ||
+        (!(nativeMode && P.playbackPolicy) && (!!options.trackChange || !!subtitleCues || !!options.applyPreferences));
       var requestBody = {
         UserId: session.user,
         StartTimeTicks: ticks,
@@ -6661,8 +6664,10 @@
         EnableDirectStream: nativeMode,
         EnableTranscoding: true,
         AllowVideoStreamCopy:
-          !options.compatibility && !(deliveredSubtitleIndex >= 0),
-        MaxAudioChannels: nativeMode ? 6 : 2,
+          !options.compatibility && (!(deliveredSubtitleIndex >= 0) || (nativeMode && !!P.playbackPolicy)),
+        MaxAudioChannels: nativeMode && P.playbackProfile
+          ? Number(deviceProfile.TranscodingProfiles[0].MaxAudioChannels) || 2
+          : nativeMode ? 6 : 2,
         AudioStreamIndex: options.audioIndex,
         SubtitleStreamIndex: subtitleCues ? -1 : options.subtitleIndex,
         MediaSourceId: options.mediaSourceId,
@@ -6770,6 +6775,8 @@
         .setAttribute("aria-label", "Playback position");
       showControls();
       document.getElementById("playing-title").textContent = item.Name;
+      if (P.playbackTracks && video.configure)
+        video.configure(P.playbackTracks(selected, sourceMetadata, playing.audioIndex, playing.subtitleIndex, subtitleCues, nativeMode));
       video.src = selected.url + (ticks ? "#t=" + ticks / 10000000 : "");
       resumeTimer = setInterval(finishResume, 250);
       video.load();
