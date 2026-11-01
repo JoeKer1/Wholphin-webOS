@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.20_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.21_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.20_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.20_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.21_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -201,3 +201,9 @@ Sidebar labels use explicit positioning within each row instead of flex text lay
 ### v0.2.20 — Live TV guide preview
 
 Back from full-screen Live TV returns to the guide with the current stream continuing in a small preview. Guide focus returns to the playing channel. Browsing keeps that channel playing; choosing another channel switches the preview and releases the previous tuner. Selecting the playing channel or Return to fullscreen expands the same stream without restarting it. Stop Live TV or Back from preview ends playback. Leaving the guide or hiding the app also ends the Live TV session.
+
+### v0.2.21 — Programme details beside Live TV preview
+
+The preview guide shows the highlighted programme title, channel, broadcast time, and description beside the video. Moving between channels or Now/Next updates these details from the bounded guide cache without changing playback or issuing extra detail requests. Missing listings and failed EPG loads show explicit placeholders.
+
+Channel numbers and logos are informational labels rather than remote focus targets. OK on a currently airing programme watches that channel. Channels without EPG data keep a Watch live programme cell, and future programmes still open details.

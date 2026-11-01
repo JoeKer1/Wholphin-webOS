@@ -267,10 +267,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .getByRole("button", { name: /Morning news/ })
       .waitFor();
     await row("c0")
-      .getByRole("button", { name: /Morning news/ })
+      .getByRole("button", { name: /Afternoon show/ })
       .click();
     await page
-      .getByRole("heading", { name: "Morning news", exact: true })
+      .getByRole("heading", { name: "Afternoon show", exact: true })
       .waitFor();
     await page.keyboard.press("Escape");
     await row("c0")
@@ -278,7 +278,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .waitFor();
     assert.equal(
       await page.locator(":focus").getAttribute("data-item"),
-      "c0now",
+      "c0next",
       "Back restores programme focus",
     );
     await page.keyboard.press("ArrowDown");
@@ -302,9 +302,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await row("c0")
       .getByRole("button", { name: /Morning news/ })
       .waitFor();
+    assert.equal(
+      await page
+        .locator(".guide-channel-label button,.guide-channel-label[tabindex]")
+        .count(),
+      0,
+      "Channel labels are not selectable",
+    );
     await page.screenshot({ path: "/tmp/wholphin-live-guide.png" });
     await row("c3")
-      .getByRole("button", { name: "Watch Station 3", exact: true })
+      .getByRole("button", { name: /Watch live/ })
       .click();
     await wait(() => requests.some((r) => r.path === "/Sessions/Playing"));
     assert.equal(await page.locator("#timeline").isVisible(), false);
@@ -347,6 +354,32 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       negotiationsBeforePreview,
       "Browsing does not switch channels",
     );
+    await page.waitForFunction(
+      () =>
+        document.getElementById("live-browse-title").textContent ===
+        "Morning news",
+    );
+    assert.match(
+      await page.locator("#live-browse-metadata").textContent(),
+      /Station 4/,
+    );
+    assert.equal(
+      await page.locator("#live-browse-overview").textContent(),
+      "Programme summary",
+    );
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    assert.equal(
+      await page.locator("#live-browse-title").textContent(),
+      "Afternoon show",
+    );
+    assert.equal(
+      await page.locator("#live-preview-caption").textContent(),
+      "Station 3",
+      "Browsing details do not change the channel being watched",
+    );
+
     assert.equal(await page.locator("header").isVisible(), true);
     assert.equal(
       await page.locator("#live-preview-caption").textContent(),
@@ -361,7 +394,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     await page.screenshot({ path: "/tmp/wholphin-live-preview.png" });
     await row("c4")
-      .getByRole("button", { name: "Watch Station 4", exact: true })
+      .getByRole("button", { name: /Morning news/ })
       .click();
     await wait(
       () =>
@@ -395,7 +428,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       document.body.classList.contains("live-preview"),
     );
     await row("c4")
-      .getByRole("button", { name: "Watch Station 4", exact: true })
+      .getByRole("button", { name: /Morning news/ })
       .click();
     assert.equal(
       requests.filter((r) => r.path === "/Sessions/Playing").length,

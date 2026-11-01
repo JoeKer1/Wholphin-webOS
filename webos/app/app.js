@@ -76,7 +76,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.20"' +
+      '", Version="0.2.21"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -2207,7 +2207,7 @@
     ).className = "metadata";
     var headers = el("div", null, main);
     headers.className = "guide-headings";
-    el("span", "Channel · OK to watch", headers);
+    el("span", "Channel", headers);
     el("span", state.offset ? "At " + guideTime(state.at) : "Now", headers);
     el("span", "Next", headers);
     var count = el("p", "Loading channels…", main);
@@ -2234,6 +2234,7 @@
     }
     function focusRow(index, column) {
       if (!valid()) return;
+      if (column === 0) column = 1;
       var channel = state.channels[index];
       if (!channel) {
         pendingFocus = { index: index, column: column };
@@ -2252,9 +2253,67 @@
       if (node) {
         var target =
           node.querySelector('[data-column="' + column + '"]') ||
+          node.querySelector('[data-column="1"]') ||
           node.querySelector("button");
         if (target) focusContent(target);
       }
+    }
+    function showBrowseDetails(channel, column) {
+      if (!livePreview || !channel) return;
+      var cached = state.cache.get(channel.Id),
+        programme =
+          cached &&
+          cached.data &&
+          (column === 2 ? cached.data.next : cached.data.current),
+        station =
+          (channel.ChannelNumber ? channel.ChannelNumber + " · " : "") +
+          channel.Name;
+      document.getElementById("live-browse-title").textContent = programme
+        ? programme.Name
+        : channel.Name;
+      document.getElementById("live-browse-metadata").textContent =
+        station +
+        (programme
+          ? " · " +
+            guideTime(programme.StartDate) +
+            " – " +
+            guideTime(programme.EndDate)
+          : "");
+      document.getElementById("live-browse-overview").textContent = programme
+        ? programme.Overview || "No description available."
+        : !cached
+          ? "Loading programme details…"
+          : cached.error
+            ? "Programme details are unavailable. Retry listings for this channel."
+            : column === 2
+              ? "No upcoming programme listed."
+              : "No programme listed for this channel.";
+    }
+    function watchChannel(channel, programme) {
+      return play(
+        {
+          Id: programme ? programme.Id : channel.Id,
+          ChannelId: channel.Id,
+          ChannelName: channel.Name,
+          Name: programme ? programme.Name : channel.Name,
+          IsLiveChannel: true,
+        },
+        0,
+        false,
+        true,
+      );
+    }
+    function watchCell(cell, channel, message) {
+      return itemButton(
+        "Watch live · " + message,
+        function () {
+          return watchChannel(channel);
+        },
+        cell,
+        channel,
+        1,
+        channel.Id + ":watch",
+      );
     }
     function fillProgrammes(row, channel, result) {
       var focused =
@@ -2265,16 +2324,18 @@
         cell.textContent = "";
         var programme = index === 0 ? result.current : result.next;
         if (!programme) {
-          el(
-            "p",
-            index === 0 ? "No programme listed" : "No upcoming listing",
-            cell,
-          );
+          if (index === 0) watchCell(cell, channel, "No programme listed");
+          else el("p", "No upcoming listing", cell);
           return;
         }
         var control = itemButton(
           "",
           function () {
+            if (
+              Date.parse(programme.StartDate) <= Date.now() &&
+              Date.parse(programme.EndDate) > Date.now()
+            )
+              return watchChannel(channel, programme);
             return go(function () {
               return detail(programme.Id, true);
             });
@@ -2298,6 +2359,8 @@
             C.liveProgress(programme, state.at) + "%";
         }
       });
+      if (state.focusChannel === channel.Id)
+        showBrowseDetails(channel, state.focusColumn);
       if (focused) {
         var restore = row.querySelector('[data-column="' + focused + '"]');
         if (restore) restore.focus();
@@ -2316,10 +2379,12 @@
       pump();
     }
     function guideError(row, channel) {
+      if (state.focusChannel === channel.Id)
+        showBrowseDetails(channel, state.focusColumn);
       var cells = row.querySelectorAll(".guide-programme");
       cells[0].textContent = "";
       cells[1].textContent = "";
-      el("p", "Guide unavailable", cells[0]);
+      watchCell(cells[0], channel, "Guide unavailable");
       itemButton(
         "Retry guide",
         function () {
@@ -2400,28 +2465,8 @@
       row.className = "guide-channel-row";
       var station = el("div", null, row);
       station.className = "guide-station";
-      var watch = itemButton(
-        "",
-        function () {
-          return play(
-            {
-              Id: channel.Id,
-              ChannelId: channel.Id,
-              ChannelName: channel.Name,
-              Name: channel.Name,
-              IsLiveChannel: true,
-            },
-            0,
-            false,
-            true,
-          );
-        },
-        station,
-        channel,
-        0,
-        channel.Id + ":watch",
-      );
-      watch.setAttribute("aria-label", "Watch " + channel.Name);
+      var watch = el("div", null, station);
+      watch.className = "guide-channel-label";
       var logo = image(channel, true);
       if (logo) {
         var img = el("img", null, watch);
@@ -2486,7 +2531,8 @@
       for (var i = 0; i < 2; i++) {
         var cell = el("div", null, row);
         cell.className = "guide-programme";
-        el("p", "Loading…", cell);
+        if (i === 0) watchCell(cell, channel, "Loading programme…");
+        else el("p", "Loading…", cell);
       }
       return row;
     }
@@ -2630,6 +2676,12 @@
       if (e.target.dataset.channel) {
         state.focusChannel = e.target.dataset.channel;
         state.focusColumn = Number(e.target.dataset.column);
+        showBrowseDetails(
+          state.channels.find(function (channel) {
+            return channel.Id === state.focusChannel;
+          }),
+          state.focusColumn,
+        );
       }
     }
     main.addEventListener("scroll", schedule);
@@ -2639,8 +2691,10 @@
         var index = state.channels.findIndex(function (channel) {
           return channel.Id === id;
         });
-        if (index >= 0) focusRow(index, 0);
-        else focusFirst();
+        if (index >= 0) {
+          focusRow(index, 0);
+          showBrowseDetails(state.channels[index], 0);
+        } else focusFirst();
       },
       dispose: function () {
         disposed = true;
@@ -2673,7 +2727,7 @@
         }
         if (key === 37 || key === 39) {
           var row = node.closest(".guide-channel-row"),
-            order = [0, 3, 1, 2],
+            order = [3, 1, 2],
             at = order.indexOf(column),
             target = order[at + (key === 37 ? -1 : 1)];
           if (target != null) {
@@ -4325,7 +4379,8 @@
       livePreview = !!keepPreview;
       document.body.classList.toggle("live-preview", livePreview);
       document.body.classList.toggle("is-playing", !livePreview);
-      document.getElementById("live-preview-caption").textContent = item.Name;
+      document.getElementById("live-preview-caption").textContent =
+        returnItem.ChannelName || item.Name;
       video.style.objectFit = previous ? video.style.objectFit : "contain";
       document.getElementById("fit").textContent =
         video.style.objectFit === "cover" ? "Fit video" : "Fill screen";

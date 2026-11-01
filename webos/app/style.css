@@ -1089,7 +1089,7 @@ body:not(.signed-in) main {
   display: flex;
   min-width: 0;
 }
-.guide-station > button:first-child {
+.guide-channel-label {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -1259,4 +1259,41 @@ body:not(.signed-in) main {
 }
 .live-preview #wall-clock {
   display: none;
+}
+
+#live-browse-info {
+  display: none;
+}
+.live-preview #live-browse-info {
+  display: block;
+  position: fixed;
+  top: 28px;
+  left: 160px;
+  right: 560px;
+  max-height: 260px;
+  overflow: hidden;
+  z-index: 3;
+}
+#live-browse-title {
+  font-size: 36px;
+  line-height: 1.15;
+  margin: 0 0 12px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+#live-browse-metadata {
+  color: #d4c9df;
+  font-size: 23px;
+  margin: 0 0 12px;
+}
+#live-browse-overview {
+  font-size: 25px;
+  line-height: 1.3;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
