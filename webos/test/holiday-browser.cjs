@@ -71,14 +71,25 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         (q) => q.SearchTerm === "halloween" && q.IncludeItemTypes === "Episode",
       ),
     );
-    await page.clock.setFixedTime(new Date(2026, 10, 1, 12));
+    await page.clock.setFixedTime(new Date(2026, 10, 11, 12));
+    await page.reload();
+    await page
+      .getByRole("button", { name: "Halloween movie", exact: true })
+      .waitFor();
+    await page.clock.setFixedTime(new Date(2026, 10, 12, 12));
     await page.reload();
     await page
       .locator('[data-row="holiday:2026-11:thanksgiving:movies"]')
       .waitFor({ state: "attached" });
     assert.equal(await page.locator('[data-row*="halloween"]').count(), 0);
+    await page.clock.setFixedTime(new Date(2026, 10, 27, 12));
+    await page.reload();
+    await page
+      .locator('[data-row="holiday:2026-12:christmas:movies"]')
+      .waitFor({ state: "attached" });
+    assert.equal(await page.locator('[data-row*="thanksgiving"]').count(), 0);
     console.log(
-      "PASS: seasonal query filters, populated cards, hidden empty rows, and October to November rollover",
+      "PASS: seasonal query filters, populated cards, hidden empty rows, and extended Halloween tail and immediate post-Thanksgiving Christmas",
     );
   } finally {
     await browser.close();

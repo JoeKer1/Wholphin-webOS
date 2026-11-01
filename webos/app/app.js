@@ -140,7 +140,7 @@
     return (
       'MediaBrowser Client="Ember", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.47"' +
+      '", Version="0.2.48"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -834,7 +834,7 @@
       },
     );
     vision.disabled = !decoder.native;
-    var about = section("About", "Ember for Jellyfin · v0.2.47");
+    var about = section("About", "Ember for Jellyfin · v0.2.48");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -951,13 +951,9 @@
     checkbox("Watch live row", options.live !== false, function (v) {
       options.live = v;
     });
-    checkbox(
-      "Holiday rows for the current month",
-      options.holidays !== false,
-      function (v) {
-        options.holidays = v;
-      },
-    );
+    checkbox("Seasonal holiday rows", options.holidays !== false, function (v) {
+      options.holidays = v;
+    });
     checkbox("Show poster titles", options.showTitles, function (v) {
       options.showTitles = v;
     });

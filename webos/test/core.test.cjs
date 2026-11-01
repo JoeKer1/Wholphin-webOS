@@ -306,7 +306,7 @@ test("live playback requires a negotiated transcode and carries the tuner identi
   );
 });
 
-test("holiday rows cover the full local month and use KefinTweaks filters", () => {
+test("holiday rows retain eleven days after holidays and Christmas follows Thanksgiving", () => {
   const rows = (month, day = 1, year = 2026) =>
     C.holidayRows(new Date(year, month - 1, day, 12));
   assert.deepEqual(
@@ -319,11 +319,21 @@ test("holiday rows cover the full local month and use KefinTweaks filters", () =
     ],
   );
   assert.deepEqual(rows(10, 31), rows(10));
-  assert.deepEqual(rows(11)[0].filter, { Tags: "thanksgiving" });
+  assert.deepEqual(rows(11, 12)[0].filter, { Tags: "thanksgiving" });
   assert.deepEqual(rows(12)[1].filter, { SearchTerm: "christmas" });
   assert.equal(rows(12)[1].layout, "landscape");
-  assert.equal(rows(1, 31)[0].title, "New Year's Movies");
-  assert.equal(rows(2, 28)[0].title, "Valentine's Movies");
+  assert.equal(rows(11, 11)[0].title, "Halloween Movies");
+  assert.equal(rows(11, 26)[0].title, "Thanksgiving Movies");
+  assert.equal(rows(11, 27)[0].title, "Christmas Movies");
+  assert.equal(rows(11, 23, 2023)[0].title, "Thanksgiving Movies");
+  assert.equal(rows(11, 24, 2023)[0].title, "Christmas Movies");
+  assert.equal(rows(1, 5, 2027)[0].title, "Christmas Movies");
+  assert.equal(rows(1, 5, 2027)[0].key, rows(12, 25, 2026)[0].key);
+  assert.equal(rows(1, 6)[0].title, "New Year's Movies");
+  assert.equal(rows(1, 12)[0].title, "New Year's Movies");
+  assert.deepEqual(rows(1, 13), []);
+  assert.equal(rows(2, 25)[0].title, "Valentine's Movies");
+  assert.deepEqual(rows(2, 26), []);
   for (const month of [3, 4, 5, 6, 7, 8, 9]) assert.deepEqual(rows(month), []);
   assert.notEqual(rows(1, 1, 2026)[0].key, rows(1, 1, 2027)[0].key);
   const plan = C.homeRows([], { combine: true }, new Date(2026, 9, 31));

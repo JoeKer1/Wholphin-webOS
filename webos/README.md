@@ -315,3 +315,7 @@ Settings uses a fixed category column and a separately scrolling list of full-wi
 ### v0.2.47 — Community and critic ratings
 
 Home/library previews, movie/show details and season episode previews display the server's community rating with a gold star and critic percentage with a red tomato and green leaf. Missing, nonnumeric and out-of-range scores are omitted; valid zero scores are retained. Rating symbols are rendered locally with accessible labels and no remote icon dependencies.
+
+### v0.2.48 — Longer holiday seasons
+
+Holiday rows retain eleven days after Halloween, Christmas, New Year's and Valentine's Day. Halloween runs October 1–November 11; Thanksgiving runs November 12 through US Thanksgiving; Christmas takes over the following day through January 5; New Year's follows January 6–12; Valentine's runs February 1–25. Christmas explicitly takes precedence over Thanksgiving's tail. Row keys remain anchored to the holiday's year/month across calendar boundaries. Profile colors follow the same season, with Harvest starting October 17 and Bloom lasting eleven days after Easter. Dates use the TV's local calendar.

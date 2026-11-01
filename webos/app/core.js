@@ -667,19 +667,36 @@
   }
   // Native equivalents of KefinTweaks' seasonal query presets:
   // https://github.com/ranaldsgift/KefinTweaks/blob/main/scripts/homeScreenConfig2.js
-  // Activate for the entire holiday month, using the TV's local calendar.
-  function holidayRows(now) {
-    now = now || new Date();
-    var month = now.getMonth() + 1;
+  // Local-calendar seasons retain rows for eleven days after the holiday.
+  function holidaySeason(now) {
+    var year = now.getFullYear(),
+      month = now.getMonth() + 1,
+      day = now.getDate(),
+      thanksgiving = 22 + ((4 - new Date(year, 10, 22).getDay() + 7) % 7),
+      key;
+    if (month === 10 || (month === 11 && day <= 11)) key = 10;
+    else if (month === 11) key = day <= thanksgiving ? 11 : 12;
+    else if (month === 12) key = 12;
+    else if (month === 1 && day <= 5) {
+      key = 12;
+      year--;
+    } else if (month === 1 && day <= 12) key = 1;
+    else if (month === 2 && day <= 25) key = 2;
     var holiday = {
       1: ["new-years", "New Year's", "new year's eve", "new year"],
       2: ["valentines", "Valentine's", "valentine's day", "valentine"],
       10: ["halloween", "Halloween", "halloween", "halloween"],
       11: ["thanksgiving", "Thanksgiving", "thanksgiving", "thanksgiving"],
       12: ["christmas", "Christmas", "christmas", "christmas"],
-    }[month];
-    if (!holiday) return [];
-    var period = now.getFullYear() + "-" + month;
+    }[key];
+    return holiday ? { holiday: holiday, month: key, year: year } : null;
+  }
+  function holidayRows(now) {
+    var season = holidaySeason(now || new Date());
+    if (!season) return [];
+    var holiday = season.holiday,
+      month = season.month,
+      period = season.year + "-" + month;
     function row(suffix, title, type, filter) {
       return {
         key: "holiday:" + period + ":" + holiday[0] + ":" + suffix,
@@ -1057,15 +1074,15 @@
       year = date.getFullYear(),
       month = date.getMonth(),
       day = date.getDate();
-    var thanksgiving = 22 + ((4 - new Date(year, 10, 22).getDay() + 7) % 7);
+    var season = holidaySeason(date);
+    if (season && (season.month === 12 || season.month === 1))
+      return "snowfall";
     if (
-      (month === 9 && day >= 17) ||
-      (month === 10 && day <= 2) ||
-      (month === 10 && day >= thanksgiving - 14 && day <= thanksgiving + 2)
+      season &&
+      (season.month === 11 ||
+        (season.month === 10 && (month === 10 || day >= 17)))
     )
       return "harvest";
-    if ((month === 11 && day >= 11) || (month === 0 && day <= 2))
-      return "snowfall";
     // Gregorian Easter, using the anonymous computus.
     var a = year % 19,
       b = Math.floor(year / 100),
@@ -1083,7 +1100,7 @@
       easter = new Date(year, Math.floor(n / 31) - 1, (n % 31) + 1),
       today = new Date(year, month, day),
       delta = Math.round((today - easter) / 86400000);
-    return delta >= -14 && delta <= 2 ? "bloom" : "";
+    return delta >= -14 && delta <= 11 ? "bloom" : "";
   }
   var api = {
     profileHolidayTheme: profileHolidayTheme,
