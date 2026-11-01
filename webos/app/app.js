@@ -3548,14 +3548,52 @@
           var section = el("section", null, collectionHost);
           section.className = "detail-media-row";
           section.dataset.rowKey = "collections:" + seed;
-          el("h2", "Collections", section);
+          var heading = el("div", null, section);
+          heading.className = "detail-row-heading";
+          el("h2", "Collections", heading);
+          var position = el("span", "1 of " + members.length, heading);
+          position.className = "metadata";
           section.loadPage = function () {};
           cards(members, section, "portrait", null, function (collection) {
             return go(function () {
               return listing(collection.Id, collection.Name);
             });
           });
-          notify(section, section.querySelector(".rail"), {
+          var rail = section.querySelector(".rail");
+          rail.addEventListener("focusin", function (event) {
+            var card = event.target.closest(".card");
+            if (!card) return;
+            position.textContent =
+              Array.prototype.indexOf.call(rail.children, card) +
+              1 +
+              " of " +
+              members.length;
+            var bounds = rail.getBoundingClientRect(),
+              rect = card.getBoundingClientRect();
+            if (rect.left < bounds.left + 16)
+              rail.scrollLeft -= bounds.left + 16 - rect.left;
+            else if (rect.right > bounds.right - 16)
+              rail.scrollLeft += rect.right - bounds.right + 16;
+          });
+          rail.addEventListener(
+            "wheel",
+            function (event) {
+              if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+              var target = Math.max(
+                0,
+                Math.min(
+                  rail.scrollWidth - rail.clientWidth,
+                  rail.scrollLeft + event.deltaY,
+                ),
+              );
+              if (target !== rail.scrollLeft) {
+                event.preventDefault();
+                rail.scrollLeft = target;
+              }
+            },
+            { passive: false },
+          );
+          notify(section, rail, {
             done: true,
             count: members.length,
           });

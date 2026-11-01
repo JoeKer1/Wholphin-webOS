@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.29_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.30_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.29_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.29_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.30_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -239,3 +239,7 @@ Opening Live TV focuses the current programme. Left reaches the favorite star an
 ### v0.2.29 — Description follows episode focus
 
 The episode synopsis beside Start/Continue updates while browsing season episode cards and returns to the Start/Continue synopsis when that card is focused. Missing summaries show an explicit fallback instead of the previous episode description.
+
+### v0.2.30 — Collection scrolling
+
+The Collections row keeps focused cards fully visible, supports vertical remote-wheel scrolling horizontally, and shows the focused collection position and total.

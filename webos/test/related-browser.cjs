@@ -150,6 +150,34 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     const collection = page.locator('[data-row-key="collections:m1"]');
     await collection.locator('.card[data-item="col1"]').waitFor();
     assert.equal(await collection.locator(".card").count(), 2);
+    await collection
+      .locator(".rail")
+      .evaluate((n) => (n.style.maxWidth = "300px"));
+    await collection.locator('[data-item="col2"]').focus();
+    assert.equal(
+      await collection.locator(".detail-row-heading .metadata").textContent(),
+      "2 of 2",
+    );
+    assert.ok(
+      await collection.locator(".rail").evaluate((n) => n.scrollLeft > 0),
+      "Focused collection scrolls into view",
+    );
+    await collection.locator(".rail").evaluate((n) => {
+      n.scrollLeft = 0;
+      n.dispatchEvent(
+        new WheelEvent("wheel", {
+          deltaY: 200,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    assert.ok(
+      await collection.locator(".rail").evaluate((n) => n.scrollLeft > 0),
+      "Remote wheel scrolls collection row",
+    );
+    await collection.locator(".rail").evaluate((n) => (n.style.maxWidth = ""));
+
     assert.equal(
       requests.some((r) => r.q.ParentId === "col1" || r.q.ParentId === "col2"),
       false,
