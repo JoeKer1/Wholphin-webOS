@@ -63,6 +63,28 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       RunTimeTicks: 18000000000,
       UserData: { PlaybackPositionTicks: ticks },
       ImageTags: { Primary: "episode" },
+      MediaSources: [
+        {
+          Id: "source-" + Id,
+          DefaultSubtitleStreamIndex: 4,
+          MediaStreams: [
+            {
+              Type: "Subtitle",
+              Index: 4,
+              DisplayTitle: "English",
+              Language: "eng",
+              Codec: "srt",
+            },
+            {
+              Type: "Subtitle",
+              Index: 7,
+              DisplayTitle: "French",
+              Language: "fra",
+              Codec: "srt",
+            },
+          ],
+        },
+      ],
       People: [
         { Id: "host", Name: "Host", Type: "Actor" },
         { Id: "writer", Name: "Writer", Type: "Writer" },
@@ -254,6 +276,19 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page.locator(":focus").getAttribute("aria-selected"),
       "true",
     );
+    await page.locator("#detail-subtitles").click();
+    await page.locator('#detail-subtitle-menu [data-index="-1"]').click();
+    assert.equal(await page.locator("#detail-subtitles").textContent(), "Off");
+    assert.equal(
+      await page.locator("#detail-subtitles").getAttribute("data-source"),
+      "source-progress",
+    );
+    assert.ok(
+      !(await page.locator(".episode-stream-details").textContent()).includes(
+        "French",
+      ),
+    );
+
     await page
       .locator(".season-browser-tabs")
       .getByRole("tab", { name: "Season 2", exact: true })
@@ -267,6 +302,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     assert.equal(
       await page.locator("main h1").textContent(),
       "Multiple seasons",
+    );
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#detail-subtitles").dataset.source ===
+        "source-next",
+    );
+    assert.equal(
+      await page.locator("#detail-subtitles").textContent(),
+      "Off",
+      "Off preference carries to another episode",
     );
     const art = page.locator(".episode-browser-rail [data-item=next] .art");
     const bounds = await art.boundingBox();
@@ -304,6 +349,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .getByRole("button", { name: "Remove from favorites", exact: true })
       .waitFor();
     await page.locator(".episode-browser-actions button").first().focus();
+    await page.keyboard.press("ArrowDown");
+    assert.equal(
+      await page.locator(":focus").getAttribute("id"),
+      "detail-subtitles",
+    );
     await page.keyboard.press("ArrowDown");
     assert.equal(
       await page.locator(":focus").getAttribute("aria-label"),
