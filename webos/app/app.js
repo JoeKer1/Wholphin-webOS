@@ -885,6 +885,14 @@
     cards(data.Items, main);
     focusFirst();
   }
+  function bonfireFields(value) {
+    if (!value || typeof value !== "object") return value;
+    var normalized = {};
+    Object.keys(value).forEach(function (key) {
+      normalized[key.charAt(0).toLowerCase() + key.slice(1)] = value[key];
+    });
+    return normalized;
+  }
   function profileAccount() {
     var root = session && session.profileAccount;
     return root &&
@@ -949,6 +957,7 @@
           { session: account, signal: controller.signal, profileErrors: true },
         );
         if (!valid()) return;
+        result = bonfireFields(result);
         if (
           !result ||
           typeof result.activeProfileToken !== "string" ||
@@ -1041,6 +1050,7 @@
       bonfireAvailable = true;
       navigation();
       profiles
+        .map(bonfireFields)
         .filter(function (profile) {
           return (
             profile &&

@@ -62,7 +62,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
           auth.includes('Token="master-token"'),
           "Profile management uses the parent credential",
         );
-        return route.fulfill({ json: profiles });
+        return route.fulfill({
+          json: profiles.map((p) =>
+            Object.fromEntries(
+              Object.entries(p).map(([k, v]) => [
+                k[0].toUpperCase() + k.slice(1),
+                v,
+              ]),
+            ),
+          ),
+        });
       }
       if (u.pathname.startsWith("/plugins/profiles/image/"))
         return route.fulfill({ status: 404, body: "" });
@@ -73,8 +82,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         if (mode === "invalid")
           return route.fulfill({
             json: {
-              activeProfileToken: "other-token",
-              jellyfinUserId: "intruder",
+              ActiveProfileToken: "other-token",
+              JellyfinUserId: "intruder",
             },
           });
         if (mode === "slow") await new Promise((r) => setTimeout(r, 400));
@@ -82,9 +91,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
           return route.fulfill({ status: 400, body: "<b>Incorrect PIN</b>" });
         return route.fulfill({
           json: {
-            activeProfileToken:
+            ActiveProfileToken:
               body.profileId === "kid" ? "kid-token" : "master-token",
-            jellyfinUserId: body.profileId,
+            JellyfinUserId: body.profileId,
           },
         });
       }
