@@ -140,7 +140,7 @@
     return (
       'MediaBrowser Client="Ember", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.44"' +
+      '", Version="0.2.45"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -610,7 +610,7 @@
   function settings() {
     reset("Settings");
     selectNav("settings");
-    el("p", "Ember for Jellyfin · v0.2.44", main).className = "metadata";
+    el("p", "Ember for Jellyfin · v0.2.45", main).className = "metadata";
     el("p", "Connected to " + session.server, main).className = "metadata";
     button(
       "Switch profile",

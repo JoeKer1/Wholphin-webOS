@@ -303,3 +303,7 @@ Continue watching groups in-progress episodes by series, retaining the episode w
 ### v0.2.44 — Fullscreen profile gate
 
 Profile selection fills the entire viewport with centered profile cards, without sidebar spacing, clock or background artwork. PIN entry stays within the same fullscreen view. There is no Back button into content; remote Back returns to profile selection. Home appears after a profile is selected successfully.
+
+### v0.2.45 — Refresh launcher icon paths
+
+Ember launcher artwork uses new Ember-specific filenames to avoid reusing cached Wholphin icon paths. The installed image bytes were already correct; this updates the image references without uninstalling the app.
