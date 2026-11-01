@@ -1,5 +1,12 @@
 * {
   box-sizing: border-box;
+  scrollbar-width: none;
+}
+/* Keep remote/pointer scrolling, without desktop scrollbars on the TV. */
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 html,
 body {
@@ -596,9 +603,6 @@ body:not(.signed-in) main {
   width: 36px;
   height: 36px;
 }
-#transport #stop {
-  margin-right: 0;
-}
 #player-tools {
   margin-top: 24px;
   padding-top: 20px;
@@ -1133,4 +1137,11 @@ body:not(.signed-in) main {
 #guide-count {
   font-size: 22px;
   color: #d1c9d9;
+}
+
+#detail-subtitles {
+  max-width: 600px;
+}
+.detail-subtitle-settings label {
+  margin-right: 12px;
 }

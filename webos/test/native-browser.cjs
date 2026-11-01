@@ -259,7 +259,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       );
     const starts = () => requests.filter((r) => r.path === "/Sessions/Playing");
     async function stopped() {
-      await page.locator("#stop").click();
+      await page.evaluate(() =>
+        document.dispatchEvent(
+          new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+        ),
+      );
       await page
         .getByRole("heading", { name: "4K test", exact: true })
         .waitFor();

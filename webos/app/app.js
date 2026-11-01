@@ -75,7 +75,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.13"' +
+      '", Version="0.2.14"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -2743,19 +2743,84 @@
         actions,
       );
     } else if (item.MediaType === "Video") {
+      var subtitleSettings = el("div", null, main);
+      subtitleSettings.className = "detail-subtitle-settings";
+      var subtitlePicker = el("select", null, subtitleSettings);
+      subtitlePicker.id = "detail-subtitles";
+      subtitlePicker.setAttribute("aria-label", "Subtitles before playback");
+      var subtitleLabel = el("label", "Subtitles", subtitleSettings);
+      subtitleLabel.htmlFor = subtitlePicker.id;
+      subtitleSettings.insertBefore(subtitleLabel, subtitlePicker);
+      function detailSubtitleOptions() {
+        return subtitlePicker.value === "default"
+          ? {}
+          : {
+              subtitleIndex: Number(subtitlePicker.value),
+              mediaSourceId: subtitlePicker.dataset.source,
+            };
+      }
+      function loadDetailSubtitles() {
+        subtitlePicker.disabled = true;
+        subtitlePicker.textContent = "";
+        el("option", "Loading subtitles…", subtitlePicker).value = "default";
+        return (async function () {
+          var sources = item.MediaSources;
+          if (
+            !sources ||
+            !sources.some(function (source) {
+              return Array.isArray(source.MediaStreams);
+            })
+          ) {
+            var metadata = await api(
+              "/Items/" + encodeURIComponent(item.Id) + "/PlaybackInfo",
+              { UserId: session.user },
+            );
+            sources = metadata.MediaSources || [];
+          }
+          if (!subtitlePicker.isConnected) return;
+          var source =
+            sources.find(function (entry) {
+              return Array.isArray(entry.MediaStreams);
+            }) || {};
+          subtitlePicker.textContent = "";
+          el("option", "Default / remembered choice", subtitlePicker).value =
+            "default";
+          el("option", "Off", subtitlePicker).value = "-1";
+          C.tracks(source, "Subtitle").forEach(function (track) {
+            el("option", track.label, subtitlePicker).value = String(
+              track.index,
+            );
+          });
+          if (source.Id) subtitlePicker.dataset.source = source.Id;
+          subtitlePicker.disabled = false;
+        })().catch(function () {
+          if (!subtitlePicker.isConnected) return;
+          subtitlePicker.textContent = "";
+          el("option", "Default (tracks unavailable)", subtitlePicker).value =
+            "default";
+          button(
+            "Retry subtitle tracks",
+            async function () {
+              await loadDetailSubtitles();
+            },
+            actions,
+          );
+        });
+      }
+      loadDetailSubtitles();
       var ticks = (item.UserData && item.UserData.PlaybackPositionTicks) || 0;
       if (ticks)
         button(
           "Resume",
           function () {
-            return play(item, ticks, true);
+            return play(item, ticks, true, false, detailSubtitleOptions());
           },
           actions,
         );
       button(
         "Play from beginning",
         function () {
-          return play(item, 0);
+          return play(item, 0, false, false, detailSubtitleOptions());
         },
         actions,
       );
@@ -3835,7 +3900,7 @@
             "Audio",
             preferences.Audio,
           );
-        if (preferences.Subtitle)
+        if (preferences.Subtitle && options.subtitleIndex == null)
           options.subtitleIndex = C.preferredTrack(
             sourceMetadata || {},
             "Subtitle",
@@ -4251,7 +4316,6 @@
   transportIcon("rewind", "rewind", "Back 30 seconds");
   transportIcon("forward", "forward", "Forward 30 seconds");
   transportIcon("next-video", "next", "Next video");
-  transportIcon("stop", "stop", "Stop playback");
   setTransportState(false);
   function closePlayerTools(restore) {
     var tools = document.getElementById("player-tools"),
@@ -4349,9 +4413,6 @@
     video.style.objectFit = fill ? "cover" : "contain";
     this.textContent = fill ? "Fit video" : "Fill screen";
     showControls();
-  };
-  document.getElementById("stop").onclick = function () {
-    run(stop);
   };
   document.addEventListener("focusin", function (e) {
     document
@@ -4480,6 +4541,54 @@
         seek(key === 412 ? -30 : 30);
         return;
       }
+    }
+    if (
+      playing &&
+      document.getElementById("playback-panel").hidden &&
+      key >= 37 &&
+      key <= 40
+    ) {
+      var focused = document.activeElement,
+        transport = document.getElementById("transport"),
+        tools = document.getElementById("player-tools");
+      if (transport.contains(focused)) {
+        e.preventDefault();
+        var buttons = Array.prototype.slice
+            .call(transport.querySelectorAll("button"))
+            .filter(function (node) {
+              return !node.disabled;
+            }),
+          index = buttons.indexOf(focused);
+        if (key === 37 || key === 39)
+          buttons[
+            Math.max(
+              0,
+              Math.min(buttons.length - 1, index + (key === 37 ? -1 : 1)),
+            )
+          ].focus();
+        else if (key === 38) document.getElementById("timeline").focus();
+        else if (!tools.hidden)
+          tools.querySelector("button:not(:disabled)").focus();
+        else document.getElementById("player-options").focus();
+        return;
+      }
+      if (focused.id === "timeline" && key === 40) {
+        e.preventDefault();
+        document.getElementById("toggle").focus();
+        return;
+      }
+      if (tools.contains(focused) && key === 38) {
+        e.preventDefault();
+        document.getElementById("player-options").focus();
+        return;
+      }
+    }
+    if (document.activeElement.tagName === "SELECT") {
+      if (key === 39 && document.activeElement.id === "detail-subtitles") {
+        e.preventDefault();
+        focusContent(main.querySelector(".actions button"));
+      }
+      return;
     }
     if (key < 37 || key > 40) return;
     var active = document.activeElement;

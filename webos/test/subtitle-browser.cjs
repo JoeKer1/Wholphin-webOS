@@ -211,7 +211,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page.locator("#playback-panel .subtitle-preview").waitFor();
     }
     await page.goto(
-      pathToFileURL(path.join(process.env.APP_DIR || path.resolve(__dirname, "../app"), "index.html")).href,
+      pathToFileURL(
+        path.join(
+          process.env.APP_DIR || path.resolve(__dirname, "../app"),
+          "index.html",
+        ),
+      ).href,
     );
     await click("Subtitle test");
     await click("Play from beginning");
@@ -332,7 +337,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await click("Apply subtitle appearance");
     await wait(() => !!releaseText);
     await page.keyboard.press("Escape");
-    await page.locator("#stop").click();
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+      ),
+    );
     releaseText();
     holdText = false;
     await page.waitForSelector("body:not(.is-playing)");
@@ -353,7 +362,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     await at(100);
     await wait(() => page.locator("#subtitle-overlay").isVisible());
-    await page.locator("#stop").click();
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+      ),
+    );
     await page.locator("nav [data-nav=settings]").click();
     await click("Subtitle appearance");
     await page.locator("main .subtitle-preview").waitFor();

@@ -475,7 +475,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         ),
       "Old stop report precedes new start",
     );
-    await page.locator("#stop").click();
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+      ),
+    );
     await page
       .getByRole("heading", { name: "Movie two", exact: true })
       .waitFor();
@@ -554,7 +558,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await click("English subtitles");
     await waitFor(() => !!releaseNegotiation);
     await page.keyboard.press("Escape");
-    await page.locator("#stop").click();
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+      ),
+    );
     releaseNegotiation();
     holdNegotiation = false;
     await page
@@ -601,7 +609,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "es",
       "Fallback must retain the desired language for later episodes",
     );
-    await page.locator("#stop").click();
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+      ),
+    );
     await page
       .getByRole("heading", { name: "Episode 3", exact: true })
       .waitFor();
@@ -615,7 +627,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       32,
       "Returning to an available language restores subtitles using the new index",
     );
-    await page.locator("#stop").click();
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+      ),
+    );
     await page
       .getByRole("heading", { name: "Episode 2", exact: true })
       .waitFor();
@@ -641,7 +657,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "Another account keeps its own defaults",
     );
     assert.equal(infos().at(-1).body.SubtitleStreamIndex, undefined);
-    await page.locator("#stop").click();
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+      ),
+    );
     await page
       .getByRole("heading", { name: "Episode 2", exact: true })
       .waitFor();
@@ -760,7 +780,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page.locator("#playing-title").textContent(),
       /Episode 3/,
     );
-    await page.locator("#stop").click();
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+      ),
+    );
     await page.locator("nav [data-nav=home]").click();
     await click("Test show");
     failSeasons = true;
@@ -804,6 +828,53 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .locator(".season-choices button")
       .filter({ hasText: "Specials" })
       .waitFor();
+    await page.locator("nav [data-nav=home]").click();
+    await click("Movie one");
+    const subtitlePicker = page.getByRole("combobox", {
+      name: "Subtitles before playback",
+    });
+    await subtitlePicker.selectOption("12");
+    const preselectedStart = starts().length;
+    await click("Play from beginning");
+    await started(preselectedStart + 1);
+    await waitFor(() => infos().at(-1).body.SubtitleStreamIndex === 12);
+    assert.equal(infos().at(-1).body.MediaSourceId, "source-m1");
+    assert.equal(await page.locator("#stop").count(), 0);
+    await page.locator("#toggle").focus();
+    for (let i = 0; i < 6; i++) {
+      if (
+        await page
+          .locator("#player-options")
+          .evaluate((n) => n === document.activeElement)
+      )
+        break;
+      await page.keyboard.press("ArrowRight");
+    }
+    assert.equal(
+      await page
+        .locator("#player-options")
+        .evaluate((n) => n === document.activeElement),
+      true,
+      "Options is reachable with the remote",
+    );
+    await page.keyboard.press("Enter");
+    assert.equal(await page.locator("#player-tools").isVisible(), true);
+    const oldSubtitlePicker = await subtitlePicker.elementHandle();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => document.getElementById("player").hidden);
+    await page.waitForFunction((node) => !node.isConnected, oldSubtitlePicker);
+    await page
+      .getByRole("combobox", { name: "Subtitles before playback" })
+      .selectOption("-1");
+    const offStart = starts().length;
+    await click("Play from beginning");
+    await started(offStart + 1);
+    await waitFor(() => infos().at(-1).body.SubtitleStreamIndex === -1);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => document.getElementById("player").hidden);
     assert.deepEqual(errors, []);
     console.log(
       "PASS: Up Next artwork/description, playback-time countdown, seek dismissal, cancellation, Still watching confirmation; audio/subtitle indices, Off, exact-position and paused switching, failure recovery, chapters, menu Back, queue reorder/priority, stop-before-start, autoplay toggle/season boundary/finale, cancelled-switch race, remembered languages across indices/restarts, missing-language fallback, account isolation and preference reset",

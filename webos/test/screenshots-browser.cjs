@@ -281,9 +281,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "tuner",
     );
     encoderFails = true;
-    await page
-      .getByRole("button", { name: "Stop playback", exact: true })
-      .click();
+    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { keyCode: 413, bubbles: true })));
     await wait(() => calls.some((c) => c.path === "/LiveStreams/Close"));
     assert.equal(
       calls.find((c) => c.path === "/LiveStreams/Close").body.LiveStreamId,

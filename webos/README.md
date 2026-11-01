@@ -1,6 +1,6 @@
 # Wholphin for LG webOS — initial port
 
-A standalone webOS TV app alongside the Android client. This is an early implementation, not feature parity with Android Wholphin. No Android build or Jellyfin Web deployment is required. The UI follows the upstream Wholphin home and movie-detail designs and Android Compose implementation.
+A standalone webOS TV app alongside the Android client. This is an early implementation, not feature parity with Android Wholphin. No Android build or Jellyfin Web deployment is required. The UI follows the home and movie-detail screenshots in the root README and the Android Compose implementation.
 
 Implemented: Wholphin-style focused-item backdrops and summaries, collapsible navigation drawer, poster rows, favorites browsing/toggle, cast details, server URL/password login, saved session and sign out, continuous library/folder browsing with sorting and filters, continue watching, next up, recently added, title search, item details, resume, playback controls, remote directional navigation, and Jellyfin playback progress/stopped reporting. Magic Remote pointer clicks use standard buttons and inputs.
 
@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.13_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.14_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.13_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.13_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.14_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -173,3 +173,7 @@ The sidebar now has a dedicated **Live TV** screen. Channel rows show numbers/lo
 **Later/Earlier** move the reference time in two-hour steps, up to 24 hours ahead. **Now** returns to current listings. The displayed timestamp identifies the reference time; use Now or Refresh guide to update it. Favorites stars update Jellyfin channel favorites, with an All/Favorites filter. D-pad moves between channel rows and listing columns; Back returns from details to the guide. Direct channel playback returns to the guide on Stop and releases its tuner.
 
 Channels load continuously in batches of 24, with a bounded window of rendered rows. EPG requests are limited to nearby rows and two concurrent requests, with a small memory cache. A failing programme row offers Retry without blocking channel playback or other listings. Channel errors/permission failures offer Retry channels. Navigation cancels pending guide requests and stale responses cannot replace the next page. Uses Jellyfin's [Live TV channel/programme APIs](https://github.com/jellyfin/jellyfin/blob/master/Jellyfin.Api/Controllers/LiveTvController.cs). Local tests cover now/next selection, favorites, continuous loading, remote navigation, Back focus, lazy/bounded rendering, retries, denied access, no-EPG playback and tuner cleanup. Validated on the LG C1 (webOS 6.5 / Chromium 79) on 2026-10-31: all 79 configured channels loaded continuously; channel logos, now/next, later programme details, D-pad row navigation and Back worked. The Favorites filter correctly showed an empty state and was restored to All without changing saved favorites. A live 1920×1080 stream decoded without a reported media error, paused and resumed with advancing playback time, and returned to the guide on Stop. Jellyfin returned HTTP 204 for the stopped-session report, encoder cleanup and tuner close. No playback was left running. Other TV models and DVR functionality remain unvalidated.
+
+### v0.2.14 — Subtitle selection before playback
+
+Movie and episode details include a subtitle dropdown with available tracks, Off, and the default/remembered choice. Explicit choices apply to Play and Resume. Playback transport controls use ordered left/right remote navigation so Options stays reachable. Back exits playback and saves progress; the on-screen Stop button has been removed. Scrollbars are hidden throughout the TV interface while scrolling remains enabled.

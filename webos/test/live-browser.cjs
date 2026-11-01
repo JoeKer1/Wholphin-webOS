@@ -309,7 +309,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await wait(() => requests.some((r) => r.path === "/Sessions/Playing"));
     assert.equal(await page.locator("#timeline").isVisible(), false);
     assert.equal(await page.locator("#rewind").isDisabled(), true);
-    await page.locator("#stop").click();
+    await page.evaluate(() =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
+      ),
+    );
     await wait(() => requests.some((r) => r.path === "/LiveStreams/Close"));
     assert.ok(
       await page.locator("#guide-channels").isVisible(),
