@@ -2,7 +2,7 @@
 
 Ember is an unofficial, experimental Jellyfin client for LG webOS TVs, inspired by [Wholphin for Android TV](https://github.com/damontecres/Wholphin). This repository contains the standalone webOS implementation; it does not require an Android build or a Jellyfin Web deployment.
 
-Current version: **0.2.50**. Developed for an LG C1 running webOS 6.5; other models are untested. This is not affiliated with or an official release of Wholphin, Jellyfin, or LG, and does not have feature parity with Android Wholphin.
+Current version: **0.2.51**. Developed for an LG C1 running webOS 6.5; other models are untested. This is not affiliated with or an official release of Wholphin, Jellyfin, or LG, and does not have feature parity with Android Wholphin.
 
 The app was previously named Wholphin for webOS. Existing installations update in place and keep their sign-in and settings.
 

@@ -140,7 +140,7 @@
     return (
       'MediaBrowser Client="Ember", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.50"' +
+      '", Version="0.2.51"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -686,7 +686,7 @@
       profile,
       "Customize Home",
       "",
-      "Choose rows, libraries and poster titles.",
+      "Reorder rows, choose artwork and pin your favorites.",
       function () {
         return go(customizeHome);
       },
@@ -834,7 +834,7 @@
       },
     );
     vision.disabled = !decoder.native;
-    var about = section("About", "Ember for Jellyfin · v0.2.50");
+    var about = section("About", "Ember for Jellyfin · v0.2.51");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -928,9 +928,26 @@
   function customizeHome() {
     reset("Customize Home");
     selectNav("settings");
-    var options = homeOptions(),
+    var options = JSON.parse(JSON.stringify(homeOptions())),
       form = el("form", null, main);
     form.className = "home-options";
+    main.classList.add("home-editor-page");
+    el(
+      "p",
+      "Choose what appears on Home, then arrange each row. Changes apply only to this profile when you save.",
+      form,
+    ).className = "metadata";
+    var editorActions = el("div", null, form);
+    editorActions.className = "home-editor-actions";
+    var rowsEditor,
+      controller = new AbortController(),
+      editorRevision = revision;
+    function editButton(label, action, parent) {
+      var control = button(label, action, parent);
+      control.type = "button";
+      return control;
+    }
+
     function checkbox(label, checked, onChange) {
       var line = el("label", null, form),
         input = el("input", null, line);
@@ -939,6 +956,7 @@
       el("span", label, line);
       input.onchange = function () {
         onChange(input.checked);
+        if (rowsEditor) renderRows();
       };
     }
     checkbox(
@@ -1001,7 +1019,330 @@
           },
         );
       });
-    var save = el("button", "Save and open Home", form);
+    el("h2", "Pinned rows", form);
+    el(
+      "p",
+      "Add a row of titles from a collection, playlist, genre or studio.",
+      form,
+    ).className = "metadata";
+    var pinActions = el("div", null, form);
+    pinActions.className = "home-pin-actions";
+    var picker = el("section", null, main),
+      pickerOpener,
+      pickerToken = 0;
+    picker.id = "home-pin-picker";
+    picker.className = "home-pin-picker";
+    picker.hidden = true;
+    picker.setAttribute("role", "dialog");
+    picker.setAttribute("aria-modal", "true");
+    function closePins() {
+      if (picker.hidden) return false;
+      picker.hidden = true;
+      pickerToken++;
+      picker.textContent = "";
+      if (pickerOpener && pickerOpener.isConnected) pickerOpener.focus();
+      return true;
+    }
+    function openPins(kind, opener) {
+      pickerOpener = opener;
+      picker.hidden = false;
+      picker.textContent = "";
+      picker.setAttribute("aria-label", "Pin a " + kind);
+      el("h2", "Pin a " + kind, picker);
+      editButton("Close picker", closePins, picker);
+      var label = el("label", "Search " + kind + "s", picker),
+        input = el("input", null, picker);
+      input.id = "home-pin-search";
+      label.htmlFor = input.id;
+      var results = el("div", null, picker),
+        status = el("p", "", picker),
+        offset = 0,
+        loading = false,
+        seen = new Set();
+      status.setAttribute("role", "status");
+      results.className = "home-pin-results";
+      var more = editButton(
+        "Load more",
+        function () {
+          return load(false);
+        },
+        picker,
+      );
+      async function load(resetResults) {
+        if (loading && !resetResults) return;
+        var token = ++pickerToken;
+        if (resetResults) {
+          offset = 0;
+          seen.clear();
+          results.textContent = "";
+        }
+        loading = true;
+        more.disabled = true;
+        status.textContent = "Loading…";
+        var query = {
+          UserId: session.user,
+          StartIndex: offset,
+          Limit: 48,
+          SortBy: "SortName",
+          SortOrder: "Ascending",
+          SearchTerm: input.value.trim() || undefined,
+          Recursive: true,
+          EnableImages: false,
+          EnableTotalRecordCount: true,
+        };
+        var path = "/Users/" + session.user + "/Items";
+        if (kind === "genre") path = "/Genres";
+        else if (kind === "studio") path = "/Studios";
+        else
+          query.IncludeItemTypes =
+            kind === "collection" ? "BoxSet" : "Playlist";
+        try {
+          var data = await api(path, query, null, "GET", {
+            signal: controller.signal,
+          });
+          if (
+            revision !== editorRevision ||
+            picker.hidden ||
+            token !== pickerToken
+          )
+            return;
+          var batch = data.Items || [];
+          batch.forEach(function (item) {
+            if (!item.Id || !item.Name || seen.has(item.Id)) return;
+            seen.add(item.Id);
+            var pinned = (options.pinnedRows || []).some(function (pin) {
+              return pin.kind === kind && pin.id === item.Id;
+            });
+            var control = editButton(
+              item.Name + (pinned ? " — pinned" : ""),
+              function () {
+                options.pinnedRows = options.pinnedRows || [];
+                if (
+                  !options.pinnedRows.some(function (pin) {
+                    return pin.kind === kind && pin.id === item.Id;
+                  })
+                )
+                  options.pinnedRows.push({
+                    kind: kind,
+                    id: item.Id,
+                    name: item.Name,
+                  });
+                renderRows();
+                closePins();
+              },
+              results,
+            );
+            control.disabled = pinned;
+          });
+          offset += batch.length;
+          more.hidden =
+            !batch.length ||
+            (Number.isFinite(data.TotalRecordCount)
+              ? offset >= data.TotalRecordCount
+              : batch.length < 48);
+          status.textContent = results.children.length
+            ? ""
+            : "No matches found.";
+        } catch (error) {
+          if (
+            revision !== editorRevision ||
+            picker.hidden ||
+            token !== pickerToken
+          )
+            return;
+          status.textContent = "Could not load choices. Try searching again.";
+          more.hidden = false;
+        } finally {
+          if (token === pickerToken) {
+            loading = false;
+            more.disabled = false;
+          }
+        }
+      }
+      editButton(
+        "Search choices",
+        function () {
+          return load(true);
+        },
+        picker,
+      );
+      input.onkeydown = function (event) {
+        if (event.keyCode === 13) {
+          event.preventDefault();
+          run(function () {
+            return load(true);
+          });
+        }
+      };
+      picker.querySelector("button").focus();
+      run(function () {
+        return load(true);
+      });
+    }
+    ["collection", "playlist", "genre", "studio"].forEach(function (kind) {
+      var control = editButton(
+        "Pin " + kind,
+        function () {
+          openPins(kind, control);
+        },
+        pinActions,
+      );
+    });
+    activeListing = {
+      dispose: function () {
+        controller.abort();
+        pickerToken++;
+      },
+      scope: function () {
+        return picker.hidden ? null : picker;
+      },
+      closeOptions: closePins,
+      handleKey: function (key, active) {
+        if (picker.hidden) return false;
+        var controls = Array.prototype.slice
+          .call(picker.querySelectorAll("button,input"))
+          .filter(function (node) {
+            return (
+              !node.disabled && node.getClientRects().length && node !== active
+            );
+          });
+        var next = C.neighbor(
+          active.getBoundingClientRect(),
+          controls.map(function (node) {
+            return { element: node, rect: node.getBoundingClientRect() };
+          }),
+          { 37: "left", 38: "up", 39: "right", 40: "down" }[key],
+        );
+        if (next) focusContent(next);
+        return true;
+      },
+    };
+    el("h2", "Row order & artwork", form);
+    el(
+      "p",
+      "Move rows up or down, hide individual rows, or switch between posters and wide thumbnails. Empty rows stay hidden on Home.",
+      form,
+    ).className = "metadata";
+    rowsEditor = el("div", null, form);
+    rowsEditor.className = "home-row-editor";
+    function renderRows(restoreKey, action) {
+      rowsEditor.textContent = "";
+      var planned = C.homeRows(
+        libraryItems,
+        Object.assign({}, options, { hiddenRows: [] }),
+      );
+      planned.forEach(function (row, index) {
+        var key = C.homeRowKey(row),
+          line = el("div", null, rowsEditor);
+        line.className = "home-row-setting";
+        line.dataset.rowKey = key;
+        var title = el("div", null, line);
+        title.className = "home-row-setting-title";
+        el("strong", row.title, title);
+        el("span", index + 1 + " of " + planned.length, title);
+        function reorder(delta) {
+          var order = planned.map(C.homeRowKey),
+            target = index + delta;
+          if (target < 0 || target >= order.length) return;
+          order.splice(index, 1);
+          order.splice(target, 0, key);
+          options.rowOrder = order;
+          renderRows(key, delta < 0 ? "up" : "down");
+        }
+        function control(label, actionName, callback) {
+          var b = editButton(label, callback, line);
+          b.dataset.action = actionName;
+          b.setAttribute("aria-label", label);
+          b.textContent =
+            actionName === "up"
+              ? "↑"
+              : actionName === "down"
+                ? "↓"
+                : actionName === "visibility"
+                  ? hidden
+                    ? "Show"
+                    : "Hide"
+                  : actionName === "artwork"
+                    ? row.layout === "landscape"
+                      ? "Thumbnails"
+                      : "Posters"
+                    : "Unpin";
+          return b;
+        }
+        control("Move " + row.title + " up", "up", function () {
+          reorder(-1);
+        }).disabled = index === 0;
+        control("Move " + row.title + " down", "down", function () {
+          reorder(1);
+        }).disabled = index === planned.length - 1;
+        var hidden = (options.hiddenRows || []).indexOf(key) >= 0;
+        control(
+          (hidden ? "Show " : "Hide ") + row.title,
+          "visibility",
+          function () {
+            options.hiddenRows = (options.hiddenRows || []).filter(
+              function (id) {
+                return id !== key;
+              },
+            );
+            if (!hidden) options.hiddenRows.push(key);
+            renderRows(key, "visibility");
+          },
+        ).setAttribute("aria-pressed", String(!hidden));
+        if (row.kind !== "live")
+          control(
+            "Artwork for " +
+              row.title +
+              ": " +
+              (row.layout === "landscape" ? "Thumbnails" : "Posters"),
+            "artwork",
+            function () {
+              options.rowLayouts = options.rowLayouts || {};
+              options.rowLayouts[key] =
+                row.layout === "landscape" ? "poster" : "landscape";
+              renderRows(key, "artwork");
+            },
+          );
+        if (row.kind === "pinned")
+          control("Unpin " + row.title, "remove", function () {
+            options.pinnedRows = (options.pinnedRows || []).filter(
+              function (pin) {
+                return "pinned:" + pin.kind + ":" + pin.id !== row.key;
+              },
+            );
+            renderRows();
+            focusContent(
+              rowsEditor.querySelector("button:not(:disabled)") ||
+                pinActions.querySelector("button"),
+            );
+          });
+      });
+      if (restoreKey) {
+        var line = Array.prototype.find.call(
+            rowsEditor.children,
+            function (node) {
+              return node.dataset.rowKey === restoreKey;
+            },
+          ),
+          target = line && line.querySelector('[data-action="' + action + '"]');
+        if (target && target.disabled)
+          target = line.querySelector("button:not(:disabled)");
+        if (target) focusContent(target);
+      }
+    }
+    renderRows();
+    editButton(
+      "Reset row order and artwork",
+      function () {
+        options.rowOrder = [];
+        options.rowLayouts = {};
+        options.hiddenRows = [];
+        renderRows();
+      },
+      form,
+    );
+    editButton("Cancel changes", back, editorActions);
+    var save = el("button", "Save and open Home", editorActions);
     save.type = "submit";
     form.onsubmit = function (event) {
       event.preventDefault();
@@ -1012,7 +1353,7 @@
         return go(home);
       });
     };
-    focusFirst();
+    form.querySelector("input").focus();
   }
   async function loadLibraries() {
     if (libraryUpdated && Date.now() - libraryUpdated < 60000)
@@ -1901,6 +2242,14 @@
       var both = await Promise.all([resume(), next()]);
       return C.combineResume(both[0], both[1]);
     }
+    if (row.kind === "pinned" && row.pinType === "playlist")
+      return request("/Playlists/" + encodeURIComponent(row.pinId) + "/Items", {
+        UserId: session.user,
+        Limit: 24,
+        Fields: fields,
+      }).then(function (data) {
+        return data.Items || [];
+      });
     if (row.kind === "latest")
       return request(base + "/Latest", {
         ParentId: row.parent,

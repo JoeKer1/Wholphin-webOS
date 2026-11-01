@@ -805,3 +805,38 @@ test("ratings include valid community and critic scores, including zero", () => 
     assert.ok(!text.includes("★") && !text.includes("🍅"));
   }
 });
+
+test("Home custom rows reorder, hide and set artwork without losing seasonal identity", () => {
+  const libraries = [
+    { Id: "movies", Name: "Movies", CollectionType: "movies" },
+  ];
+  const options = {
+    combine: true,
+    holidays: true,
+    rowOrder: ["pinned:genre:comedy", "latest:movies", "continue"],
+    hiddenRows: ["favorite-series"],
+    rowLayouts: { continue: "landscape" },
+    pinnedRows: [
+      { kind: "genre", id: "comedy", name: "Comedy" },
+      { kind: "genre", id: "comedy", name: "Duplicate" },
+      { kind: "playlist", id: "list", name: "Weekend" },
+      { kind: "invalid", id: "bad", name: "Bad" },
+    ],
+  };
+  const rows = C.homeRows(libraries, options, new Date(2026, 9, 31));
+  assert.deepEqual(
+    rows.slice(0, 3).map((x) => x.key),
+    ["pinned:genre:comedy", "latest:movies", "continue"],
+  );
+  assert.equal(rows[0].filter.GenreIds, "comedy");
+  assert.equal(rows[2].layout, "landscape");
+  assert.equal(rows.filter((x) => x.key === "pinned:genre:comedy").length, 1);
+  assert.ok(
+    !rows.some((x) => x.key === "favorite-series" || x.title === "Bad"),
+  );
+  assert.equal(
+    C.homeRowKey(C.holidayRows(new Date(2026, 9, 31))[0]),
+    C.homeRowKey(C.holidayRows(new Date(2027, 9, 31))[0]),
+  );
+  assert.ok(rows.some((x) => x.pinType === "playlist" && x.pinId === "list"));
+});

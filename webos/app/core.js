@@ -722,6 +722,9 @@
     );
     return rows;
   }
+  function homeRowKey(row) {
+    return row.key.replace(/^holiday:[^:]+:/, "holiday:");
+  }
   function homeRows(libraries, options, now) {
     options = options || {};
     var rows = options.combine
@@ -801,7 +804,64 @@
         type: "Playlist",
         title: "Playlists",
       });
-    return rows;
+    (options.pinnedRows || []).forEach(function (pin) {
+      if (
+        !pin ||
+        ["collection", "playlist", "genre", "studio"].indexOf(pin.kind) < 0 ||
+        typeof pin.id !== "string" ||
+        !pin.id ||
+        typeof pin.name !== "string"
+      )
+        return;
+      var row = {
+        key: "pinned:" + pin.kind + ":" + pin.id,
+        kind: "pinned",
+        pinType: pin.kind,
+        pinId: pin.id,
+        title: pin.name,
+        type:
+          pin.kind === "genre" || pin.kind === "studio"
+            ? "Movie,Series"
+            : "Movie,Series,Episode,Video",
+      };
+      if (pin.kind === "collection") row.parent = pin.id;
+      if (pin.kind === "genre") row.filter = { GenreIds: pin.id };
+      if (pin.kind === "studio") row.filter = { StudioIds: pin.id };
+      if (
+        !rows.some(function (existing) {
+          return existing.key === row.key;
+        })
+      )
+        rows.push(row);
+    });
+    var order = options.rowOrder || [],
+      layouts = options.rowLayouts || {},
+      hidden = options.hiddenRows || [];
+    return rows
+      .filter(function (row) {
+        return hidden.indexOf(homeRowKey(row)) < 0;
+      })
+      .map(function (row, index) {
+        var layout = layouts[homeRowKey(row)];
+        if (
+          (layout === "poster" || layout === "landscape") &&
+          row.kind !== "live"
+        )
+          row.layout = layout;
+        return {
+          row: row,
+          index: index,
+          order: order.indexOf(homeRowKey(row)),
+        };
+      })
+      .sort(function (a, b) {
+        var first = a.order < 0 ? order.length + a.index : a.order,
+          second = b.order < 0 ? order.length + b.index : b.order;
+        return first - second;
+      })
+      .map(function (entry) {
+        return entry.row;
+      });
   }
   function combineResume(resume, next) {
     var seenIds = {},
@@ -1124,6 +1184,7 @@
     libraryWindow: libraryWindow,
     followingEpisodes: followingEpisodes,
     homeRows: homeRows,
+    homeRowKey: homeRowKey,
     holidayRows: holidayRows,
     logoItem: logoItem,
     quickDetails: quickDetails,
