@@ -75,7 +75,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.16"' +
+      '", Version="0.2.17"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -200,6 +200,14 @@
     return action();
   }
   async function back() {
+    var subtitleMenu = document.getElementById("detail-subtitle-menu");
+    if (subtitleMenu && !subtitleMenu.hidden && !playing) {
+      subtitleMenu.hidden = true;
+      var picker = document.getElementById("detail-subtitles");
+      picker.setAttribute("aria-expanded", "false");
+      picker.focus();
+      return;
+    }
     if (!upNext.hidden) {
       dismissUpNext();
       return;
@@ -457,6 +465,7 @@
       "Reset track preferences",
       function () {
         localStorage.removeItem(accountKey("track-preferences"));
+        localStorage.removeItem(accountKey("subtitle-choices"));
         message(
           "Remembered audio/subtitle choices cleared. New videos will use Jellyfin defaults.",
         );
@@ -2745,25 +2754,54 @@
     } else if (item.MediaType === "Video") {
       var subtitleSettings = el("div", null, main);
       subtitleSettings.className = "detail-subtitle-settings";
-      var subtitlePicker = el("select", null, subtitleSettings);
+      function openDetailSubtitles() {
+        subtitleMenu.hidden = !subtitleMenu.hidden;
+        subtitlePicker.setAttribute(
+          "aria-expanded",
+          String(!subtitleMenu.hidden),
+        );
+        if (!subtitleMenu.hidden) {
+          var chosen =
+            subtitleMenu.querySelector('[aria-selected="true"]') ||
+            subtitleMenu.querySelector("button");
+          if (chosen) focusContent(chosen);
+        }
+      }
+      var subtitlePicker = button(
+        "Loading subtitles…",
+        openDetailSubtitles,
+        subtitleSettings,
+      );
       subtitlePicker.id = "detail-subtitles";
+      subtitlePicker.value = "-1";
+      subtitlePicker.setAttribute("role", "combobox");
       subtitlePicker.setAttribute("aria-label", "Subtitles before playback");
+      subtitlePicker.setAttribute("aria-haspopup", "listbox");
+      subtitlePicker.setAttribute("aria-expanded", "false");
+      subtitlePicker.setAttribute("aria-controls", "detail-subtitle-menu");
       var subtitleLabel = el("label", "Subtitles", subtitleSettings);
       subtitleLabel.htmlFor = subtitlePicker.id;
       subtitleSettings.insertBefore(subtitleLabel, subtitlePicker);
+      var subtitleMenu = el("div", null, subtitleSettings);
+      subtitleMenu.id = "detail-subtitle-menu";
+      subtitleMenu.setAttribute("role", "listbox");
+      subtitleMenu.setAttribute("aria-label", "Available subtitles");
+      subtitleMenu.hidden = true;
       function detailSubtitleOptions() {
-        return subtitlePicker.value === "default"
+        return subtitlePicker.disabled ||
+          !subtitlePicker.dataset.source ||
+          subtitlePicker.dataset.explicit !== "true"
           ? {}
           : {
               subtitleIndex: Number(subtitlePicker.value),
               mediaSourceId: subtitlePicker.dataset.source,
             };
       }
-      function loadDetailSubtitles() {
+      async function loadDetailSubtitles() {
         subtitlePicker.disabled = true;
-        subtitlePicker.textContent = "";
-        el("option", "Loading subtitles…", subtitlePicker).value = "default";
-        return (async function () {
+        subtitlePicker.textContent = "Loading subtitles…";
+        subtitleMenu.textContent = "";
+        try {
           var sources = item.MediaSources;
           if (
             !sources ||
@@ -2779,33 +2817,85 @@
           }
           if (!subtitlePicker.isConnected) return;
           var source =
-            sources.find(function (entry) {
-              return Array.isArray(entry.MediaStreams);
-            }) || {};
-          subtitlePicker.textContent = "";
-          el("option", "Default / remembered choice", subtitlePicker).value =
-            "default";
-          el("option", "Off", subtitlePicker).value = "-1";
-          C.tracks(source, "Subtitle").forEach(function (track) {
-            el("option", track.label, subtitlePicker).value = String(
-              track.index,
+              sources.find(function (entry) {
+                return Array.isArray(entry.MediaStreams);
+              }) || {},
+            tracks = [{ index: -1, label: "Off" }].concat(
+              C.tracks(source, "Subtitle"),
+            ),
+            saved = readPreference("subtitle-choices", {})[item.Id],
+            chosen =
+              saved && saved.source === source.Id
+                ? saved.index
+                : C.preferredTrack(
+                    source,
+                    "Subtitle",
+                    readPreference("track-preferences", {}).Subtitle,
+                  );
+          if (chosen == null) chosen = source.DefaultSubtitleStreamIndex;
+          if (
+            !tracks.some(function (track) {
+              return track.index === chosen;
+            })
+          )
+            chosen = -1;
+          if (source.Id) subtitlePicker.dataset.source = source.Id;
+          subtitlePicker.dataset.explicit = String(
+            !!(saved && saved.source === source.Id && saved.index === chosen),
+          );
+          function selectTrack(track, persist) {
+            subtitlePicker.value = String(track.index);
+            subtitlePicker.textContent = track.label;
+            Array.prototype.forEach.call(
+              subtitleMenu.querySelectorAll("button"),
+              function (node) {
+                node.setAttribute(
+                  "aria-selected",
+                  String(node.dataset.index === String(track.index)),
+                );
+              },
+            );
+            subtitleMenu.hidden = true;
+            subtitlePicker.setAttribute("aria-expanded", "false");
+            if (persist) {
+              subtitlePicker.dataset.explicit = "true";
+              saveSubtitleChoice(item.Id, source, track.index);
+              subtitlePicker.focus();
+            }
+          }
+          tracks.forEach(function (track) {
+            var option = button(
+              track.label,
+              function () {
+                selectTrack(track, true);
+              },
+              subtitleMenu,
+            );
+            option.setAttribute("role", "option");
+            option.dataset.index = String(track.index);
+            option.setAttribute(
+              "aria-selected",
+              String(track.index === chosen),
             );
           });
-          if (source.Id) subtitlePicker.dataset.source = source.Id;
-          subtitlePicker.disabled = false;
-        })().catch(function () {
-          if (!subtitlePicker.isConnected) return;
-          subtitlePicker.textContent = "";
-          el("option", "Default (tracks unavailable)", subtitlePicker).value =
-            "default";
-          button(
-            "Retry subtitle tracks",
-            async function () {
-              await loadDetailSubtitles();
-            },
-            actions,
+          selectTrack(
+            tracks.find(function (track) {
+              return track.index === chosen;
+            }),
+            false,
           );
-        });
+          subtitlePicker.disabled = false;
+          subtitlePicker.onclick = function () {
+            run(openDetailSubtitles);
+          };
+        } catch (_) {
+          if (!subtitlePicker.isConnected) return;
+          subtitlePicker.textContent = "Subtitles unavailable — retry";
+          subtitlePicker.disabled = false;
+          subtitlePicker.onclick = function () {
+            run(loadDetailSubtitles);
+          };
+        }
       }
       loadDetailSubtitles();
       var ticks = (item.UserData && item.UserData.PlaybackPositionTicks) || 0;
@@ -3193,6 +3283,25 @@
       native: false,
       dolbyVision: false,
     });
+  }
+  function saveSubtitleChoice(itemId, source, index) {
+    var choices = readPreference("subtitle-choices", {});
+    choices[itemId] = { source: source.Id, index: index, updated: Date.now() };
+    Object.keys(choices)
+      .sort(function (a, b) {
+        return choices[b].updated - choices[a].updated;
+      })
+      .slice(100)
+      .forEach(function (key) {
+        delete choices[key];
+      });
+    try {
+      localStorage.setItem(
+        accountKey("subtitle-choices"),
+        JSON.stringify(choices),
+      );
+      rememberTrack("Subtitle", C.trackPreference(source, "Subtitle", index));
+    } catch (_) {}
   }
   function playbackOptions() {
     return Object.assign(
@@ -3873,6 +3982,8 @@
     active.started = true;
     active.lastPositionTicks = Math.round(video.currentTime * 10000000);
     if (active.pendingPreference) {
+      if (active.pendingPreference.type === "Subtitle")
+        saveSubtitleChoice(active.item.Id, active.source, active.subtitleIndex);
       rememberTrack(
         active.pendingPreference.type,
         active.pendingPreference.value,
@@ -4519,6 +4630,41 @@
     if (key === 461 || key === 27) {
       e.preventDefault();
       run(back);
+      return;
+    }
+    var detailSubtitleMenu = document.getElementById("detail-subtitle-menu");
+    if (
+      !playing &&
+      detailSubtitleMenu &&
+      !detailSubtitleMenu.hidden &&
+      key >= 37 &&
+      key <= 40
+    ) {
+      e.preventDefault();
+      var subtitleOptions = Array.prototype.slice.call(
+          detailSubtitleMenu.querySelectorAll("button"),
+        ),
+        optionIndex = subtitleOptions.indexOf(document.activeElement),
+        nextOption = Math.max(
+          0,
+          Math.min(
+            subtitleOptions.length - 1,
+            optionIndex + (key === 38 || key === 37 ? -1 : 1),
+          ),
+        );
+      focusContent(subtitleOptions[nextOption]);
+      return;
+    }
+    if (
+      !playing &&
+      document.activeElement.id === "detail-subtitles" &&
+      key >= 37 &&
+      key <= 40
+    ) {
+      e.preventDefault();
+      if (key === 40 && main.querySelector(".cast-row figure"))
+        focusContent(main.querySelector(".cast-row figure"));
+      else if (key !== 40) focusContent(main.querySelector(".actions button"));
       return;
     }
     if (playing && !upNext.hidden) {

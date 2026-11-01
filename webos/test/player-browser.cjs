@@ -833,7 +833,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     const subtitlePicker = page.getByRole("combobox", {
       name: "Subtitles before playback",
     });
-    await subtitlePicker.selectOption("12");
+    await subtitlePicker.click();
+    await page.locator('#detail-subtitle-menu [data-index="12"]').click();
     const preselectedStart = starts().length;
     await click("Play from beginning");
     await started(preselectedStart + 1);
@@ -865,9 +866,30 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => document.getElementById("player").hidden);
     await page.waitForFunction((node) => !node.isConnected, oldSubtitlePicker);
+    await page.waitForFunction(
+      () =>
+        document.getElementById("detail-subtitles").textContent ===
+        "Spanish subtitles",
+    );
     await page
       .getByRole("combobox", { name: "Subtitles before playback" })
-      .selectOption("-1");
+      .focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("listbox", { name: "Available subtitles" }).waitFor();
+    assert.equal(await page.locator(":focus").getAttribute("data-index"), "12");
+    await page.keyboard.press("ArrowUp");
+    assert.equal(await page.locator(":focus").getAttribute("data-index"), "9");
+    await page.keyboard.press("Escape");
+    assert.equal(await page.locator("#detail-subtitle-menu").isHidden(), true);
+    assert.equal(
+      await page.locator("#detail-subtitles").textContent(),
+      "Spanish subtitles",
+    );
+
+    await page
+      .getByRole("combobox", { name: "Subtitles before playback" })
+      .click();
+    await page.locator('#detail-subtitle-menu [data-index="-1"]').click();
     const offStart = starts().length;
     await click("Play from beginning");
     await started(offStart + 1);
