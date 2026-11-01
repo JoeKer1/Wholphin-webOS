@@ -6,31 +6,37 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url),
   root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."),
   target = process.argv[2];
-if (!["webos", "tizen"].includes(target))
-  throw new Error("Choose webos or tizen.");
+if (!["webos", "tizen", "firetv"].includes(target))
+  throw new Error("Choose webos, tizen or firetv.");
 const source = path.join(root, "webos/app"),
   out = path.join(root, "dist", target);
 await fs.rm(out, { recursive: true, force: true });
 await fs.mkdir(out, { recursive: true });
 await fs.cp(source, out, { recursive: true });
-if (target === "tizen") {
+if (target !== "webos") {
   await fs.rm(path.join(out, "appinfo.json"));
-  for (const file of ["platform.js", "avplay.js", "config.xml", "tizen.css"])
+  const platformFiles = target === "tizen"
+    ? ["platform.js", "avplay.js", "config.xml", "tizen.css"]
+    : ["platform.js", "firetv.css"];
+  for (const file of platformFiles)
     await fs.copyFile(
-      path.join(root, "platforms/tizen", file),
+      path.join(root, "platforms", target, file),
       path.join(out, file),
     );
   let html = await fs.readFile(path.join(out, "index.html"), "utf8");
   html = html
-    .replace("object-src 'none'", "object-src 'self'")
+    .replace("object-src 'none'", target === "tizen" ? "object-src 'self'" : "object-src 'none'")
     .replace(
       '<link rel="stylesheet" href="style.css" />',
-      '<link rel="stylesheet" href="style.css" /><link rel="stylesheet" href="tizen.css" />',
+      `<link rel="stylesheet" href="style.css" /><link rel="stylesheet" href="${target}.css" />`,
     );
   html = html.replace(
     '<script src="platform.js"></script>',
-    '<script src="compat.js"></script>\n<script src="$WEBAPIS/webapis/webapis.js"></script>\n<script src="avplay.js"></script>\n<script src="platform.js"></script>',
+    '<script src="compat.js"></script>\n' +
+      (target === "tizen" ? '<script src="$WEBAPIS/webapis/webapis.js"></script>\n<script src="avplay.js"></script>\n' : '') +
+      '<script src="platform.js"></script>',
   );
+  if (target === "firetv") html = html.replace('width=device-width,initial-scale=1', 'width=1920');
   await fs.writeFile(path.join(out, "index.html"), html);
   const compatibility = await Promise.all(
     [
@@ -39,7 +45,7 @@ if (target === "tizen") {
     ].map((x) => fs.readFile(require.resolve(x), "utf8")),
   );
   await fs.writeFile(path.join(out, "compat.js"), compatibility.join("\n;\n"));
-  for (const file of ["app.js", "core.js", "platform.js", "avplay.js"]) {
+  for (const file of ["app.js", "core.js", ...platformFiles.filter(f => f.endsWith('.js'))]) {
     const code = await fs.readFile(path.join(out, file), "utf8");
     const compiled = await transformAsync(code, {
       filename: file,
@@ -56,7 +62,7 @@ if (target === "tizen") {
     });
     await fs.writeFile(path.join(out, file), compiled.code + "\n");
   }
-  await fs.copyFile(
+  if (target === "tizen") await fs.copyFile(
     path.join(root, "platforms/tizen/ember-tizen-icon.png"),
     path.join(out, "ember-tizen-icon.png"),
   );

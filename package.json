@@ -1,15 +1,17 @@
 {
   "name": "ember-tv",
-  "version": "0.2.55",
+  "version": "0.2.56",
   "private": true,
   "scripts": {
     "build:webos": "node tools/build.mjs webos",
     "build:tizen": "node tools/build.mjs tizen",
-    "build": "npm run build:webos && npm run build:tizen",
+    "build": "npm run build:webos && npm run build:tizen && npm run build:firetv",
     "package:webos": "node tools/package.mjs webos",
     "package:tizen": "node tools/package.mjs tizen",
     "test": "npm --prefix webos test && node --test test/*.test.cjs",
-    "check": "npm --prefix webos run check"
+    "check": "npm --prefix webos run check",
+    "build:firetv": "node tools/build.mjs firetv",
+    "package:firetv": "node tools/package.mjs firetv"
   },
   "devDependencies": {
     "@babel/core": "^7.28.0",

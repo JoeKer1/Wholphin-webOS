@@ -1,0 +1,28 @@
+plugins { id 'com.android.application' }
+
+def emberVersion = new groovy.json.JsonSlurper().parse(file('../../../package.json')).version
+def parts = emberVersion.tokenize('.').collect { it.toInteger() }
+android {
+    namespace 'tv.ember.jellyfin'
+    compileSdk 35
+    buildFeatures { buildConfig true }
+    defaultConfig {
+        applicationId 'tv.ember.jellyfin'
+        minSdk 25
+        targetSdk 35
+        versionCode parts[0] * 1000000 + parts[1] * 10000 + parts[2]
+        versionName emberVersion
+    }
+    sourceSets.main.assets.srcDirs = ['../../../dist/firetv']
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    buildTypes.debug { applicationIdSuffix '.debug' }
+}
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.media3:media3-exoplayer:1.5.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.5.1'
+    implementation 'androidx.media3:media3-ui:1.5.1'
+}

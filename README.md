@@ -1,8 +1,8 @@
-# Ember for Jellyfin — LG webOS and Samsung Tizen
+# Ember for Jellyfin — webOS, Tizen and Fire TV
 
-Ember is an unofficial, experimental Jellyfin client for LG webOS and Samsung Tizen TVs, inspired by [Wholphin for Android TV](https://github.com/damontecres/Wholphin). This repository contains the standalone TV implementation; it does not require an Android build or a Jellyfin Web deployment.
+Ember is an unofficial, experimental Jellyfin client for LG webOS, Samsung Tizen and Android-based Fire TV devices, inspired by [Wholphin for Android TV](https://github.com/damontecres/Wholphin). This repository contains the standalone TV implementation; it does not require an Android build or a Jellyfin Web deployment.
 
-Current version: **0.2.55**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed; Samsung playback remains under hardware testing. Other models are untested. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, or Samsung, and does not have feature parity with Android Wholphin.
+Current version: **0.2.56**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed; Samsung playback remains under hardware testing. An experimental Fire OS 6+ APK is available to build; physical Fire TV playback is not yet verified. Other models are untested. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
 
 The app was previously named Wholphin for webOS. Existing installations update in place and keep their sign-in and settings.
 
@@ -38,15 +38,17 @@ See [security notes](webos/SECURITY-REVIEW.md) and [native playback limitations 
 ## Separate platform builds
 
 Shared UI source lives in `webos/app`; platform adapters are selected at build time.
-Samsung uses AVPlay and a Chromium 56 compatibility bundle. LG retains its existing HTML video playback.
+Samsung uses AVPlay, Fire TV uses native AndroidX Media3, and both bundle browser compatibility helpers. LG retains its existing HTML video playback.
 
 ```sh
 npm ci
 npm test
 npm run build:webos  # dist/webos, LG appinfo.json
 npm run build:tizen  # dist/tizen, Samsung config.xml
+npm run build:firetv # dist/firetv, bundled APK assets
 npm run package:webos
 TIZEN_PROFILE=YourSamsungProfile npm run package:tizen
+npm run package:firetv # requires JDK 17 + Android SDK
 ```
 
 Packaging requires the official LG CLI or Tizen CLI on PATH (or `ARES_PACKAGE` / `TIZEN_CLI`).
@@ -62,6 +64,8 @@ compatibility polyfills, older IntersectionObserver API and navigation expansion
 Server addresses add port 8096 only for a 192.168.* host without an explicit port.
 Other hosts retain the protocol's default port unless a port is entered.
 
+Fire TV build, sideload, security and hardware validation details are in [platforms/firetv/README.md](platforms/firetv/README.md). This APK targets Android-based Fire OS devices, not Vega OS.
+
 ## License and attribution
 
-Distributed under the [GNU GPL version 2](LICENSE), retaining the upstream Wholphin license. Wholphin branding/assets and the UI inspiration originate from [damontecres/Wholphin](https://github.com/damontecres/Wholphin); credit belongs to its contributors. Seasonal query presets are credited to [KefinTweaks](https://github.com/ranaldsgift/KefinTweaks), as documented in the source and webOS README. The webOS application is a separate implementation maintained here.
+Distributed under the [GNU GPL version 2](LICENSE), retaining the upstream Wholphin license. Wholphin branding/assets and the UI inspiration originate from [damontecres/Wholphin](https://github.com/damontecres/Wholphin); credit belongs to its contributors. Seasonal query presets are credited to [KefinTweaks](https://github.com/ranaldsgift/KefinTweaks), as documented in the source and webOS README. The Ember TV application is a separate implementation maintained here.

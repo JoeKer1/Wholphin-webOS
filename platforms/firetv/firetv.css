@@ -1,0 +1,78 @@
+/* Native Media3 video sits beneath the transparent WebView controls. */
+html.platform-firetv, .platform-firetv body { height: 100%; overflow: hidden; }
+.platform-firetv body.is-playing, .platform-firetv body.live-preview { background: transparent; }
+.platform-firetv .is-playing #backdrop,
+.platform-firetv .is-playing #backdrop-shade,
+.platform-firetv .live-preview #backdrop,
+.platform-firetv .live-preview #backdrop-shade,
+.platform-firetv .is-playing main { visibility: hidden; }
+.platform-firetv #video { visibility: hidden; }
+.platform-firetv #player { background: transparent; }
+.platform-firetv .live-preview #player { border: 0; overflow: visible; }
+.platform-firetv .live-preview #live-preview-caption {
+  top: 100%; bottom: auto; min-height: 38px; padding: 6px 12px;
+  background: #211b2a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.platform-firetv .live-preview .live-guide-page { top: 350px; height: calc(100vh - 350px); }
+.platform-firetv .live-preview #live-browse-info {
+  top: 24px; left: 144px; right: 552px; height: 308px; max-height: 308px;
+  padding: 12px 20px; background: #15121c;
+}
+
+/* Older Fire TV web engines may lack CSS Grid; preserve the TV's six-column layout. */
+.legacy-grid .grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+.legacy-grid .grid > .card {
+  flex: 0 0 calc(16.6667% - 24px);
+  margin: 0 12px 32px;
+}
+.legacy-grid .profile-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.legacy-grid .profile-grid > button {
+  flex: 0 0 260px;
+  margin: 14px;
+}
+.legacy-grid .settings-layout {
+  display: flex;
+}
+.legacy-grid .settings-categories {
+  flex: 0 0 310px;
+  margin-right: 48px;
+}
+.legacy-grid .settings-pane {
+  flex: 1;
+}
+.legacy-grid .guide-headings,
+.legacy-grid .guide-channel-row {
+  display: flex;
+}
+.legacy-grid .guide-headings > *,
+.legacy-grid .guide-channel-row > * {
+  flex: 1;
+  margin-right: 20px;
+}
+.legacy-grid .guide-headings > :first-child,
+.legacy-grid .guide-channel-row > :first-child {
+  flex: 0 0 340px;
+}
+.legacy-grid .home-pin-results {
+  display: flex;
+  flex-wrap: wrap;
+}
+.legacy-grid .home-pin-results > button {
+  flex: 0 0 46%;
+  margin: 1%;
+}
+.legacy-grid .playback-info-row {
+  display: flex;
+}
+.legacy-grid .playback-info-row > :first-child {
+  flex: 0 0 220px;
+  margin-right: 20px;
+}
+

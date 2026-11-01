@@ -143,7 +143,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.55"' +
+      '", Version="0.2.56"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -405,7 +405,7 @@
         for (var i = 0; i < nodes.length; i++)
           if (nodes[i].dataset.item === page.focus) nodes[i].focus();
       }
-    } else if (P.id === "tizen") {
+    } else if (P.exit) {
       if (window.confirm("Exit Ember?")) P.exit();
     } else if (window.webOS && window.webOS.platformBack)
       window.webOS.platformBack();
@@ -804,7 +804,7 @@
       decoder = decoderOptions();
     function modeValue() {
       return P.nativePlayback === false
-        ? "Samsung AVPlay (Compatibility)"
+        ? (P.playbackName || "Samsung AVPlay") + " (Compatibility)"
         : decoder.native
           ? "LG C1 native (experimental)"
           : "Compatibility";
@@ -813,8 +813,8 @@
       device,
       "Playback mode",
       modeValue,
-      P.id === "tizen"
-        ? "Samsung AVPlay with Jellyfin compatibility transcoding."
+      P.nativePlayback === false
+        ? (P.playbackName || "Samsung AVPlay") + " with Jellyfin compatibility transcoding."
         : "Compatibility works with the widest range of files. Native enables supported C1 formats.",
       function (control) {
         decoder.native = !decoder.native;
@@ -856,7 +856,7 @@
       modeControl.disabled = true;
       vision.hidden = true;
     }
-    var about = section("About", "Ember for Jellyfin · v0.2.55");
+    var about = section("About", "Ember for Jellyfin · v0.2.56");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -6639,7 +6639,7 @@
         : options.compatibility
           ? { native: false, reason: options.policyReason }
           : P.nativePlayback === false
-            ? { native: false, reason: "Samsung compatibility playback" }
+            ? { native: false, reason: P.deviceName + " compatibility playback" }
             : C.nativePolicy(sourceMetadata, decoder, deliveredSubtitleIndex);
       var nativeMode = policy.native;
       var deviceProfile = C.profile({
@@ -7181,7 +7181,7 @@
       document.querySelector("header").scrollLeft = 0;
       return;
     }
-    if (P.id === "tizen" && main.classList.contains("live-guide-page") && main.contains(node)) {
+    if (P.nativePlayback === false && main.classList.contains("live-guide-page") && main.contains(node)) {
       // Older Tizen scrollIntoView scrolls the document as well as the guide.
       var itemBounds = node.getBoundingClientRect(),
         guideBounds = main.getBoundingClientRect();
@@ -7685,6 +7685,9 @@
       return;
     }
     if (next) focusContent(next);
+  });
+  document.addEventListener("ember-suspend", function () {
+    run(stop);
   });
   document.addEventListener("visibilitychange", function () {
     if (document.hidden && cancelQuickConnect) {

@@ -5,7 +5,7 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 (async () => {
  const browser = await chromium.launch({headless:true, ...(process.env.CHROMIUM_PATH ? {executablePath:process.env.CHROMIUM_PATH}: {})});
  try {
-  for (const platform of ['webos','tizen']) {
+  for (const platform of ['webos','tizen','firetv']) {
    const page = await browser.newPage({viewport:{width:1920,height:1080}});
    const libraries = [ ['discover','Discover','movies'], ['kids','Kids TV','tvshows'], ['collections','Collections','boxsets'], ['anime','Anime','tvshows'], ['tv','TV Shows','tvshows'], ['movies','Movies','movies'] ].map(([Id,Name,CollectionType])=>({Id,Name,CollectionType}));
    await page.route('https://jellyfin.test/**', r => {

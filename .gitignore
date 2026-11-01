@@ -12,3 +12,9 @@ webos/dist/
 *.pri
 profiles.xml
 device-profile.xml
+
+/platforms/firetv/.gradle/
+/platforms/firetv/**/build/
+/platforms/firetv/local.properties
+*.keystore
+*.jks
