@@ -85,6 +85,7 @@ header {
   font-weight: 500;
 }
 nav {
+  width: 306px;
   display: flex;
   flex-direction: column;
   height: calc(100% - 92px);
@@ -100,7 +101,7 @@ nav button {
   flex-shrink: 0;
   align-items: center;
   min-height: 62px;
-  width: 72px;
+  width: 292px;
   margin-bottom: 8px;
   padding: 14px 20px;
   border: 0;
@@ -118,12 +119,12 @@ nav button svg {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-/* Keep text laid out so webOS can reveal it immediately when the drawer opens. */
+/* Keep labels painted at a fixed width; the collapsed header clips them. */
 .nav-label {
   display: block;
-  visibility: hidden;
-  flex: 0 0 200px;
-  margin-left: 24px;
+  visibility: visible;
+  flex: 0 0 176px;
+  margin-left: 46px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -134,16 +135,18 @@ nav button[aria-current="page"] {
 nav .settings-entry {
   margin-top: auto;
 }
-header.drawer-open {
+header.drawer-open,
+header:focus-within {
   width: 330px;
   background: #1e1928;
   border-right: 1px solid #393240;
 }
-header.drawer-open nav button {
+header.drawer-open nav button,
+header:focus-within nav button {
   width: 292px;
 }
-header.drawer-open .nav-label,
-header.drawer-open #brand strong {
+header.drawer-open #brand strong,
+header:focus-within #brand strong {
   display: block;
   visibility: visible;
 }
@@ -654,7 +657,7 @@ body:not(.signed-in) main {
     padding: 12px 4px;
   }
   nav button {
-    width: 64px;
+    width: 292px;
     padding: 14px 16px;
   }
   #home-preview {

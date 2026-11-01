@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.17_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.18_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.17_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.17_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.18_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -189,3 +189,7 @@ Returning from cast to the action row restores the details header instead of lea
 ### v0.2.17 — Reliable subtitle dropdown
 
 The pre-play subtitle selector uses an app-controlled list instead of a native TV popup. It displays the actual selected track or Off. Explicit choices persist per account and video on the TV, while language preferences apply to other videos. Up/Down moves through an open list, OK selects, and Back cancels without changing the choice. Track choices reset with the existing Settings reset action.
+
+### v0.2.18 — Stable sidebar labels
+
+Sidebar labels keep a fixed layout and remain painted, with the collapsed header clipping the text. Expansion no longer toggles label visibility or reflows button widths. Focus inside the sidebar also expands it through CSS. D-pad focus scrolls the sidebar vertically while keeping horizontal offsets at zero.

@@ -75,7 +75,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.17"' +
+      '", Version="0.2.18"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -4607,6 +4607,16 @@
   function focusContent(node) {
     if (!node) return;
     node.focus();
+    if (nav.contains(node)) {
+      var rect = node.getBoundingClientRect(),
+        bounds = nav.getBoundingClientRect();
+      if (rect.top < bounds.top) nav.scrollTop -= bounds.top - rect.top;
+      else if (rect.bottom > bounds.bottom)
+        nav.scrollTop += rect.bottom - bounds.bottom;
+      nav.scrollLeft = 0;
+      document.querySelector("header").scrollLeft = 0;
+      return;
+    }
     node.scrollIntoView({ block: "nearest", inline: "nearest" });
     if (main.classList.contains("detail-page") && node.closest(".actions"))
       main.scrollTop = 0;
@@ -4944,10 +4954,7 @@
       );
       return;
     }
-    if (next) {
-      next.focus();
-      next.scrollIntoView({ block: "nearest", inline: "nearest" });
-    }
+    if (next) focusContent(next);
   });
   document.addEventListener("visibilitychange", function () {
     if (document.hidden && cancelQuickConnect) {

@@ -131,6 +131,41 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page.locator("#preview-title").textContent(),
       "Resume movie",
     );
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press("ArrowLeft");
+      const sidebar = await page
+        .locator("nav [data-nav=home] .nav-label")
+        .evaluate((label) => {
+          const header = document.querySelector("header"),
+            nav = document.querySelector("nav"),
+            r = label.getBoundingClientRect(),
+            h = header.getBoundingClientRect();
+          return {
+            visible: getComputedStyle(label).visibility,
+            inside: r.left >= h.left && r.right <= h.right,
+            headerScroll: header.scrollLeft,
+            navScroll: nav.scrollLeft,
+            width: r.width,
+          };
+        });
+      assert.equal(sidebar.visible, "visible");
+      assert.equal(sidebar.inside, true);
+      assert.equal(sidebar.headerScroll, 0);
+      assert.equal(sidebar.navScroll, 0);
+      assert.equal(sidebar.width, 176);
+      await page.keyboard.press("ArrowRight");
+      assert.equal(
+        await page
+          .locator("nav [data-nav=home] .nav-label")
+          .evaluate(
+            (label) =>
+              label.getBoundingClientRect().left >=
+              document.querySelector("header").getBoundingClientRect().right,
+          ),
+        true,
+        "Collapsed labels remain laid out but fully clipped",
+      );
+    }
     await page
       .getByRole("button", { name: "Retry loading Next up", exact: true })
       .waitFor();
