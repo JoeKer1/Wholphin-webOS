@@ -327,3 +327,5 @@ Library grids have a fixed right-side #/A–Z rail. Selecting a letter starts a 
 ### v0.2.50 — Live controls and buffered seeking
 
 Next video is hidden during Live TV. Live streams expose the seek bar and rewind/forward controls only when the TV reports a usable seekable range. Seeks clamp inside that sliding range with a one-second live-edge margin; the clock shows the delay behind live. Controls hide/disable again when the range disappears. This uses the stream buffer supplied through Jellyfin and the TV, not a DVR archive or a promise of seeking before tuning in. On-demand seeking retains its existing duration-based behavior.
+
+Hardware check: the LG C1 playing WDTN HD through Jellyfin exposed a seekable live range. A ten-second rewind via the live timeline changed position and playback continued without a media error; the clock showed the live delay. This verifies that channel/session, not every tuner or live stream.
