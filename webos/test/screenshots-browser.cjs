@@ -24,6 +24,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       SeriesId: "show",
       SeriesName: "The Daily Show",
       ParentLogoItemId: "show",
+      CommunityRating: 8.5,
+      CriticRating: 90,
       ParentIndexNumber: 31,
       IndexNumber: index,
       Name: name,
@@ -229,6 +231,27 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "E121",
     );
     assert.equal(await page.locator("#profile-initial").textContent(), "J");
+    assert.equal(
+      await page
+        .locator("#preview-meta .rating-star")
+        .evaluate((x) => getComputedStyle(x).color),
+      "rgb(255, 201, 64)",
+    );
+    assert.equal(
+      await page
+        .locator("#preview-meta .rating-tomato path")
+        .first()
+        .getAttribute("fill"),
+      "#ef4136",
+    );
+    assert.equal(
+      await page
+        .locator(
+          '#preview-meta [aria-label="Critic rating: 90%"] .rating-tomato',
+        )
+        .count(),
+      1,
+    );
     const liveRow = page.locator("[data-row=live]");
     await liveRow
       .getByRole("button", { name: programme.Name, exact: true })

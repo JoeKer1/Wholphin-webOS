@@ -869,8 +869,17 @@
         ? Math.ceil(Math.max(0, duration - saved) / 60) + "m left"
         : null,
       item.OfficialRating,
-      item.CommunityRating
-        ? Number(item.CommunityRating).toFixed(1) + " ★"
+      typeof item.CommunityRating === "number" &&
+      Number.isFinite(item.CommunityRating) &&
+      item.CommunityRating >= 0 &&
+      item.CommunityRating <= 10
+        ? item.CommunityRating.toFixed(1) + " ★"
+        : null,
+      typeof item.CriticRating === "number" &&
+      Number.isFinite(item.CriticRating) &&
+      item.CriticRating >= 0 &&
+      item.CriticRating <= 100
+        ? Math.round(item.CriticRating) + "% 🍅"
         : null,
       end && !isNaN(end)
         ? "Ends at " +

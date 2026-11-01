@@ -140,7 +140,7 @@
     return (
       'MediaBrowser Client="Ember", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.46"' +
+      '", Version="0.2.47"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -834,7 +834,7 @@
       },
     );
     vision.disabled = !decoder.native;
-    var about = section("About", "Ember for Jellyfin · v0.2.46");
+    var about = section("About", "Ember for Jellyfin · v0.2.47");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -1565,8 +1565,52 @@
       loading.src = url;
     }, 180);
   }
-  function itemMetadata(item) {
-    return C.quickDetails(item);
+  function itemMetadata(item, host) {
+    var text = C.quickDetails(item);
+    host.textContent = "";
+    var pattern = /(\d+\.\d ★|\d+% 🍅)/g,
+      match,
+      offset = 0;
+    while ((match = pattern.exec(text))) {
+      host.appendChild(
+        document.createTextNode(text.slice(offset, match.index)),
+      );
+      var critic = match[0].indexOf("🍅") !== -1,
+        score = match[0].split(" ")[0],
+        rating = el("span", null, host);
+      rating.className = "media-rating";
+      rating.setAttribute(
+        "aria-label",
+        (critic ? "Critic rating: " : "Community rating: ") +
+          score +
+          (critic ? "" : " out of 10"),
+      );
+      rating.appendChild(document.createTextNode(score + " "));
+      if (critic) {
+        var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("viewBox", "0 0 24 24");
+        svg.setAttribute("aria-hidden", "true");
+        svg.classList.add("rating-tomato");
+        var body = document.createElementNS(svg.namespaceURI, "path");
+        body.setAttribute(
+          "d",
+          "M12 7C5 3 1 9 3 16c1 4 5 6 9 5 4 1 8-1 9-5 2-7-2-13-9-9Z",
+        );
+        body.setAttribute("fill", "#ef4136");
+        svg.appendChild(body);
+        var leaf = document.createElementNS(svg.namespaceURI, "path");
+        leaf.setAttribute("d", "m12 8-6-3 5 1 1-5 2 5 5-2-4 4 2 3-5-2-4 2Z");
+        leaf.setAttribute("fill", "#63b447");
+        svg.appendChild(leaf);
+        rating.appendChild(svg);
+      } else {
+        var star = el("span", "★", rating);
+        star.className = "rating-star";
+        star.setAttribute("aria-hidden", "true");
+      }
+      offset = pattern.lastIndex;
+    }
+    host.appendChild(document.createTextNode(text.slice(offset)));
   }
   function previewLogo(item) {
     var image = document.getElementById("preview-logo"),
@@ -1619,7 +1663,7 @@
     previewLogo(item);
     document.getElementById("preview-title").textContent =
       item.SeriesName || item.Name;
-    document.getElementById("preview-meta").textContent = itemMetadata(item);
+    itemMetadata(item, document.getElementById("preview-meta"));
     document.getElementById("preview-overview").textContent =
       item.Overview || "";
     var episode = document.getElementById("preview-episode");
@@ -2578,7 +2622,7 @@
     function paint(item) {
       selected = item;
       name.textContent = item.Name;
-      meta.textContent = itemMetadata(item);
+      itemMetadata(item, meta);
       overview.textContent = item.Overview || "No description available.";
       labelAction(
         playButton,
@@ -4468,7 +4512,9 @@
     main.className =
       "detail-page" + (item.Type === "Series" ? " series-detail" : "");
     setBackdrop(item);
-    el("p", itemMetadata(item), main).className = "metadata";
+    var metadata = el("p", null, main);
+    metadata.className = "metadata";
+    itemMetadata(item, metadata);
     var formatHost = el("div", null, main);
     formatPills(item, formatHost);
     if (item.Genres && item.Genres.length)

@@ -773,3 +773,25 @@ test("Live TV now/next handles gaps, expired and duplicate listings per channel"
   assert.equal(C.liveProgress(current, at + 600000), 100);
   assert.equal(C.liveProgress({}, at), 0);
 });
+
+test("ratings include valid community and critic scores, including zero", () => {
+  assert.ok(
+    C.quickDetails({ CommunityRating: 8.5, CriticRating: 90 }).includes(
+      "8.5 ★  ·  90% 🍅",
+    ),
+  );
+  assert.ok(
+    C.quickDetails({ CommunityRating: 0, CriticRating: 0 }).includes(
+      "0.0 ★  ·  0% 🍅",
+    ),
+  );
+  for (const item of [
+    {},
+    { CommunityRating: null, CriticRating: null },
+    { CommunityRating: 11, CriticRating: 101 },
+    { CommunityRating: NaN, CriticRating: -1 },
+  ]) {
+    const text = C.quickDetails(item);
+    assert.ok(!text.includes("★") && !text.includes("🍅"));
+  }
+});

@@ -21,6 +21,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     const movie = {
       Id: "movie",
       Name: "Test movie",
+      CommunityRating: 8.5,
+      CriticRating: 90,
       MediaType: "Video",
       RunTimeTicks: 18000000000,
       UserData: { PlaybackPositionTicks: 600000000 },
@@ -199,6 +201,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     }
     await page.getByRole("button", { name: "Movies", exact: true }).click();
     await page.getByRole("button", { name: "Test movie", exact: true }).click();
+    await page.locator(".metadata .rating-tomato").waitFor();
+    assert.equal(
+      await page
+        .locator(".metadata .rating-star")
+        .evaluate((x) => getComputedStyle(x).color),
+      "rgb(255, 201, 64)",
+    );
     await page.getByRole("button", { name: "Resume", exact: true }).waitFor();
     await page.keyboard.press("ArrowRight");
     assert.equal(

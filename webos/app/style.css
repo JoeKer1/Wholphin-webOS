@@ -1839,3 +1839,16 @@ main.settings-page {
   display: block;
   height: 60vh;
 }
+
+.media-rating {
+  display: inline-block;
+  white-space: nowrap;
+}
+.rating-star {
+  color: #ffc940;
+}
+.rating-tomato {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.12em;
+}

@@ -311,3 +311,7 @@ Ember launcher artwork uses new Ember-specific filenames to avoid reusing cached
 ### v0.2.46 — Settings for TV
 
 Settings uses a fixed category column and a separately scrolling list of full-width rows. Profile & Home, Playback, Subtitles, Device and About organize existing controls. Rows separate their title, explanation and current value, with a warm Ember focus treatment. D-pad Up/Down moves within a column; Right opens a category's controls; Left returns to the category, then the main sidebar. Categories align their heading at the top of the content pane. Current values update immediately and preserve the existing account-scoped preferences. No unsupported Android-only settings are shown.
+
+### v0.2.47 — Community and critic ratings
+
+Home/library previews, movie/show details and season episode previews display the server's community rating with a gold star and critic percentage with a red tomato and green leaf. Missing, nonnumeric and out-of-range scores are omitted; valid zero scores are retained. Rating symbols are rendered locally with accessible labels and no remote icon dependencies.
