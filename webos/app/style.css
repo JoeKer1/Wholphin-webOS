@@ -1667,3 +1667,7 @@ body:not(.signed-in) main {
   height: 100%;
   object-fit: cover;
 }
+
+body.choosing-profile header {
+  display: none;
+}

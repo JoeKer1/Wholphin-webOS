@@ -140,7 +140,7 @@
     return (
       'MediaBrowser Client="Ember", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.41"' +
+      '", Version="0.2.42"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -245,6 +245,7 @@
   }
   function reset(title) {
     main.removeAttribute("data-profile-theme");
+    document.body.classList.remove("choosing-profile");
     if (livePreview && title !== "Live TV") run(stop);
     revision++;
     if (detailController) {
@@ -339,7 +340,7 @@
   async function back() {
     if (
       main.classList.contains("profiles-page") &&
-      main.querySelector(".profile-pin-form")
+      (main.querySelector(".profile-pin-form") || stack.length <= 1)
     )
       return profilesPage();
     var moreMenu = document.getElementById("detail-more-options");
@@ -613,7 +614,7 @@
   function settings() {
     reset("Settings");
     selectNav("settings");
-    el("p", "Ember for Jellyfin · v0.2.41", main).className = "metadata";
+    el("p", "Ember for Jellyfin · v0.2.42", main).className = "metadata";
     el("p", "Connected to " + session.server, main).className = "metadata";
     button(
       "Switch profile",
@@ -954,6 +955,7 @@
   async function startSession() {
     var current = session;
     reset("Loading profiles…");
+    document.body.classList.add("choosing-profile");
     try {
       var profiles = await api("/plugins/profiles/list", null, null, "GET", {
         session: profileAccount(),
@@ -994,6 +996,7 @@
       current = session;
     selectNav("profiles");
     main.className = "profiles-page";
+    document.body.classList.add("choosing-profile");
     main.dataset.profileTheme = C.profileHolidayTheme();
     var controller = new AbortController();
     homeController = controller;

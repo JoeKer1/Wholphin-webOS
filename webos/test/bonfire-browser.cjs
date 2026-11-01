@@ -172,12 +172,24 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .waitFor();
     assert.equal(await page.locator(".profile-card").count(), 3);
     assert.equal(
+      await page.locator("header").isVisible(),
+      false,
+      "Menu hidden until profile chosen",
+    );
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(
+      await page.evaluate(() => !!document.activeElement.closest("nav")),
+      false,
+    );
+    assert.equal(
       await page.locator("#profile-initial").isVisible(),
       false,
       "Duplicate profile badge is hidden",
     );
     assert.equal(await page.locator("nav [data-nav=profiles]").count(), 1);
-    await page.locator(".profile-nav-initial img").waitFor();
+    await page
+      .locator(".profile-nav-initial img")
+      .waitFor({ state: "attached" });
     assert.ok(
       (
         await page.locator(".profile-nav-initial img").getAttribute("src")
@@ -221,6 +233,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .click();
     await page.getByRole("heading", { name: "Home", exact: true }).waitFor();
     await page.locator("nav [data-nav=kids-library]").waitFor();
+    assert.equal(
+      await page.locator("header").isVisible(),
+      true,
+      "Menu restored after successful switch",
+    );
     assert.equal(
       await page.locator("nav [data-nav=private-library]").count(),
       0,
@@ -291,7 +308,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     mode = "slow";
     await page.getByRole("button", { name: "Guest", exact: true }).click();
-    await page.locator("nav [data-nav=home]").click();
+    await page.getByRole("button", { name: "Back", exact: true }).click();
     await page.waitForTimeout(500);
     assert.equal(
       await page.evaluate(
@@ -300,6 +317,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "kid",
       "Cancelled switch cannot replace a later session",
     );
+    mode = "normal";
+    await page
+      .getByRole("button", { name: "Kids, PIN required", exact: true })
+      .click();
+    await page.getByLabel("Profile PIN", { exact: true }).fill("9797");
+    await page
+      .getByRole("button", { name: "Unlock profile", exact: true })
+      .click();
+    await page.getByRole("heading", { name: "Home", exact: true }).waitFor();
     available = false;
     await page.locator("nav [data-nav=settings]").click();
     await page
@@ -318,6 +344,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .getByRole("button", { name: "Retry profiles", exact: true })
       .click();
     await page.getByRole("button", { name: "Guest", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Back", exact: true }).click();
     await page.locator("nav [data-nav=settings]").click();
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await page.getByRole("button", { name: "Sign in", exact: true }).waitFor();

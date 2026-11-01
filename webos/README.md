@@ -291,3 +291,7 @@ The duplicate initial above the sidebar is hidden when Bonfire supplies the prof
 ### v0.2.41 — Ember
 
 The app is now Ember for Jellyfin, with a new flame/play launcher icon and Ember branding in the launcher, sidebar, Settings and Jellyfin sessions. The existing webOS application ID, device identifier and local storage keys are preserved so this installs as an update and retains sign-in, settings and preferences.
+
+### v0.2.42 — Profile picker without sidebar
+
+The sidebar stays hidden while startup profiles load and throughout profile/PIN selection. It returns after successful selection. Remote focus remains within visible picker controls; Back cancels a pending startup switch and returns to the picker.
