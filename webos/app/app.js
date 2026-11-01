@@ -78,7 +78,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.33"' +
+      '", Version="0.2.34"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -2001,17 +2001,44 @@
       favorite.setAttribute("aria-pressed", String(saved));
       var source = (item.MediaSources || [])[0],
         streams = (source && source.MediaStreams) || item.MediaStreams || [];
-      specs.textContent = streams
-        .filter(function (stream) {
-          return ["Video", "Audio"].indexOf(stream.Type) !== -1;
-        })
-        .slice(0, 5)
-        .map(function (stream) {
-          return (
-            stream.DisplayTitle ||
-            [stream.Language, stream.Codec].filter(Boolean).join(" ")
-          );
-        })
+      var videoStream =
+        streams.find(function (stream) {
+          return stream.Type === "Video";
+        }) || {};
+      var audioStreams = streams.filter(function (stream) {
+        return stream.Type === "Audio";
+      });
+      var audioStream =
+        audioStreams.find(function (stream) {
+          return source && stream.Index === source.DefaultAudioStreamIndex;
+        }) ||
+        audioStreams.find(function (stream) {
+          return stream.IsDefault;
+        }) ||
+        audioStreams[0] ||
+        {};
+      var height = Number(videoStream.Height || (source && source.Height));
+      var codec = String(videoStream.Codec || "").toLowerCase();
+      var codecLabel =
+        {
+          hevc: "HEVC",
+          h265: "HEVC",
+          h264: "H.264",
+          av1: "AV1",
+          vp9: "VP9",
+          mpeg2video: "MPEG-2",
+          mpeg4: "MPEG-4",
+        }[codec] || (/^[a-z0-9]{1,12}$/.test(codec) ? codec.toUpperCase() : "");
+      var channels = Number(audioStream.Channels);
+      var audioLabel =
+        { 1: "Mono", 2: "Stereo", 6: "5.1", 8: "7.1" }[channels] ||
+        (channels > 0 && channels <= 32 ? channels + " channels" : "");
+      specs.textContent = [
+        height > 0 && height <= 8640 ? height + "p" : "",
+        codecLabel,
+        audioLabel,
+      ]
+        .filter(Boolean)
         .join(" · ");
       setBackdrop(item);
     }

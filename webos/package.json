@@ -1,6 +1,6 @@
 {
   "name": "wholphin-webos",
-  "version": "0.2.33",
+  "version": "0.2.34",
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.cjs",

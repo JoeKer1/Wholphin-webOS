@@ -67,7 +67,29 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         {
           Id: "source-" + Id,
           DefaultSubtitleStreamIndex: 4,
+          DefaultAudioStreamIndex: 3,
           MediaStreams: [
+            {
+              Type: "Video",
+              Index: 0,
+              Codec: "hevc",
+              Height: 720,
+              DisplayTitle: "720p Shield Ninja / PSA HEVC SDR",
+            },
+            {
+              Type: "Audio",
+              Index: 1,
+              Codec: "aac",
+              Channels: 6,
+              DisplayTitle: "Hindi HE-AAC Shield Ninja default",
+            },
+            {
+              Type: "Audio",
+              Index: 3,
+              Codec: "aac",
+              Channels: 2,
+              DisplayTitle: "English HE-AAC Shield Ninja default",
+            },
             {
               Type: "Subtitle",
               Index: 4,
@@ -252,6 +274,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     await page.locator(".season-grid [data-item=m1]").click();
     await page.locator(".episode-browser-rail [data-item=progress]").waitFor();
+    assert.equal(
+      await page.locator(".episode-stream-details").textContent(),
+      "720p · HEVC · Stereo",
+      "Technical summary uses structured fields and one default audio stream",
+    );
+
     await page.waitForFunction(() =>
       document
         .querySelector(".episode-browser-overview")

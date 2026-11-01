@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.33_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.34_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.33_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.33_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.34_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -255,3 +255,7 @@ Multi-season shows display one horizontal Seasons row with season names, years a
 ### v0.2.33 — Episode subtitle selector
 
 TV season browsing uses the same pre-play subtitle dropdown as movie details, including Off, remembered choices, retry, and D-pad navigation. Selection updates for the focused episode and is applied by Play/Resume. Episode metadata lists video/audio only instead of subtitle tracks.
+
+### v0.2.34 — Concise episode format summary
+
+Episode previews show resolution, video codec and the default audio channel format (for example 720p · HEVC · Stereo). Raw track titles, release-group labels and duplicate audio tracks are excluded.
