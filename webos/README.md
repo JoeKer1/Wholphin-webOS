@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.34_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.35_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.34_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.34_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.35_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -259,3 +259,9 @@ TV season browsing uses the same pre-play subtitle dropdown as movie details, in
 ### v0.2.34 — Concise episode format summary
 
 Episode previews show resolution, video codec and the default audio channel format (for example 720p · HEVC · Stereo). Raw track titles, release-group labels and duplicate audio tracks are excluded.
+
+### v0.2.35 — Movie tabs, format pills and expanding actions
+
+Movie libraries open Recommended, Library, Collections and Genres tabs. Recommended rows are Continue watching, Recently Added, Recently Released, Top Rated Unwatched, the current month's populated holiday movie rows, then Suggestions (unwatched movies in random order). Movie collections exclude show-only collections and open mixed collections with only films. Movie and episode detail format summaries use separate resolution/codec/audio pills. Detail actions use official Material icons, expand labels on focus, and respect reduced-motion settings. Pointer activation waits until click before changing focus to prevent expanding controls from moving away under the cursor. Movies also expose Mark as watched/unwatched beside their other actions. Material icon sources and Apache-2.0 license are bundled in app/icons/.
+
+The main movie action row follows the reference order: Play/Resume, restart when resumable, watched state, favorite, playback queue (filmstrip), and More. Add to queue and Back are available inside More. Resolution pills use standard tiers for cropped files and append structured HDR/Dolby Vision metadata; raw stream titles are never displayed.

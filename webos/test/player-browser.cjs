@@ -301,9 +301,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await waitFor(() => starts().length >= count);
     }
     await click("Movie one");
+    await click("More options");
     await click("Add to queue");
     await page.locator("nav [data-nav=home]").click();
     await click("Movie two");
+    await click("More options");
     await click("Add to queue");
     await click("View playback queue");
     await click("Move up: Movie two");

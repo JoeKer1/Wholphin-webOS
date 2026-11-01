@@ -74,7 +74,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
           await route.fulfill({ json: { Items: [] } });
           return;
         }
-        calls.push(query);
+        if (query.Limit === "48") calls.push(query);
         const start = Number(query.StartIndex || 0);
         if (start === holdOffset)
           await new Promise((resolve) => (releaseHeld = resolve));
@@ -155,6 +155,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         main.dispatchEvent(new Event("scroll"));
       });
     await page.locator("nav [data-nav=library]").click();
+    await page.locator("[data-tv-tab=library]").click();
     await page.getByText("48 of 240 items", { exact: true }).waitFor();
     assert.equal(
       await page
@@ -310,6 +311,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     // Libraries without totals, and servers returning fewer than requested, still stream to the end.
     await page.locator("nav [data-nav=unknown]").click();
+    await page.locator("[data-tv-tab=library]").click();
     await waitFor(() =>
       calls.some((q) => q.ParentId === "unknown" && q.StartIndex === "0"),
     );
@@ -331,6 +333,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "Filters do not leak between libraries",
     );
     await page.locator("nav [data-nav=repeated]").click();
+    await page.locator("[data-tv-tab=library]").click();
     await page.getByText("48 of 240 items", { exact: true }).waitFor();
     await scrollEnd();
     await page
@@ -355,9 +358,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     // Changing sort preferences survives reload, while rendered items are fetched afresh.
     await page.locator("nav [data-nav=library]").click();
+    await page.locator("[data-tv-tab=library]").click();
     await page.getByText("48 of 60 items", { exact: true }).waitFor();
     await page.reload();
     await page.locator("nav [data-nav=library]").click();
+    await page.locator("[data-tv-tab=library]").click();
     await page.getByText("48 of 60 items", { exact: true }).waitFor();
     assert.equal(calls.at(-1).IsPlayed, "true");
     assert.equal(calls.at(-1).SortBy, "SortName");

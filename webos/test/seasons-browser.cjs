@@ -275,7 +275,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.locator(".season-grid [data-item=m1]").click();
     await page.locator(".episode-browser-rail [data-item=progress]").waitFor();
     assert.equal(
-      await page.locator(".episode-stream-details").textContent(),
+      await page.locator(".episode-stream-details").getAttribute("aria-label"),
       "720p · HEVC · Stereo",
       "Technical summary uses structured fields and one default audio stream",
     );

@@ -296,6 +296,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     assert.equal(started().length, 2);
     assert.equal(stopped().length, 2);
     assert.equal(movie.UserData.PlaybackPositionTicks, 1350000000);
+    await page
+      .getByRole("button", { name: "More options", exact: true })
+      .click();
     await page.getByRole("button", { name: "Back", exact: true }).click();
     await page.getByRole("heading", { name: "Movies", exact: true }).waitFor();
     assert.equal(

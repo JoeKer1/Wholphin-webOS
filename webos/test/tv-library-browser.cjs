@@ -23,6 +23,23 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       ImageTags: { Primary: "art" },
       Overview: "Show overview",
     };
+    const movie = {
+      Id: "film",
+      Name: "Test film",
+      Type: "Movie",
+      MediaType: "Video",
+      Overview: "Film overview",
+      ImageTags: { Primary: "art" },
+      MediaSources: [
+        {
+          Id: "film-source",
+          MediaStreams: [
+            { Type: "Video", Codec: "hevc", Height: 1080 },
+            { Type: "Audio", Channels: 6 },
+          ],
+        },
+      ],
+    };
     const ep = {
       Id: "episode",
       Name: "Test episode",
@@ -55,7 +72,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
           ],
         };
       else if (u.pathname.endsWith("/Resume") || u.pathname === "/Shows/NextUp")
-        data = { Items: [ep] };
+        data = { Items: q.IncludeItemTypes === "Movie" ? [movie] : [ep] };
       else if (u.pathname.endsWith("/Latest")) data = [show];
       else if (u.pathname === "/Genres")
         data = {
@@ -86,15 +103,35 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
             activeChecks--;
           }
           data = {
-            Items: q.ParentId === "moviecol" ? [] : [show],
-            TotalRecordCount: q.ParentId === "moviecol" ? 0 : 1,
+            Items:
+              q.IncludeItemTypes === "Movie"
+                ? q.ParentId === "tvcol"
+                  ? []
+                  : [movie]
+                : q.ParentId === "moviecol"
+                  ? []
+                  : [show],
+            TotalRecordCount:
+              q.IncludeItemTypes === "Movie"
+                ? q.ParentId === "tvcol"
+                  ? 0
+                  : 1
+                : q.ParentId === "moviecol"
+                  ? 0
+                  : 1,
           };
         } else
           data = {
-            Items: q.IncludeItemTypes === "Episode" ? [ep] : [show],
+            Items:
+              q.IncludeItemTypes === "Episode"
+                ? [ep]
+                : q.IncludeItemTypes === "Movie"
+                  ? [movie]
+                  : [show],
             TotalRecordCount: 1,
           };
-      } else if (u.pathname.startsWith("/Users/user/Items/")) data = show;
+      } else if (u.pathname.startsWith("/Users/user/Items/"))
+        data = u.pathname.endsWith("/film") ? movie : show;
       await route.fulfill({ json: data });
     });
     await page.addInitScript(() =>
@@ -226,12 +263,102 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "mixed",
     );
     await page.locator("nav [data-nav=movies]").click();
-    await page.locator(".library-grid .card").waitFor();
-    assert.equal(
-      await page.locator(".tv-library-tabs").count(),
-      0,
-      "Movie library keeps its existing layout",
+    await page
+      .locator("[data-tv-tab=recommended][aria-selected=true]")
+      .waitFor();
+    assert.deepEqual(
+      await page.locator(".tv-library-tabs button").allTextContents(),
+      ["Recommended", "Library", "Collections", "Genres"],
     );
+    const movieRows = await page.locator("#home-rows h2").allTextContents();
+    assert.deepEqual(
+      movieRows.filter(
+        (n) => !/Halloween|Thanksgiving|Christmas|New Year|Valentine/.test(n),
+      ),
+      [
+        "Continue watching",
+        "Recently Added",
+        "Recently Released",
+        "Top Rated Unwatched",
+        "Suggestions",
+      ],
+    );
+    assert.ok(
+      requests.some(
+        (r) =>
+          r.path.endsWith("/Resume") &&
+          r.q.ParentId === "movies" &&
+          r.q.IncludeItemTypes === "Movie",
+      ),
+    );
+    await page.locator("[data-tv-tab=collections]").click();
+    await page.locator(".tv-category-grid [data-item=moviecol]").waitFor();
+    assert.equal(
+      await page.locator(".tv-category-grid [data-item=tvcol]").count(),
+      0,
+    );
+    await page.locator(".tv-category-grid [data-item=mixed]").click();
+    await page.locator(".library-grid [data-item=film]").waitFor();
+    assert.ok(
+      requests.some(
+        (r) =>
+          r.q.ParentId === "mixed" &&
+          r.q.IncludeItemTypes === "Movie" &&
+          r.q.Limit !== "1",
+      ),
+    );
+    await page.locator("[data-tv-tab=genres]").click();
+    await page.locator(".tv-category-grid [data-item=genre]").click();
+    await page.locator(".library-grid [data-item=film]").waitFor();
+    assert.ok(
+      requests.some(
+        (r) =>
+          r.q.ParentId === "movies" &&
+          r.q.GenreIds === "genre" &&
+          r.q.IncludeItemTypes === "Movie",
+      ),
+    );
+    await page.locator("[data-tv-tab=library]").click();
+    await page.locator(".library-grid [data-item=film]").click();
+    await page.locator(".format-pill").first().waitFor();
+    assert.deepEqual(await page.locator(".format-pill").allTextContents(), [
+      "1080p",
+      "HEVC",
+      "5.1",
+    ]);
+    const watched = page.getByRole("button", {
+      name: "Mark as watched",
+      exact: true,
+    });
+    await watched.focus();
+    await page.waitForTimeout(220);
+    const expanded = await watched.boundingBox();
+    await page
+      .getByRole("button", { name: "Play from beginning", exact: true })
+      .focus();
+    await page.waitForTimeout(220);
+    const collapsed = await watched.boundingBox();
+    assert.ok(
+      expanded.width > collapsed.width + 50,
+      "Focused action expands into its label",
+    );
+    assert.equal(
+      await watched.locator("img").getAttribute("src"),
+      "icons/visibility_off.svg",
+    );
+    await watched.click();
+    await page
+      .getByRole("button", { name: "Mark as unwatched", exact: true })
+      .waitFor();
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Mark as unwatched", exact: true })
+        .locator("img")
+        .getAttribute("src"),
+      "icons/visibility.svg",
+    );
+    await page.screenshot({ path: "/tmp/wholphin-movie-detail-actions.png" });
+
     await page.locator("nav [data-nav=tv]").click();
     await page.locator("[data-tv-tab=collections]").click();
     await page.locator("nav [data-nav=home]").click();

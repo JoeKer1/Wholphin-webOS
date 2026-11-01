@@ -59,10 +59,60 @@
   }
   function button(text, action, parent) {
     var b = el("button", text, parent);
+    b.onmousedown = function (event) {
+      if (b.classList.contains("icon-action")) event.preventDefault();
+    };
     b.onclick = function () {
       run(action);
+      if (b.classList.contains("icon-action")) b.focus();
     };
+    if (parent && parent.classList.contains("actions") && text)
+      labelAction(b, text);
     return b;
+  }
+  function labelAction(node, label) {
+    var icon = /^Play from beginning/.test(label)
+      ? node.classList.contains("primary-action")
+        ? "play_arrow"
+        : "replay"
+      : /^(Play|Resume)/.test(label)
+        ? "play_arrow"
+        : label === "Mark as watched"
+          ? "visibility_off"
+          : label === "Mark as unwatched"
+            ? "visibility"
+            : /favorites/i.test(label)
+              ? "heart"
+              : label === "Back"
+                ? "arrow_back"
+                : label === "Add to queue"
+                  ? "playlist_add"
+                  : /seasons|playback queue/i.test(label)
+                    ? "movie"
+                    : "more_vert";
+    node.classList.add("icon-action");
+    node.setAttribute("aria-label", label);
+    var text = node.querySelector(".action-label"),
+      art = node.querySelector(".action-icon");
+    if (!text) {
+      node.textContent = "";
+      art = el("span", null, node);
+      art.className = "action-icon";
+      text = el("span", null, node);
+      text.className = "action-label";
+    }
+    if (art.dataset.icon !== icon) {
+      art.textContent = "";
+      art.dataset.icon = icon;
+      if (icon === "heart") art.appendChild(navIcon("favorites"));
+      else {
+        var img = el("img", null, art);
+        img.src =
+          "icons/" + (icon === "movie" ? "local_movies" : icon) + ".svg";
+        img.alt = "";
+      }
+    }
+    text.textContent = label;
   }
   function message(text) {
     status.textContent = text || "";
@@ -78,7 +128,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.34"' +
+      '", Version="0.2.35"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -263,6 +313,14 @@
     if (activeGuide) activeGuide.focusChannel(playing.item.Id);
   }
   async function back() {
+    var moreMenu = document.getElementById("detail-more-options");
+    if (moreMenu && !moreMenu.hidden && !playing) {
+      moreMenu.hidden = true;
+      var more = document.getElementById("detail-more-button");
+      more.setAttribute("aria-expanded", "false");
+      more.focus();
+      return;
+    }
     var subtitleMenu = document.getElementById("detail-subtitle-menu");
     if (subtitleMenu && !subtitleMenu.hidden && !playing) {
       subtitleMenu.hidden = true;
@@ -429,7 +487,7 @@
             : "folder",
         function () {
           return go(function () {
-            return item.CollectionType === "tvshows"
+            return ["tvshows", "movies"].indexOf(item.CollectionType) !== -1
               ? tvLibrary(item)
               : listing(item.Id, item.Name);
           });
@@ -1285,7 +1343,7 @@
         Limit: 24,
         MediaTypes: "Video",
         ParentId: row.parent,
-        IncludeItemTypes: row.parent ? "Episode" : undefined,
+        IncludeItemTypes: row.parent ? row.type || "Episode" : undefined,
         Fields: fields,
       }).then(function (data) {
         return data.Items || [];
@@ -1356,6 +1414,46 @@
       return data.Items || [];
     });
   }
+  function movieRecommendations(library) {
+    var rows = [
+      { kind: "resume", title: "Continue watching" },
+      {
+        kind: "items",
+        title: "Recently Added",
+        filter: { SortBy: "DateCreated", SortOrder: "Descending" },
+      },
+      {
+        kind: "released",
+        title: "Recently Released",
+        filter: { MaxPremiereDate: new Date().toISOString(), IsUnaired: false },
+      },
+      {
+        kind: "items",
+        title: "Top Rated Unwatched",
+        filter: {
+          IsPlayed: false,
+          SortBy: "CommunityRating",
+          SortOrder: "Descending",
+        },
+      },
+    ];
+    rows = rows.concat(
+      C.holidayRows().filter(function (row) {
+        return row.type === "Movie";
+      }),
+    );
+    rows.push({
+      kind: "items",
+      title: "Suggestions",
+      filter: { IsPlayed: false, SortBy: "Random" },
+    });
+    return rows.map(function (row) {
+      row.parent = library.Id;
+      row.type = "Movie";
+      row.key = "movie:" + library.Id + ":" + (row.key || row.title);
+      return row;
+    });
+  }
   async function home(tvLibraryItem) {
     var r = reset(tvLibraryItem ? tvLibraryItem.Name : "Home"),
       options = homeOptions();
@@ -1417,47 +1515,50 @@
     } else {
       loadLibraries().catch(function () {});
     }
-    var plan = tvLibraryItem
-        ? [
-            { kind: "resume", title: "Continue watching" },
-            { kind: "next", title: "Next Up" },
-            {
-              kind: "released",
-              title: "Recently Released",
-              type: "Episode",
-              filter: {
-                MaxPremiereDate: new Date().toISOString(),
-                IsUnaired: false,
-              },
-            },
-            {
-              kind: "items",
-              title: "Recently Added",
-              type: "Episode",
-              filter: { SortBy: "DateCreated", SortOrder: "Descending" },
-            },
-            {
-              kind: "items",
-              title: "Top Rated Unwatched",
-              type: "Series",
-              filter: {
-                IsPlayed: false,
-                SortBy: "CommunityRating",
-                SortOrder: "Descending",
-              },
-            },
-            {
-              kind: "items",
-              title: "Suggestions",
-              type: "Series",
-              filter: { IsPlayed: false, SortBy: "Random" },
-            },
-          ].map(function (row) {
-            row.parent = tvLibraryItem.Id;
-            row.key = "tv:" + tvLibraryItem.Id + ":" + row.title;
-            return row;
-          })
-        : C.homeRows(libraryItems, options),
+    var plan =
+        tvLibraryItem && tvLibraryItem.CollectionType === "movies"
+          ? movieRecommendations(tvLibraryItem)
+          : tvLibraryItem
+            ? [
+                { kind: "resume", title: "Continue watching" },
+                { kind: "next", title: "Next Up" },
+                {
+                  kind: "released",
+                  title: "Recently Released",
+                  type: "Episode",
+                  filter: {
+                    MaxPremiereDate: new Date().toISOString(),
+                    IsUnaired: false,
+                  },
+                },
+                {
+                  kind: "items",
+                  title: "Recently Added",
+                  type: "Episode",
+                  filter: { SortBy: "DateCreated", SortOrder: "Descending" },
+                },
+                {
+                  kind: "items",
+                  title: "Top Rated Unwatched",
+                  type: "Series",
+                  filter: {
+                    IsPlayed: false,
+                    SortBy: "CommunityRating",
+                    SortOrder: "Descending",
+                  },
+                },
+                {
+                  kind: "items",
+                  title: "Suggestions",
+                  type: "Series",
+                  filter: { IsPlayed: false, SortBy: "Random" },
+                },
+              ].map(function (row) {
+                row.parent = tvLibraryItem.Id;
+                row.key = "tv:" + tvLibraryItem.Id + ":" + row.title;
+                return row;
+              })
+            : C.homeRows(libraryItems, options),
       queue = [],
       active = 0;
     function valid() {
@@ -1633,29 +1734,30 @@
     main.insertBefore(tabs, main.firstChild);
     tabs.setAttribute("role", "tablist");
     tabs.setAttribute("aria-label", library.Name);
-    ["recommended", "library", "genres", "studios", "collections"].forEach(
-      function (tab) {
-        var control = button(
-          tab.charAt(0).toUpperCase() + tab.slice(1),
-          function () {
-            var action = function () {
-              return tvLibrary(library, tab);
-            };
-            var frame = stack[stack.length - 1];
-            if (frame) {
-              frame.action = action;
-              frame.focus = null;
-              frame.related = null;
-            }
-            return action();
-          },
-          tabs,
-        );
-        control.setAttribute("role", "tab");
-        control.setAttribute("aria-selected", String(tab === selected));
-        control.dataset.tvTab = tab;
-      },
-    );
+    (library.CollectionType === "movies"
+      ? ["recommended", "library", "collections", "genres"]
+      : ["recommended", "library", "genres", "studios", "collections"]
+    ).forEach(function (tab) {
+      var control = button(
+        tab.charAt(0).toUpperCase() + tab.slice(1),
+        function () {
+          var action = function () {
+            return tvLibrary(library, tab);
+          };
+          var frame = stack[stack.length - 1];
+          if (frame) {
+            frame.action = action;
+            frame.focus = null;
+            frame.related = null;
+          }
+          return action();
+        },
+        tabs,
+      );
+      control.setAttribute("role", "tab");
+      control.setAttribute("aria-selected", String(tab === selected));
+      control.dataset.tvTab = tab;
+    });
   }
   function tvLibrary(library, tab) {
     tab = tab || "recommended";
@@ -1668,6 +1770,8 @@
     return tvCategories(library, tab);
   }
   async function tvCategories(library, tab) {
+    var contentType = library.CollectionType === "movies" ? "Movie" : "Series";
+    var contentName = contentType === "Movie" ? "movies" : "TV shows";
     var r = reset(library.Name),
       controller = new AbortController();
     homeController = controller;
@@ -1695,7 +1799,7 @@
       failed = false;
       status.textContent =
         tab === "collections"
-          ? "Checking collections for TV shows…"
+          ? "Checking collections for " + contentName + "…"
           : "Loading…";
       try {
         var data = await request(
@@ -1707,7 +1811,7 @@
           {
             UserId: session.user,
             ParentId: tab === "collections" ? undefined : library.Id,
-            IncludeItemTypes: tab === "collections" ? "BoxSet" : "Series",
+            IncludeItemTypes: tab === "collections" ? "BoxSet" : contentType,
             Recursive: true,
             SortBy: "SortName",
             SortOrder: "Ascending",
@@ -1731,7 +1835,7 @@
                   {
                     ParentId: entry.Id,
                     Recursive: true,
-                    IncludeItemTypes: "Series",
+                    IncludeItemTypes: contentType,
                     Limit: 1,
                     EnableTotalRecordCount: false,
                   },
@@ -1740,7 +1844,7 @@
                 checked.set(
                   entry.Id,
                   (contents.Items || []).some(function (item) {
-                    return item.Type === "Series";
+                    return item.Type === contentType;
                   }),
                 );
               }
@@ -1786,7 +1890,9 @@
             ? ids.size + " " + tab
             : "No " +
               tab +
-              (tab === "collections" ? " containing TV shows." : " found.")
+              (tab === "collections"
+                ? " containing " + contentName + "."
+                : " found.")
           : "Scroll for more " + tab + ".";
         if (document.activeElement === main && grid.firstElementChild)
           focusContent(grid.firstElementChild);
@@ -1985,68 +2091,38 @@
       name.textContent = item.Name;
       meta.textContent = itemMetadata(item);
       overview.textContent = item.Overview || "No description available.";
-      playButton.textContent =
+      labelAction(
+        playButton,
         ((item.UserData && item.UserData.PlaybackPositionTicks) || 0) > 0
           ? "Resume"
-          : "Play";
-      watched.textContent =
+          : "Play",
+      );
+      labelAction(
+        watched,
         item.UserData && item.UserData.Played
           ? "Mark as unwatched"
-          : "Mark as watched";
+          : "Mark as watched",
+      );
       var saved = !!(item.UserData && item.UserData.IsFavorite);
       favorite.setAttribute(
         "aria-label",
         saved ? "Remove from favorites" : "Add to favorites",
       );
       favorite.setAttribute("aria-pressed", String(saved));
-      var source = (item.MediaSources || [])[0],
-        streams = (source && source.MediaStreams) || item.MediaStreams || [];
-      var videoStream =
-        streams.find(function (stream) {
-          return stream.Type === "Video";
-        }) || {};
-      var audioStreams = streams.filter(function (stream) {
-        return stream.Type === "Audio";
-      });
-      var audioStream =
-        audioStreams.find(function (stream) {
-          return source && stream.Index === source.DefaultAudioStreamIndex;
-        }) ||
-        audioStreams.find(function (stream) {
-          return stream.IsDefault;
-        }) ||
-        audioStreams[0] ||
-        {};
-      var height = Number(videoStream.Height || (source && source.Height));
-      var codec = String(videoStream.Codec || "").toLowerCase();
-      var codecLabel =
-        {
-          hevc: "HEVC",
-          h265: "HEVC",
-          h264: "H.264",
-          av1: "AV1",
-          vp9: "VP9",
-          mpeg2video: "MPEG-2",
-          mpeg4: "MPEG-4",
-        }[codec] || (/^[a-z0-9]{1,12}$/.test(codec) ? codec.toUpperCase() : "");
-      var channels = Number(audioStream.Channels);
-      var audioLabel =
-        { 1: "Mono", 2: "Stereo", 6: "5.1", 8: "7.1" }[channels] ||
-        (channels > 0 && channels <= 32 ? channels + " channels" : "");
-      specs.textContent = [
-        height > 0 && height <= 8640 ? height + "p" : "",
-        codecLabel,
-        audioLabel,
-      ]
-        .filter(Boolean)
-        .join(" · ");
+      labelAction(
+        favorite,
+        saved ? "Remove from favorites" : "Add to favorites",
+      );
+      formatPills(item, specs);
       setBackdrop(item);
     }
     function select(item) {
       if (selected && selected.Id === item.Id) return;
       paint(item);
       subtitleMount.textContent = "";
-      episodeSubtitles = subtitleControl(item, subtitleMount);
+      episodeSubtitles = subtitleControl(item, subtitleMount, function (full) {
+        if (valid() && selected.Id === item.Id) formatPills(full, specs);
+      });
       peopleHost.textContent = "";
       clearTimeout(timer);
       var n = ++selectedRequest;
@@ -2246,11 +2322,14 @@
       tvTabs(tvContext.library, tvContext.tab);
     }
     var type = tvContext
-      ? "Series"
+      ? tvContext.library.CollectionType === "movies"
+        ? "Movie"
+        : "Series"
       : library &&
         { movies: "Movie,Video", tvshows: "Series" }[library.CollectionType];
     var scopeKey =
         id +
+        (tvContext ? ":" + type : "") +
         (tvContext && tvContext.filter
           ? ":" + JSON.stringify(tvContext.filter)
           : ""),
@@ -3654,7 +3733,74 @@
       return continueRow.querySelector(".card,button");
     });
   }
-  function subtitleControl(item, parent) {
+  function formatPills(item, host) {
+    var source = (item.MediaSources || [])[0],
+      streams = (source && source.MediaStreams) || item.MediaStreams || [];
+    var videoStream =
+      streams.find(function (stream) {
+        return stream.Type === "Video";
+      }) || {};
+    var audioStreams = streams.filter(function (stream) {
+      return stream.Type === "Audio";
+    });
+    var audioStream =
+      audioStreams.find(function (stream) {
+        return source && stream.Index === source.DefaultAudioStreamIndex;
+      }) ||
+      audioStreams.find(function (stream) {
+        return stream.IsDefault;
+      }) ||
+      audioStreams[0] ||
+      {};
+    var height = Number(videoStream.Height || (source && source.Height));
+    var width = Number(videoStream.Width || (source && source.Width));
+    var resolution =
+      width >= 7600 || height >= 4200
+        ? "8K"
+        : width >= 3800 || height >= 2100
+          ? "4K"
+          : width >= 2500 || height >= 1400
+            ? "1440p"
+            : width >= 1900 || height >= 1060
+              ? "1080p"
+              : width >= 1260 || height >= 700
+                ? "720p"
+                : height > 0 && height <= 8640
+                  ? height + "p"
+                  : "";
+    var range = /^DOVI/.test(videoStream.VideoRangeType || "")
+      ? "Dolby Vision"
+      : { HDR10: "HDR10", HDR10Plus: "HDR10+", HLG: "HLG" }[
+          videoStream.VideoRangeType
+        ] || "";
+    var codec = String(videoStream.Codec || "").toLowerCase();
+    var codecLabel =
+      {
+        hevc: "HEVC",
+        h265: "HEVC",
+        h264: "H.264",
+        av1: "AV1",
+        vp9: "VP9",
+        mpeg2video: "MPEG-2",
+        mpeg4: "MPEG-4",
+      }[codec] || (/^[a-z0-9]{1,12}$/.test(codec) ? codec.toUpperCase() : "");
+    var channels = Number(audioStream.Channels);
+    var audioLabel =
+      { 1: "Mono", 2: "Stereo", 6: "5.1", 8: "7.1" }[channels] ||
+      (channels > 0 && channels <= 32 ? channels + " channels" : "");
+    var labels = [
+      [resolution, range].filter(Boolean).join(" "),
+      codecLabel,
+      audioLabel,
+    ].filter(Boolean);
+    host.textContent = "";
+    host.classList.add("format-pills");
+    host.setAttribute("aria-label", labels.join(" · "));
+    labels.forEach(function (label) {
+      el("span", label, host).className = "format-pill";
+    });
+  }
+  function subtitleControl(item, parent, onSource) {
     var subtitleSettings = el("div", null, parent);
     subtitleSettings.className = "detail-subtitle-settings";
     function openDetailSubtitles() {
@@ -3742,6 +3888,8 @@
           })
         )
           chosen = -1;
+        if (onSource)
+          onSource(Object.assign({}, item, { MediaSources: [source] }));
         if (source.Id) subtitlePicker.dataset.source = source.Id;
         subtitlePicker.dataset.explicit = String(
           !!(saved && saved.source === source.Id && saved.index === chosen),
@@ -3832,6 +3980,8 @@
       "detail-page" + (item.Type === "Series" ? " series-detail" : "");
     setBackdrop(item);
     el("p", itemMetadata(item), main).className = "metadata";
+    var formatHost = el("div", null, main);
+    formatPills(item, formatHost);
     if (item.Genres && item.Genres.length)
       el("p", item.Genres.join(", "), main).className = "genres";
     if (item.Taglines && item.Taglines.length)
@@ -3883,7 +4033,9 @@
         actions,
       );
     } else if (item.MediaType === "Video") {
-      var subtitles = subtitleControl(item, main);
+      var subtitles = subtitleControl(item, main, function (full) {
+        if (formatHost.isConnected) formatPills(full, formatHost);
+      });
       var subtitlePicker = subtitles.picker;
       var detailSubtitleOptions = subtitles.options;
       var ticks = (item.UserData && item.UserData.PlaybackPositionTicks) || 0;
@@ -3904,6 +4056,42 @@
       );
     }
     if (!item.IsFolder && !item.IsLiveProgram && item.MediaType === "Video") {
+      var extraActions = el("div", null, main);
+      extraActions.id = "detail-more-options";
+      extraActions.className = "detail-more-options";
+      extraActions.setAttribute("role", "dialog");
+      extraActions.setAttribute("aria-label", "More options");
+      extraActions.hidden = true;
+      var movieWatched = button(
+        item.UserData && item.UserData.Played
+          ? "Mark as unwatched"
+          : "Mark as watched",
+        async function () {
+          movieWatched.disabled = true;
+          try {
+            var remove = !!(item.UserData && item.UserData.Played);
+            await api(
+              "/Users/" +
+                session.user +
+                "/PlayedItems/" +
+                encodeURIComponent(item.Id),
+              null,
+              null,
+              remove ? "DELETE" : "POST",
+            );
+            item.UserData = Object.assign({}, item.UserData, {
+              Played: !remove,
+            });
+            labelAction(
+              movieWatched,
+              !remove ? "Mark as unwatched" : "Mark as watched",
+            );
+          } finally {
+            if (movieWatched.isConnected) movieWatched.disabled = false;
+          }
+        },
+        actions,
+      );
       button(
         "Add to queue",
         function () {
@@ -3924,7 +4112,7 @@
           message("Added to queue: " + item.Name);
           updatePlaybackButtons();
         },
-        actions,
+        extraActions,
       );
       button(
         "View playback queue",
@@ -3946,7 +4134,13 @@
       );
     }
     var firstAction = actions.querySelector("button");
-    if (firstAction) firstAction.classList.add("primary-action");
+    if (firstAction) {
+      firstAction.classList.add("primary-action");
+      labelAction(
+        firstAction,
+        firstAction.getAttribute("aria-label") || firstAction.textContent,
+      );
+    }
     var favorite = button(
       null,
       async function () {
@@ -3979,19 +4173,62 @@
       favorite.setAttribute("aria-label", label);
       favorite.setAttribute("title", label);
       favorite.setAttribute("aria-pressed", String(saved));
+      labelAction(
+        favorite,
+        saved ? "Remove from favorites" : "Add to favorites",
+      );
     }
     updateFavorite();
-    button("Back", back, actions);
+    if (extraActions) {
+      var queueButton = actions.querySelector(
+        '[aria-label="View playback queue"]',
+      );
+      if (queueButton) actions.insertBefore(favorite, queueButton);
+      var moreButton = button(
+        "More options",
+        function () {
+          extraActions.hidden = !extraActions.hidden;
+          moreButton.setAttribute(
+            "aria-expanded",
+            String(!extraActions.hidden),
+          );
+          if (!extraActions.hidden)
+            focusContent(extraActions.querySelector("button"));
+        },
+        actions,
+      );
+      moreButton.id = "detail-more-button";
+      moreButton.setAttribute("aria-expanded", "false");
+      button(
+        "Close",
+        function () {
+          extraActions.hidden = true;
+          moreButton.setAttribute("aria-expanded", "false");
+          moreButton.focus();
+        },
+        extraActions,
+      );
+      button(
+        "Back",
+        function () {
+          extraActions.hidden = true;
+          return back();
+        },
+        extraActions,
+      );
+    } else button("Back", back, actions);
     if (item.Type === "Series") {
       seriesReady = seriesRows(item, showSeasons, seasonsError);
       seriesReady.then(function (target) {
         if (target && target.episodeItem && seriesPlay.isConnected) {
           seriesPlay.disabled = false;
-          seriesPlay.textContent =
+          labelAction(
+            seriesPlay,
             target.episodeItem.UserData &&
-            target.episodeItem.UserData.PlaybackPositionTicks > 0
+              target.episodeItem.UserData.PlaybackPositionTicks > 0
               ? "Resume"
-              : "Play";
+              : "Play",
+          );
         }
       });
     }
@@ -6132,6 +6369,25 @@
     )
       return;
     e.preventDefault();
+    var moreMenu = main.querySelector("#detail-more-options:not([hidden])");
+    if (moreMenu && (!playing || livePreview)) {
+      var moreControls = Array.prototype.slice.call(
+        moreMenu.querySelectorAll("button"),
+      );
+      var pos = moreControls.indexOf(active);
+      focusContent(
+        moreControls[
+          Math.max(
+            0,
+            Math.min(
+              moreControls.length - 1,
+              pos + (key === 37 || key === 38 ? -1 : 1),
+            ),
+          )
+        ],
+      );
+      return;
+    }
     var tvTab = active.closest(".tv-library-tabs");
     if ((!playing || livePreview) && tvTab) {
       if (key === 37 || key === 39) {
