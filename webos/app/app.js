@@ -143,7 +143,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.54"' +
+      '", Version="0.2.55"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -547,34 +547,24 @@
       },
       "home",
     );
-    entry(
-      "Favorites",
-      "favorites",
-      function () {
-        return go(favorites);
-      },
-      "favorites",
-    );
-    entry(
-      "Live TV",
-      "tv",
-      function () {
-        var state = {};
-        return go(function () {
-          return liveGuide(state);
-        });
-      },
-      "livetv",
-    );
-    libraryItems.forEach(function (item) {
-      if (item.CollectionType === "livetv") return;
+    var libraryOrder = ["movies", "tv", "anime", "kids tv", "collections", "discover"];
+    function libraryName(item) {
+      var name = item.Name.toLowerCase().replace(/\s+/g, " ").trim();
+      if (name === "tv shows" || name === "television") return "tv";
+      if (name === "kids" || name === "kids shows") return "kids tv";
+      if (item.CollectionType === "boxsets") return "collections";
+      return name;
+    }
+    function libraryRank(item) {
+      var rank = libraryOrder.indexOf(libraryName(item));
+      return rank === -1 ? libraryOrder.length : rank;
+    }
+    function libraryEntry(item) {
+      var name = libraryName(item),
+        label = name === "tv" ? "TV" : name === "kids tv" ? "Kids TV" : item.Name;
       entry(
-        item.Name,
-        item.CollectionType === "movies"
-          ? "movies"
-          : item.CollectionType === "tvshows"
-            ? "tv"
-            : "folder",
+        label,
+        item.CollectionType === "movies" ? "movies" : item.CollectionType === "tvshows" ? "tv" : "folder",
         function () {
           return go(function () {
             return ["tvshows", "movies"].indexOf(item.CollectionType) !== -1
@@ -584,7 +574,24 @@
         },
         item.Id,
       );
+    }
+    var libraries = libraryItems.filter(function (item) {
+      return item.CollectionType !== "livetv";
+    }).slice().sort(function (a, b) {
+      return libraryRank(a) - libraryRank(b);
     });
+    libraries.filter(function (item) { return libraryRank(item) < 4; }).forEach(libraryEntry);
+    entry(
+      "Live TV",
+      "tv",
+      function () {
+        var state = {};
+        return go(function () { return liveGuide(state); });
+      },
+      "livetv",
+    );
+    entry("Favorites", "favorites", function () { return go(favorites); }, "favorites");
+    libraries.filter(function (item) { return libraryRank(item) >= 4; }).forEach(libraryEntry);
     entry(
       "Settings",
       "settings",
@@ -849,7 +856,7 @@
       modeControl.disabled = true;
       vision.hidden = true;
     }
-    var about = section("About", "Ember for Jellyfin · v0.2.54");
+    var about = section("About", "Ember for Jellyfin · v0.2.55");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -7161,6 +7168,8 @@
   });
   function focusContent(node) {
     if (!node) return;
+    if (nav.contains(node) && !nav.contains(document.activeElement))
+      node = nav.querySelector('[data-nav="home"]') || node;
     node.focus();
     if (nav.contains(node)) {
       var rect = node.getBoundingClientRect(),
