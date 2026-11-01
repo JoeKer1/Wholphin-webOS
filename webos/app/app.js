@@ -75,7 +75,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.15"' +
+      '", Version="0.2.16"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -2870,27 +2870,39 @@
     var firstAction = actions.querySelector("button");
     if (firstAction) firstAction.classList.add("primary-action");
     var favorite = button(
-      item.UserData && item.UserData.IsFavorite
-        ? "Remove from favorites"
-        : "Add to favorites",
+      null,
       async function () {
-        var remove = item.UserData && item.UserData.IsFavorite;
-        await api(
-          "/Users/" + session.user + "/FavoriteItems/" + item.Id,
-          null,
-          null,
-          remove ? "DELETE" : "POST",
-        );
-        item.UserData = item.UserData || {};
-        item.UserData.IsFavorite = !remove;
-        homeCache.delete(accountKey("row:") + "favorite-movies");
-        homeCache.delete(accountKey("row:") + "favorite-series");
-        favorite.textContent = !remove
-          ? "Remove from favorites"
-          : "Add to favorites";
+        if (favorite.disabled) return;
+        favorite.disabled = true;
+        try {
+          var remove = !!(item.UserData && item.UserData.IsFavorite);
+          await api(
+            "/Users/" + session.user + "/FavoriteItems/" + item.Id,
+            null,
+            null,
+            remove ? "DELETE" : "POST",
+          );
+          item.UserData = item.UserData || {};
+          item.UserData.IsFavorite = !remove;
+          homeCache.delete(accountKey("row:") + "favorite-movies");
+          homeCache.delete(accountKey("row:") + "favorite-series");
+          updateFavorite();
+        } finally {
+          favorite.disabled = false;
+        }
       },
       actions,
     );
+    favorite.className = "favorite-heart";
+    favorite.appendChild(navIcon("favorites"));
+    function updateFavorite() {
+      var saved = !!(item.UserData && item.UserData.IsFavorite),
+        label = saved ? "Remove from favorites" : "Add to favorites";
+      favorite.setAttribute("aria-label", label);
+      favorite.setAttribute("title", label);
+      favorite.setAttribute("aria-pressed", String(saved));
+    }
+    updateFavorite();
     button("Back", back, actions);
     var people = (item.People || []).filter(function (person) {
       return person.Type === "Actor";
@@ -2970,6 +2982,7 @@
       );
     }
     focusFirst();
+    main.scrollTop = 0;
   }
   function subtitleOptions() {
     return C.subtitleStyle(readPreference("subtitle-appearance", {}));
@@ -4471,12 +4484,21 @@
       .classList.toggle("drawer-open", nav.contains(e.target));
     document.querySelector("header").scrollLeft = 0;
     nav.scrollLeft = 0;
-    if (main.contains(e.target)) contentFocus = e.target;
+    if (main.contains(e.target)) {
+      contentFocus = e.target;
+      if (
+        main.classList.contains("detail-page") &&
+        e.target.closest(".actions")
+      )
+        main.scrollTop = 0;
+    }
   });
   function focusContent(node) {
     if (!node) return;
     node.focus();
     node.scrollIntoView({ block: "nearest", inline: "nearest" });
+    if (main.classList.contains("detail-page") && node.closest(".actions"))
+      main.scrollTop = 0;
     var rows = document.getElementById("home-rows");
     if (rows && rows.contains(node)) {
       var section = node.closest("section");
@@ -4635,9 +4657,14 @@
       }
     }
     if (document.activeElement.tagName === "SELECT") {
-      if (key === 39 && document.activeElement.id === "detail-subtitles") {
-        e.preventDefault();
-        focusContent(main.querySelector(".actions button"));
+      if (document.activeElement.id === "detail-subtitles") {
+        if (key === 38 || key === 39) {
+          e.preventDefault();
+          focusContent(main.querySelector(".actions button"));
+        } else if (key === 40 && main.querySelector(".cast-row figure")) {
+          e.preventDefault();
+          focusContent(main.querySelector(".cast-row figure"));
+        }
       }
       return;
     }
@@ -4669,9 +4696,12 @@
     }
     if (!playing && key === 40 && active.closest(".actions")) {
       var detailCast = main.querySelector(".cast-row");
-      if (detailCast) {
-        detailCast.castReturnFocus = active;
-        focusContent(detailCast.querySelector("figure"));
+      var detailSubtitles = main.querySelector(
+        "#detail-subtitles:not(:disabled)",
+      );
+      if (detailCast) detailCast.castReturnFocus = active;
+      if (detailSubtitles || detailCast) {
+        focusContent(detailSubtitles || detailCast.querySelector("figure"));
         return;
       }
     }

@@ -53,7 +53,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
               : { Id: "source", SupportsDirectPlay: true },
           ],
         };
-      else if (url.pathname.includes("/Sessions/")) {
+      else if (url.pathname.includes("/FavoriteItems/")) {
+        movie.UserData.IsFavorite = req.method() !== "DELETE";
+        data = movie.UserData;
+      } else if (url.pathname.includes("/Sessions/")) {
         if (url.pathname.endsWith("/Stopped"))
           movie.UserData.PlaybackPositionTicks = body.PositionTicks;
         await route.fulfill({ status: 204 });
@@ -305,6 +308,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page
       .getByRole("button", { name: "Test movie", exact: true })
       .waitFor();
+    movie.Overview =
+      "A long synopsis with enough text to reproduce the details scroll position. ".repeat(
+        20,
+      );
+    movie.Taglines = ["A memorable movie tagline"];
+    movie.Genres = ["Action", "Adventure", "Science Fiction"];
     movie.People = Array.from({ length: 32 }, (_, i) => ({
       Id: "person-" + i,
       Name: "Actor " + (i + 1),
@@ -313,6 +322,38 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       PrimaryImageTag: i === 3 ? null : "portrait",
     }));
     await page.getByRole("button", { name: "Test movie", exact: true }).click();
+    const heart = page.locator(".favorite-heart");
+    assert.equal(await heart.getAttribute("aria-pressed"), "false");
+    assert.equal(
+      await heart.locator("svg").evaluate((n) => getComputedStyle(n).fill),
+      "none",
+    );
+    await page
+      .getByRole("button", { name: "Add to favorites", exact: true })
+      .click();
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector(".favorite-heart")
+          .getAttribute("aria-pressed") === "true",
+    );
+    assert.equal(
+      await heart.locator("svg").evaluate((n) => getComputedStyle(n).fill),
+      "rgb(239, 68, 68)",
+    );
+    await page
+      .getByRole("button", { name: "Remove from favorites", exact: true })
+      .click();
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector(".favorite-heart")
+          .getAttribute("aria-pressed") === "false",
+    );
+    assert.equal(
+      await heart.locator("svg").evaluate((n) => getComputedStyle(n).stroke),
+      "rgb(255, 255, 255)",
+    );
     const cast = page.getByRole("list", { name: "Cast", exact: true });
     await cast.waitFor();
     assert.equal(
@@ -326,6 +367,17 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "Offscreen portraits stay unloaded",
     );
     await page.getByRole("button", { name: "Resume", exact: true }).focus();
+    await page.keyboard.press("ArrowDown");
+    assert.equal(
+      await page.locator(":focus").getAttribute("id"),
+      "detail-subtitles",
+    );
+    const selectorBounds = await page
+      .locator("#detail-subtitles")
+      .boundingBox();
+    assert.ok(
+      selectorBounds.y >= 0 && selectorBounds.y + selectorBounds.height <= 1080,
+    );
     await page.keyboard.press("ArrowDown");
     assert.equal(
       await page.locator(":focus").getAttribute("aria-posinset"),
@@ -355,6 +407,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     await page.keyboard.press("ArrowUp");
     assert.equal(await page.locator(":focus").textContent(), "Resume");
+    assert.equal(
+      await page.locator("main").evaluate((n) => n.scrollTop),
+      0,
+      "Returning to Resume restores the full details header",
+    );
+    assert.ok((await page.locator("main h1").boundingBox()).y >= 0);
+    await page.screenshot({ path: "/tmp/wholphin-detail-return.png" });
     await cast.locator("figure").first().focus();
     await page.keyboard.press("ArrowLeft");
     assert.equal(
