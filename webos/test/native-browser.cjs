@@ -420,11 +420,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await stopped();
     range = "HDR10";
     defaultSubtitle = 9;
-    await page.evaluate(() =>
+    await page.evaluate(() => {
       localStorage.removeItem(
         "wholphin-track-preferences:https://jellyfin.test:user",
-      ),
-    );
+      );
+      localStorage.removeItem(
+        "wholphin-subtitle-choices:https://jellyfin.test:user",
+      );
+    });
     await play();
     assert.equal(
       infos().at(-1).body.DeviceProfile.Name,

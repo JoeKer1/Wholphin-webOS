@@ -8,6 +8,7 @@
     player = document.getElementById("player");
   var session = null,
     playing = null,
+    livePreview = false,
     stack = [],
     revision = 0,
     timer = null,
@@ -75,7 +76,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.19"' +
+      '", Version="0.2.20"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -159,10 +160,16 @@
   }
   function focusFirst() {
     var node =
-      main.querySelector("input,button,select") || nav.querySelector("button");
+      Array.prototype.find.call(
+        main.querySelectorAll("input,button,select"),
+        function (entry) {
+          return !entry.disabled && entry.getClientRects().length;
+        },
+      ) || nav.querySelector("button");
     if (node) node.focus();
   }
   function reset(title) {
+    if (livePreview && title !== "Live TV") run(stop);
     revision++;
     if (activeGuide) {
       activeGuide.dispose();
@@ -199,6 +206,37 @@
     stack.push({ action: action });
     return action();
   }
+  function fullscreenLive() {
+    if (!playing || !playing.live) return;
+    livePreview = false;
+    document.body.classList.remove("live-preview");
+    document.body.classList.add("is-playing");
+    showControls();
+    document.getElementById("toggle").focus();
+  }
+  function livePreviewActions(toolbar) {
+    var actions = el("div", null, toolbar);
+    actions.className = "live-preview-actions";
+    button("Return to fullscreen", fullscreenLive, actions);
+    button("Stop Live TV", stop, actions);
+  }
+  async function showLivePreview() {
+    if (!playing || !playing.live) return;
+    livePreview = true;
+    document.body.classList.add("live-preview");
+    document.body.classList.remove("is-playing");
+    hideControls();
+    if (!activeGuide || !main.classList.contains("live-guide-page")) {
+      var state = { focusChannel: playing.item.Id };
+      await go(function () {
+        return liveGuide(state);
+      });
+    }
+    if (!playing || !playing.live || !livePreview) return;
+    if (!main.querySelector(".live-preview-actions"))
+      livePreviewActions(main.querySelector(".guide-toolbar"));
+    if (activeGuide) activeGuide.focusChannel(playing.item.Id);
+  }
   async function back() {
     var subtitleMenu = document.getElementById("detail-subtitle-menu");
     if (subtitleMenu && !subtitleMenu.hidden && !playing) {
@@ -223,6 +261,11 @@
     }
     if (playing && !document.getElementById("player-tools").hidden) {
       closePlayerTools();
+      return;
+    }
+    if (playing && playing.live) {
+      if (livePreview) await stop();
+      else await showLivePreview();
       return;
     }
     if (playing && document.getElementById("controls").style.opacity !== "0") {
@@ -2096,6 +2139,7 @@
       pendingFocus = null;
     var toolbar = el("div", null, main);
     toolbar.className = "guide-toolbar";
+    livePreviewActions(toolbar);
     function reopen(channels) {
       if (channels) {
         state.channels = [];
@@ -2591,6 +2635,13 @@
     main.addEventListener("scroll", schedule);
     main.addEventListener("focusin", remember);
     activeGuide = {
+      focusChannel: function (id) {
+        var index = state.channels.findIndex(function (channel) {
+          return channel.Id === id;
+        });
+        if (index >= 0) focusRow(index, 0);
+        else focusFirst();
+      },
       dispose: function () {
         disposed = true;
         controller.abort();
@@ -2607,7 +2658,15 @@
           column = Number(node.dataset.column);
         if (key === 38 || key === 40) {
           var next = index + (key === 38 ? -1 : 1);
-          if (next < 0) focusContent(toolbar.querySelector("button"));
+          if (next < 0)
+            focusContent(
+              Array.prototype.find.call(
+                toolbar.querySelectorAll("button"),
+                function (entry) {
+                  return !entry.disabled && entry.getClientRects().length;
+                },
+              ),
+            );
           else if (next < state.channels.length || !state.done)
             focusRow(next, column);
           return true;
@@ -3997,8 +4056,13 @@
   }
   async function play(item, ticks, resumeSaved, live, options) {
     options = options || {};
+    if (live && playing && playing.live && item.ChannelId === playing.item.Id) {
+      fullscreenLive();
+      return;
+    }
     if (busy) return;
     busy = true;
+    var keepPreview = livePreview && live;
     var request = ++playRequest,
       previous = playing,
       controller = new AbortController();
@@ -4240,7 +4304,10 @@
         lastSeek: 0,
         resumeDeadline: Date.now() + 30000,
         reporting: Promise.resolve(),
-        returnFocus: previous ? previous.returnFocus : document.activeElement,
+        returnFocus:
+          previous && !keepPreview
+            ? previous.returnFocus
+            : document.activeElement,
       });
       openedLive = null;
       queueItems = queueItems.filter(function (entry) {
@@ -4255,7 +4322,10 @@
       renderSubtitleOverlay();
       subtitleTimer = setInterval(renderSubtitleOverlay, 100);
       player.hidden = false;
-      document.body.classList.add("is-playing");
+      livePreview = !!keepPreview;
+      document.body.classList.toggle("live-preview", livePreview);
+      document.body.classList.toggle("is-playing", !livePreview);
+      document.getElementById("live-preview-caption").textContent = item.Name;
       video.style.objectFit = previous ? video.style.objectFit : "contain";
       document.getElementById("fit").textContent =
         video.style.objectFit === "cover" ? "Fit video" : "Fill screen";
@@ -4267,7 +4337,8 @@
       video.src = selected.url + (ticks ? "#t=" + ticks / 10000000 : "");
       resumeTimer = setInterval(finishResume, 250);
       video.load();
-      document.getElementById("toggle").focus();
+      if (livePreview && activeGuide) activeGuide.focusChannel(item.Id);
+      else document.getElementById("toggle").focus();
       message(subtitleNotice);
       timer = setInterval(function () {
         run(function () {
@@ -4418,6 +4489,8 @@
         options.positionTicks != null ? options.positionTicks : position();
     hideUpNext();
     playing = null;
+    livePreview = false;
+    document.body.classList.remove("live-preview");
     stopped.extrasController.abort();
     closePlaybackPanel(false);
     video.pause();
@@ -4521,6 +4594,7 @@
       document.activeElement.blur();
   }
   function showControls() {
+    if (livePreview) return;
     var controls = document.getElementById("controls");
     controls.style.opacity = "1";
     controls.style.pointerEvents = "auto";
@@ -4539,7 +4613,10 @@
       }, 3000);
   }
   player.addEventListener("mousemove", showControls);
-  player.addEventListener("click", showControls);
+  player.addEventListener("click", function () {
+    if (livePreview) fullscreenLive();
+    else showControls();
+  });
   function toggle() {
     if (playing && playing.awaitingWatching) return;
     if (video.paused) return video.play();
@@ -4632,6 +4709,11 @@
   }
   document.addEventListener("keydown", function (e) {
     var key = e.keyCode;
+    if (livePreview && key === 413) {
+      e.preventDefault();
+      run(stop);
+      return;
+    }
     if (key === 13 && document.activeElement.type === "checkbox") {
       e.preventDefault();
       document.activeElement.click();
@@ -4644,7 +4726,7 @@
     }
     var detailSubtitleMenu = document.getElementById("detail-subtitle-menu");
     if (
-      !playing &&
+      (!playing || livePreview) &&
       detailSubtitleMenu &&
       !detailSubtitleMenu.hidden &&
       key >= 37 &&
@@ -4666,7 +4748,7 @@
       return;
     }
     if (
-      !playing &&
+      (!playing || livePreview) &&
       document.activeElement.id === "detail-subtitles" &&
       key >= 37 &&
       key <= 40
@@ -4704,7 +4786,7 @@
         return;
       }
     }
-    if (playing) {
+    if (playing && !livePreview) {
       var panelOpen = !document.getElementById("playback-panel").hidden;
       var controlsHidden =
         document.getElementById("controls").style.opacity === "0";
@@ -4773,6 +4855,7 @@
     }
     if (
       playing &&
+      !livePreview &&
       document.getElementById("playback-panel").hidden &&
       key >= 37 &&
       key <= 40
@@ -4834,10 +4917,19 @@
     )
       return;
     e.preventDefault();
-    if (!playing && activeGuide && activeGuide.handleKey(key, active)) return;
-    if (!playing && activeListing && activeListing.handleKey(key, active))
+    if (
+      (!playing || livePreview) &&
+      activeGuide &&
+      activeGuide.handleKey(key, active)
+    )
       return;
-    if (!playing && nav.contains(active)) {
+    if (
+      (!playing || livePreview) &&
+      activeListing &&
+      activeListing.handleKey(key, active)
+    )
+      return;
+    if ((!playing || livePreview) && nav.contains(active)) {
       var entries = Array.prototype.slice.call(nav.querySelectorAll("button")),
         index = entries.indexOf(active);
       if (key === 38 || key === 40)
@@ -4850,7 +4942,7 @@
         );
       return;
     }
-    if (!playing && key === 40 && active.closest(".actions")) {
+    if ((!playing || livePreview) && key === 40 && active.closest(".actions")) {
       var detailCast = main.querySelector(".cast-row");
       var detailSubtitles = main.querySelector(
         "#detail-subtitles:not(:disabled)",
@@ -4861,7 +4953,7 @@
         return;
       }
     }
-    var castRow = !playing && active.closest(".cast-row");
+    var castRow = (!playing || livePreview) && active.closest(".cast-row");
     if (castRow) {
       var castCards = Array.prototype.slice.call(
           castRow.querySelectorAll("figure"),
@@ -4890,7 +4982,7 @@
       }
       return;
     }
-    var rail = !playing && active.closest(".rail");
+    var rail = (!playing || livePreview) && active.closest(".rail");
     if (rail) {
       var rowCards = Array.prototype.slice.call(
           rail.querySelectorAll("button"),
@@ -4922,11 +5014,12 @@
         );
       return;
     }
-    var scope = playing
-      ? document.getElementById("playback-panel").hidden
-        ? player
-        : document.getElementById("playback-panel")
-      : (activeListing && activeListing.scope()) || main;
+    var scope =
+      playing && !livePreview
+        ? document.getElementById("playback-panel").hidden
+          ? player
+          : document.getElementById("playback-panel")
+        : (activeListing && activeListing.scope()) || main;
     var nodes = Array.prototype.slice
       .call(scope.querySelectorAll('button,input,select,[tabindex="0"]'))
       .filter(function (n) {
@@ -4947,7 +5040,7 @@
         }),
       { 37: "left", 38: "up", 39: "right", 40: "down" }[key],
     );
-    if (!next && !playing && key === 37) {
+    if (!next && (!playing || livePreview) && key === 37) {
       focusContent(
         nav.querySelector('[aria-current="page"]') ||
           nav.querySelector("button"),

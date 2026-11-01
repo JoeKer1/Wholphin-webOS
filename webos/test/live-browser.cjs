@@ -309,12 +309,125 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await wait(() => requests.some((r) => r.path === "/Sessions/Playing"));
     assert.equal(await page.locator("#timeline").isVisible(), false);
     assert.equal(await page.locator("#rewind").isDisabled(), true);
+    const closedBeforePreview = requests.filter(
+      (r) => r.path === "/LiveStreams/Close",
+    ).length;
+    const startsBeforePreview = requests.filter(
+      (r) => r.path === "/Sessions/Playing",
+    ).length;
+    const negotiationsBeforePreview = requests.filter((r) =>
+      r.path.endsWith("/PlaybackInfo"),
+    ).length;
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() =>
+      document.body.classList.contains("live-preview"),
+    );
+    assert.equal(await page.locator("#player").isVisible(), true);
+    assert.equal(
+      await page.locator("#video").evaluate((v) => v.paused),
+      false,
+      "Live audio/video continue in preview",
+    );
+    assert.equal(
+      await page.locator(":focus").getAttribute("data-channel"),
+      "c3",
+    );
+    assert.equal(
+      requests.filter((r) => r.path === "/LiveStreams/Close").length,
+      closedBeforePreview,
+      "Back keeps the tuner open",
+    );
+    await page.keyboard.press("ArrowDown");
+    assert.equal(
+      await page.locator(":focus").getAttribute("data-channel"),
+      "c4",
+    );
+    assert.equal(
+      requests.filter((r) => r.path.endsWith("/PlaybackInfo")).length,
+      negotiationsBeforePreview,
+      "Browsing does not switch channels",
+    );
+    assert.equal(await page.locator("header").isVisible(), true);
+    assert.equal(
+      await page.locator("#live-preview-caption").textContent(),
+      "Station 3",
+    );
+    assert.equal(await page.locator("#live-preview-caption").isVisible(), true);
+    const previewBounds = await page.locator("#player").boundingBox();
+    const guideBounds = await page.locator("#main").boundingBox();
+    assert.ok(
+      previewBounds.y + previewBounds.height <= guideBounds.y,
+      "Preview does not cover programme rows while scrolling",
+    );
+    await page.screenshot({ path: "/tmp/wholphin-live-preview.png" });
+    await row("c4")
+      .getByRole("button", { name: "Watch Station 4", exact: true })
+      .click();
+    await wait(
+      () =>
+        requests.filter((r) => r.path === "/Sessions/Playing").length ===
+        startsBeforePreview + 1,
+    );
+    assert.equal(
+      await page
+        .locator("body")
+        .evaluate((n) => n.classList.contains("live-preview")),
+      true,
+      "Switching channels stays in guide preview",
+    );
+    assert.equal(
+      requests.filter((r) => r.path === "/LiveStreams/Close").length,
+      closedBeforePreview + 1,
+      "Switching releases the previous tuner",
+    );
+    const startsAfterSwitch = requests.filter(
+      (r) => r.path === "/Sessions/Playing",
+    ).length;
+    await click("Return to fullscreen");
+    assert.equal(
+      await page
+        .locator("body")
+        .evaluate((n) => n.classList.contains("is-playing")),
+      true,
+    );
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() =>
+      document.body.classList.contains("live-preview"),
+    );
+    await row("c4")
+      .getByRole("button", { name: "Watch Station 4", exact: true })
+      .click();
+    assert.equal(
+      requests.filter((r) => r.path === "/Sessions/Playing").length,
+      startsAfterSwitch,
+      "Returning to the playing channel reuses playback",
+    );
+    assert.equal(
+      await page
+        .locator("body")
+        .evaluate((n) => n.classList.contains("is-playing")),
+      true,
+    );
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() =>
+      document.body.classList.contains("live-preview"),
+    );
     await page.evaluate(() =>
       document.dispatchEvent(
         new KeyboardEvent("keydown", { keyCode: 413, bubbles: true }),
       ),
     );
-    await wait(() => requests.some((r) => r.path === "/LiveStreams/Close"));
+    await wait(
+      () =>
+        requests.filter((r) => r.path === "/LiveStreams/Close").length ===
+        closedBeforePreview + 2,
+    );
+    assert.equal(
+      await page
+        .locator("body")
+        .evaluate((n) => n.classList.contains("live-preview")),
+      false,
+    );
     assert.ok(
       await page.locator("#guide-channels").isVisible(),
       "Stop returns to guide for channel without EPG",

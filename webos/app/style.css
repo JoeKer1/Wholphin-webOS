@@ -1216,3 +1216,47 @@ body:not(.signed-in) main {
 #detail-subtitle-menu [aria-selected="true"] {
   border-color: #a779ff;
 }
+
+.live-preview-actions,
+#live-preview-caption {
+  display: none;
+}
+.live-preview .live-preview-actions {
+  display: flex;
+  margin-bottom: 16px;
+}
+.live-preview #player {
+  top: 24px;
+  right: 40px;
+  bottom: auto;
+  left: auto;
+  width: 480px;
+  height: 270px;
+  border: 2px solid #71677e;
+  cursor: pointer;
+}
+.live-preview #controls {
+  display: none;
+}
+.live-preview #live-preview-caption {
+  display: block;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.8);
+  font-size: 22px;
+}
+.live-preview .live-guide-page {
+  position: fixed;
+  top: 310px;
+  left: 144px;
+  right: 40px;
+  margin: 0;
+  height: calc(100vh - 310px);
+  padding-top: 24px;
+}
+.live-preview #wall-clock {
+  display: none;
+}
