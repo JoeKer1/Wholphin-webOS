@@ -75,7 +75,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.18"' +
+      '", Version="0.2.19"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }

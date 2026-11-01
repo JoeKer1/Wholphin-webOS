@@ -85,6 +85,7 @@ header {
   font-weight: 500;
 }
 nav {
+  transform: translateZ(0);
   width: 306px;
   display: flex;
   flex-direction: column;
@@ -97,7 +98,8 @@ nav::-webkit-scrollbar {
   display: none;
 }
 nav button {
-  display: flex;
+  position: relative;
+  display: block;
   flex-shrink: 0;
   align-items: center;
   min-height: 62px;
@@ -110,6 +112,7 @@ nav button {
   color: #9993a5;
 }
 nav button svg {
+  display: block;
   width: 30px;
   height: 30px;
   flex-shrink: 0;
@@ -123,8 +126,11 @@ nav button svg {
 .nav-label {
   display: block;
   visibility: visible;
-  flex: 0 0 176px;
-  margin-left: 46px;
+  position: absolute;
+  left: 96px;
+  top: 16px;
+  width: 176px;
+  margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

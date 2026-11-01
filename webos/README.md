@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.18_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.19_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.18_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.18_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.19_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -193,3 +193,7 @@ The pre-play subtitle selector uses an app-controlled list instead of a native T
 ### v0.2.18 — Stable sidebar labels
 
 Sidebar labels keep a fixed layout and remain painted, with the collapsed header clipping the text. Expansion no longer toggles label visibility or reflows button widths. Focus inside the sidebar also expands it through CSS. D-pad focus scrolls the sidebar vertically while keeping horizontal offsets at zero.
+
+### v0.2.19 — C1 sidebar repaint correction
+
+Sidebar labels use explicit positioning within each row instead of flex text layout. The navigation has its own composited paint layer. This addresses rows reporting visible text while leaving it unpainted until focus moves over them. The change was checked against actual C1 screenshots through repeated drawer openings.
