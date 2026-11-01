@@ -1323,3 +1323,10 @@ body:not(.signed-in) main {
 .detail-related .rail {
   min-height: 60px;
 }
+
+.library-grid.episode-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.library-grid.episode-grid .art {
+  padding-top: 56.25%;
+}

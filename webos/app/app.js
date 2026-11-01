@@ -1129,6 +1129,7 @@
     )
       kind = "Backdrop";
     else if (!landscape && item.SeriesId) id = item.SeriesId;
+    else if (landscape && item.Type === "Episode" && !tags.Primary) return null;
     else if (!tags.Primary && item.SeriesId) id = item.SeriesId;
     else if (!tags.Primary) return null;
     return (
@@ -1625,7 +1626,8 @@
       bottom = el("div", null, holder);
     top.setAttribute("aria-hidden", "true");
     bottom.setAttribute("aria-hidden", "true");
-    grid.className = "grid library-grid";
+    grid.className =
+      "grid library-grid" + (seasonContext ? " episode-grid" : "");
     var loader = el("div", null, main);
     loader.id = "library-loading";
     loader.setAttribute("role", "status");
@@ -1666,7 +1668,7 @@
       var style = getComputedStyle(grid);
       columns = style.gridTemplateColumns.split(/\s+/).length || 6;
       var width = (grid.clientWidth - 20 - 24 * (columns - 1)) / columns;
-      rowHeight = width * 1.5 + 75 + 32;
+      rowHeight = width * (seasonContext ? 0.5625 : 1.5) + 75 + 32;
     }
     function offset() {
       return (
@@ -1711,7 +1713,12 @@
       for (var index = window.start; index < window.end; index++) {
         var card = cardMap.get(index);
         if (!card) {
-          cards([state.items[index]], holder, null, grid);
+          cards(
+            [state.items[index]],
+            holder,
+            seasonContext ? "landscape" : null,
+            grid,
+          );
           card = grid.lastElementChild;
           card.dataset.libraryIndex = index;
           if (!card.querySelector(".card-subtitle"))

@@ -264,6 +264,23 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .getByRole("heading", { name: "Single season · Season 1", exact: true })
       .waitFor();
     await page.locator(".library-grid [data-item=singlefirst]").waitFor();
+    const episodeArt = page.locator(
+      ".library-grid [data-item=singlefirst] .art",
+    );
+    await episodeArt.scrollIntoViewIfNeeded();
+    const still = await episodeArt
+      .locator("img")
+      .evaluate((n) => n.getAttribute("src") || n.dataset.src);
+    assert.ok(
+      still.includes("/Items/singlefirst/Images/Primary"),
+      "Season cards use the episode still",
+    );
+    const size = await episodeArt.boundingBox();
+    assert.ok(
+      Math.abs(size.width / size.height - 16 / 9) < 0.05,
+      "Episode stills match Start watching proportions",
+    );
+
     assert.equal(
       await page.locator(".season-grid").count(),
       0,
