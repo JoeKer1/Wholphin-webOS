@@ -1349,3 +1349,51 @@ body:not(.signed-in) main {
   -webkit-line-clamp: 6;
   overflow: hidden;
 }
+
+.tv-library-tabs {
+  display: flex;
+  margin: 0 8px 24px;
+}
+.tv-library-tabs button {
+  background: transparent;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 4px solid transparent;
+  padding: 12px 18px;
+  margin-right: 18px;
+  color: #c1b8cd;
+  font-size: 27px;
+}
+.tv-library-tabs button[aria-selected="true"] {
+  color: #fff;
+  border-bottom-color: #a67aff;
+}
+.tv-library-tabs button:focus {
+  outline: 3px solid #a67aff;
+}
+.tv-recommended > h1 {
+  display: none;
+}
+.tv-recommended .tv-library-tabs {
+  position: absolute;
+  top: 24px;
+  left: 0;
+  right: 0;
+}
+.tv-recommended #home-preview {
+  top: 120px;
+}
+.tv-recommended #home-rows {
+  top: 450px;
+}
+.tv-library-page {
+  padding-top: 24px;
+}
+.tv-category-page > h1,
+.tv-library-root > h1 {
+  display: none;
+}
+.tv-library-page > h1 {
+  font-size: 32px;
+  margin: 0 16px 24px;
+}

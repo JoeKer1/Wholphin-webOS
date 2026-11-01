@@ -78,7 +78,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.24"' +
+      '", Version="0.2.31"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -429,7 +429,9 @@
             : "folder",
         function () {
           return go(function () {
-            return listing(item.Id, item.Name);
+            return item.CollectionType === "tvshows"
+              ? tvLibrary(item)
+              : listing(item.Id, item.Name);
           });
         },
         item.Id,
@@ -1275,6 +1277,8 @@
       return request(base + "/Resume", {
         Limit: 24,
         MediaTypes: "Video",
+        ParentId: row.parent,
+        IncludeItemTypes: row.parent ? "Episode" : undefined,
         Fields: fields,
       }).then(function (data) {
         return data.Items || [];
@@ -1283,6 +1287,8 @@
     function next() {
       return request("/Shows/NextUp", {
         UserId: session.user,
+        ParentId: row.parent,
+        EnableResumable: row.parent ? false : undefined,
         Limit: 24,
         Fields: fields,
       }).then(function (data) {
@@ -1337,13 +1343,14 @@
       query.SortBy = "PremiereDate";
       query.SortOrder = "Descending";
     }
+    if (row.filter) Object.assign(query, row.filter);
     if (row.kind === "favorites") query.IsFavorite = true;
     return request(base, query).then(function (data) {
       return data.Items || [];
     });
   }
-  async function home() {
-    var r = reset("Home"),
+  async function home(tvLibraryItem) {
+    var r = reset(tvLibraryItem ? tvLibraryItem.Name : "Home"),
       options = homeOptions();
     homeController = new AbortController();
     var homeSignal = homeController.signal,
@@ -1365,7 +1372,11 @@
         );
       });
     main.className = "home-page" + (options.showTitles ? " show-titles" : "");
-    selectNav("home");
+    selectNav(tvLibraryItem ? tvLibraryItem.Id : "home");
+    if (tvLibraryItem) {
+      main.classList.add("tv-recommended");
+      tvTabs(tvLibraryItem, "recommended");
+    }
     var preview = el("section", null, main);
     preview.id = "home-preview";
     var heading = el("div", null, preview);
@@ -1399,7 +1410,47 @@
     } else {
       loadLibraries().catch(function () {});
     }
-    var plan = C.homeRows(libraryItems, options),
+    var plan = tvLibraryItem
+        ? [
+            { kind: "resume", title: "Continue watching" },
+            { kind: "next", title: "Next Up" },
+            {
+              kind: "released",
+              title: "Recently Released",
+              type: "Episode",
+              filter: {
+                MaxPremiereDate: new Date().toISOString(),
+                IsUnaired: false,
+              },
+            },
+            {
+              kind: "items",
+              title: "Recently Added",
+              type: "Episode",
+              filter: { SortBy: "DateCreated", SortOrder: "Descending" },
+            },
+            {
+              kind: "items",
+              title: "Top Rated Unwatched",
+              type: "Series",
+              filter: {
+                IsPlayed: false,
+                SortBy: "CommunityRating",
+                SortOrder: "Descending",
+              },
+            },
+            {
+              kind: "items",
+              title: "Suggestions",
+              type: "Series",
+              filter: { IsPlayed: false, SortBy: "Random" },
+            },
+          ].map(function (row) {
+            row.parent = tvLibraryItem.Id;
+            row.key = "tv:" + tvLibraryItem.Id + ":" + row.title;
+            return row;
+          })
+        : C.homeRows(libraryItems, options),
       queue = [],
       active = 0;
     function valid() {
@@ -1569,7 +1620,215 @@
     var first = rows.querySelector("section:not([hidden]) button");
     if (first) first.focus();
   }
-  async function listing(id, title, focusControl, seasonContext) {
+  function tvTabs(library, selected) {
+    var tabs = el("div", null, main);
+    tabs.className = "tv-library-tabs";
+    main.insertBefore(tabs, main.firstChild);
+    tabs.setAttribute("role", "tablist");
+    tabs.setAttribute("aria-label", library.Name);
+    ["recommended", "library", "genres", "studios", "collections"].forEach(
+      function (tab) {
+        var control = button(
+          tab.charAt(0).toUpperCase() + tab.slice(1),
+          function () {
+            var action = function () {
+              return tvLibrary(library, tab);
+            };
+            var frame = stack[stack.length - 1];
+            if (frame) {
+              frame.action = action;
+              frame.focus = null;
+              frame.related = null;
+            }
+            return action();
+          },
+          tabs,
+        );
+        control.setAttribute("role", "tab");
+        control.setAttribute("aria-selected", String(tab === selected));
+        control.dataset.tvTab = tab;
+      },
+    );
+  }
+  function tvLibrary(library, tab) {
+    tab = tab || "recommended";
+    if (tab === "recommended") return home(library);
+    if (tab === "library")
+      return listing(library.Id, library.Name, false, null, {
+        library: library,
+        tab: tab,
+      });
+    return tvCategories(library, tab);
+  }
+  async function tvCategories(library, tab) {
+    var r = reset(library.Name),
+      controller = new AbortController();
+    homeController = controller;
+    main.className = "tv-category-page tv-library-page";
+    selectNav(library.Id);
+    tvTabs(library, tab);
+    var grid = el("div", null, main),
+      status = el("p", "", main);
+    grid.className = "grid tv-category-grid";
+    var offset = 0,
+      done = false,
+      loading = false,
+      failed = false,
+      ids = new Set(),
+      checked = new Map();
+    function valid() {
+      return r === revision && !controller.signal.aborted;
+    }
+    function request(path, query) {
+      return api(path, query, null, "GET", { signal: controller.signal });
+    }
+    async function load() {
+      if (!valid() || loading || done) return;
+      loading = true;
+      failed = false;
+      status.textContent =
+        tab === "collections"
+          ? "Checking collections for TV shows…"
+          : "Loading…";
+      try {
+        var data = await request(
+          tab === "collections"
+            ? "/Users/" + session.user + "/Items"
+            : tab === "genres"
+              ? "/Genres"
+              : "/Studios",
+          {
+            UserId: session.user,
+            ParentId: tab === "collections" ? undefined : library.Id,
+            IncludeItemTypes: tab === "collections" ? "BoxSet" : "Series",
+            Recursive: true,
+            SortBy: "SortName",
+            SortOrder: "Ascending",
+            StartIndex: offset,
+            Limit: 24,
+            EnableTotalRecordCount: true,
+            Fields: "PrimaryImageAspectRatio",
+          },
+        );
+        if (!valid()) return;
+        var batch = data.Items || [],
+          selected = batch;
+        if (tab === "collections") {
+          var cursor = 0;
+          async function worker() {
+            while (cursor < batch.length && valid()) {
+              var entry = batch[cursor++];
+              if (!checked.has(entry.Id)) {
+                var contents = await request(
+                  "/Users/" + session.user + "/Items",
+                  {
+                    ParentId: entry.Id,
+                    Recursive: true,
+                    IncludeItemTypes: "Series",
+                    Limit: 1,
+                    EnableTotalRecordCount: false,
+                  },
+                );
+                if (!valid()) return;
+                checked.set(
+                  entry.Id,
+                  (contents.Items || []).some(function (item) {
+                    return item.Type === "Series";
+                  }),
+                );
+              }
+            }
+          }
+          var checks = await Promise.allSettled([worker(), worker()]);
+          var rejected = checks.find(function (result) {
+            return result.status === "rejected";
+          });
+          if (rejected) throw rejected.reason;
+          selected = batch.filter(function (entry) {
+            return checked.get(entry.Id);
+          });
+        }
+        if (!valid()) return;
+        var fresh = selected.filter(function (entry) {
+          if (!entry.Id || ids.has(entry.Id)) return false;
+          ids.add(entry.Id);
+          return true;
+        });
+        cards(fresh, grid, null, grid, function (entry) {
+          return go(function () {
+            var filter = {};
+            if (tab === "genres") filter.GenreIds = entry.Id;
+            if (tab === "studios") filter.StudioIds = entry.Id;
+            return listing(
+              tab === "collections" ? entry.Id : library.Id,
+              entry.Name,
+              false,
+              null,
+              { library: library, tab: tab, filter: filter },
+            );
+          });
+        });
+        offset += batch.length;
+        done =
+          !batch.length ||
+          (Number.isFinite(data.TotalRecordCount)
+            ? offset >= data.TotalRecordCount
+            : batch.length < 24);
+        status.textContent = done
+          ? ids.size
+            ? ids.size + " " + tab
+            : "No " +
+              tab +
+              (tab === "collections" ? " containing TV shows." : " found.")
+          : "Scroll for more " + tab + ".";
+        if (document.activeElement === main && grid.firstElementChild)
+          focusContent(grid.firstElementChild);
+      } catch (error) {
+        if (!valid()) return;
+        failed = true;
+        status.textContent = "Could not load " + tab + ". ";
+        button("Retry " + tab, load, status);
+      } finally {
+        loading = false;
+        if (
+          valid() &&
+          !done &&
+          !failed &&
+          status.getBoundingClientRect().top <
+            main.getBoundingClientRect().bottom + 300
+        )
+          load();
+      }
+    }
+    function scroll() {
+      if (
+        !failed &&
+        status.getBoundingClientRect().top <
+          main.getBoundingClientRect().bottom + 300
+      )
+        load();
+    }
+    main.addEventListener("scroll", scroll);
+    activeListing = {
+      dispose: function () {
+        controller.abort();
+        main.removeEventListener("scroll", scroll);
+      },
+      closeOptions: function () {
+        return false;
+      },
+      scope: function () {
+        return null;
+      },
+      handleKey: function () {
+        return false;
+      },
+    };
+    main.tabIndex = -1;
+    main.focus();
+    await load();
+  }
+  async function listing(id, title, focusControl, seasonContext, tvContext) {
     var r = reset(title),
       controller = new AbortController(),
       disposed = false;
@@ -1578,11 +1837,24 @@
       return item.Id === id;
     });
     if (library) selectNav(id);
-    var type =
-      library &&
-      { movies: "Movie,Video", tvshows: "Series" }[library.CollectionType];
-    var key = accountKey("library:" + id),
-      preferenceKey = "library-options:" + id;
+    if (tvContext) {
+      main.classList.add("tv-library-page");
+      if (title === tvContext.library.Name)
+        main.classList.add("tv-library-root");
+      selectNav(tvContext.library.Id);
+      tvTabs(tvContext.library, tvContext.tab);
+    }
+    var type = tvContext
+      ? "Series"
+      : library &&
+        { movies: "Movie,Video", tvshows: "Series" }[library.CollectionType];
+    var scopeKey =
+        id +
+        (tvContext && tvContext.filter
+          ? ":" + JSON.stringify(tvContext.filter)
+          : ""),
+      key = accountKey("library:" + scopeKey),
+      preferenceKey = "library-options:" + scopeKey;
     var defaults = {
       sort: seasonContext ? "episode-asc" : "title-asc",
       watched: "all",
@@ -1782,6 +2054,7 @@
           Object.assign(
             C.libraryQuery(id, state.options, state.nextIndex, type),
             seasonContext ? { Fields: "Overview,PrimaryImageAspectRatio" } : {},
+            tvContext ? tvContext.filter || {} : {},
           ),
           null,
           "GET",
@@ -1872,7 +2145,7 @@
       var replacement = fresh(options);
       replacement.facets = state.facets;
       listingStates.set(key, replacement);
-      return listing(id, title, control, seasonContext);
+      return listing(id, title, control, seasonContext, tvContext);
     }
     function facets() {
       if (state.facets) return Promise.resolve(state.facets);
@@ -5423,6 +5696,24 @@
     )
       return;
     e.preventDefault();
+    var tvTab = active.closest(".tv-library-tabs");
+    if ((!playing || livePreview) && tvTab) {
+      if (key === 37 || key === 39) {
+        var tabs = Array.prototype.slice.call(tvTab.querySelectorAll("button")),
+          at = tabs.indexOf(active);
+        var target = tabs[at + (key === 37 ? -1 : 1)];
+        if (target) focusContent(target);
+        else if (key === 37)
+          focusContent(nav.querySelector('[aria-current="page"]'));
+      } else if (key === 40) {
+        focusContent(
+          main.querySelector(
+            ".rail button,.library-grid .card,.tv-category-grid .card,#library-sort",
+          ),
+        );
+      }
+      return;
+    }
     if (
       (!playing || livePreview) &&
       activeGuide &&
@@ -5548,6 +5839,13 @@
         var nextCards = nextRail.querySelectorAll("button,figure[tabindex]");
         focusContent(nextCards[Math.min(cardIndex, nextCards.length - 1)]);
       } else if (key === 38) {
+        var selectedTab = main.querySelector(
+          '.tv-library-tabs [aria-selected="true"]',
+        );
+        if (selectedTab) {
+          focusContent(selectedTab);
+          return;
+        }
         if (rail.closest(".series-continue")) {
           focusContent(
             main.querySelector(".actions button") ||

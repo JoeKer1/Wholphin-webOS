@@ -1,12 +1,12 @@
 {
   "name": "wholphin-webos",
-  "version": "0.2.30",
+  "version": "0.2.31",
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.cjs",
     "check": "node --check app/core.js && node --check app/app.js",
     "serve": "python3 -m http.server 8080 --directory app",
     "package": "ares-package app -o dist",
-    "test:browser": "node test/startup-browser.cjs && node test/browser.cjs && node test/related-browser.cjs && node test/seasons-browser.cjs && node test/home-browser.cjs && node test/screenshots-browser.cjs && node test/holiday-browser.cjs && node test/auth-browser.cjs && node test/loading-browser.cjs && node test/player-browser.cjs && node test/library-browser.cjs && node test/native-browser.cjs && node test/subtitle-browser.cjs && node test/live-browser.cjs"
+    "test:browser": "node test/startup-browser.cjs && node test/browser.cjs && node test/related-browser.cjs && node test/tv-library-browser.cjs && node test/seasons-browser.cjs && node test/home-browser.cjs && node test/screenshots-browser.cjs && node test/holiday-browser.cjs && node test/auth-browser.cjs && node test/loading-browser.cjs && node test/player-browser.cjs && node test/library-browser.cjs && node test/native-browser.cjs && node test/subtitle-browser.cjs && node test/live-browser.cjs"
   }
 }
