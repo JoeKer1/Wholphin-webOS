@@ -3404,23 +3404,13 @@
         }
       }
     }
-    function row(parent, title, key, path, query, collection) {
+    function row(parent, title, key, path, query) {
       var section = el("section", null, parent),
         heading = el("div", null, section);
       section.className = "detail-media-row";
       section.dataset.rowKey = key;
       heading.className = "detail-row-heading";
       el("h2", title, heading);
-      if (collection)
-        button(
-          "View collection",
-          function () {
-            return go(function () {
-              return listing(collection.Id, collection.Name);
-            });
-          },
-          heading,
-        );
       var rail = el("div", null, section),
         status = el("p", "", section),
         state = { loading: false, done: false, offset: 0, count: 0 },
@@ -3452,7 +3442,7 @@
               ? state.offset >= data.TotalRecordCount
               : batch.length < 24) ||
             (!fresh.length && batch.length > 0 && state.count > 0);
-          if (!collection) state.done = true;
+          state.done = true;
           cards(fresh, section, "portrait", rail);
           state.count += fresh.length;
           section.hidden = state.done && !state.count;
@@ -3515,24 +3505,27 @@
         if (!valid()) return;
         membershipLoaded = true;
         var seen = new Set();
-        (data.Items || []).forEach(function (collection) {
-          if (!collection.Id || seen.has(collection.Id)) return;
+        var members = (data.Items || []).filter(function (collection) {
+          if (!collection.Id || seen.has(collection.Id)) return false;
           seen.add(collection.Id);
-          row(
-            collectionHost,
-            collection.Name,
-            "collection:" + collection.Id,
-            "/Users/" + session.user + "/Items",
-            {
-              ParentId: collection.Id,
-              SortBy: "SortName",
-              SortOrder: "Ascending",
-              Fields: "Overview,PrimaryImageAspectRatio",
-              EnableTotalRecordCount: true,
-            },
-            collection,
-          );
+          return true;
         });
+        if (members.length) {
+          var section = el("section", null, collectionHost);
+          section.className = "detail-media-row";
+          section.dataset.rowKey = "collections:" + seed;
+          el("h2", "Collections", section);
+          section.loadPage = function () {};
+          cards(members, section, "portrait", null, function (collection) {
+            return go(function () {
+              return listing(collection.Id, collection.Name);
+            });
+          });
+          notify(section, section.querySelector(".rail"), {
+            done: true,
+            count: members.length,
+          });
+        }
       } catch (error) {
         if (!valid() || error.status === 404) return;
         var retryMessage = el(

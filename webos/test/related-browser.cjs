@@ -45,7 +45,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         film("member" + i, "Collection movie " + i),
       ),
     ];
-    let failSecondCollection = true,
+    let failMembership = false,
       holdSimilar = false;
     await page.route("https://jellyfin.test/**", async (route) => {
       const req = route.request(),
@@ -71,7 +71,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
             { Id: "source", MediaStreams: [], DefaultSubtitleStreamIndex: -1 },
           ],
         };
-      else if (u.pathname.endsWith("/Collections"))
+      else if (u.pathname.endsWith("/Collections")) {
+        if (failMembership) return route.fulfill({ status: 503, json: {} });
         data = {
           Items:
             u.pathname.includes("/m1/") || u.pathname.includes("/s1/")
@@ -81,7 +82,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
                 ]
               : [],
         };
-      else if (u.pathname.endsWith("/Similar")) {
+      } else if (u.pathname.endsWith("/Similar")) {
         if (holdSimilar) await new Promise((r) => setTimeout(r, 1000));
         data = {
           Items:
@@ -98,8 +99,6 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         u.searchParams.has("ParentId")
       ) {
         if (u.searchParams.get("ParentId") === "col2") {
-          if (failSecondCollection)
-            return route.fulfill({ status: 503, json: {} });
           data = {
             Items: [film("second", "Another collection movie")],
             TotalRecordCount: 1,
@@ -148,76 +147,57 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       pathToFileURL(path.resolve(__dirname, "../app/index.html")).href,
     );
     await page.locator('#main .card[data-item="m1"]').first().click();
-    const collection = page.locator('[data-row-key="collection:col1"]');
-    await collection.waitFor();
-    await collection.scrollIntoViewIfNeeded();
-    await collection.locator(".card").first().waitFor();
-    assert.equal(await collection.locator('[data-item="m1"]').count(), 0);
+    const collection = page.locator('[data-row-key="collections:m1"]');
+    await collection.locator('.card[data-item="col1"]').waitFor();
+    assert.equal(await collection.locator(".card").count(), 2);
     assert.equal(
-      await collection.locator(".card").count(),
-      23,
-      "First page excludes the current title",
-    );
-    assert.equal(
-      requests.some(
-        (r) => r.q.ParentId === "col1" && Number(r.q.StartIndex) > 0,
-      ),
+      requests.some((r) => r.q.ParentId === "col1" || r.q.ParentId === "col2"),
       false,
+      "Membership cards do not fetch collection contents",
     );
     await page.locator(".cast-row figure").first().focus();
     await page.keyboard.press("ArrowDown");
     assert.equal(
       await page.locator(":focus").getAttribute("data-item"),
-      "member0",
+      "col1",
     );
     await page.keyboard.press("ArrowUp");
     assert.equal(
       await page.locator(":focus").getAttribute("aria-label"),
       "Actor One",
     );
-    await page.keyboard.press("ArrowDown");
-    for (let i = 0; i < 30; i++) await page.keyboard.press("ArrowRight");
-    await collection.locator('[data-item="member30"]').waitFor();
-    assert.ok(
-      requests.some(
-        (r) => r.q.ParentId === "col1" && Number(r.q.StartIndex) === 24,
-      ),
-    );
-    await collection.locator('[data-item="member30"]').click();
+    await collection.locator('[data-item="col2"]').click();
     await page
-      .getByRole("heading", { name: "Child movie", exact: true })
+      .getByRole("heading", { name: "Another Collection", exact: true })
       .waitFor();
+    await page.locator('.library-grid [data-item="second"]').waitFor();
     await page.keyboard.press("Escape");
     await page.waitForFunction(
-      () => document.activeElement.dataset.item === "member30",
+      () => document.activeElement.dataset.item === "col2",
     );
-    const second = page.locator('[data-row-key="collection:col2"]');
-    await second.scrollIntoViewIfNeeded();
+    await collection.locator('[data-item="col1"]').click();
     await page
-      .getByRole("button", { name: "Retry Another Collection", exact: true })
+      .getByRole("heading", { name: "A Collection", exact: true })
       .waitFor();
+    await page.locator('.library-grid [data-item="member0"]').waitFor();
+    assert.equal(
+      await page.locator('.library-grid [data-item="m1"]').count(),
+      1,
+      "Opened collection includes the original title",
+    );
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(
+      () => document.activeElement.dataset.item === "col1",
+    );
     const similar = page.locator('[data-row-key="similar:m1"]');
     await similar.scrollIntoViewIfNeeded();
     await similar.locator('[data-item="rec1"]').waitFor();
-    assert.equal(
-      await similar.locator(".card").count(),
-      1,
-      "Similar titles omit self and duplicates",
-    );
-    failSecondCollection = false;
-    await page
-      .getByRole("button", { name: "Retry Another Collection", exact: true })
-      .click();
-    await second.locator('[data-item="second"]').waitFor();
-    assert.ok(
-      (await collection.locator(".card").count()) > 0,
-      "A failed row leaves other rows intact",
-    );
+    assert.equal(await similar.locator(".card").count(), 1);
     await similar.locator('[data-item="rec1"]').focus();
     await page.keyboard.press("ArrowUp");
     assert.equal(
       await page.locator(":focus").getAttribute("data-item"),
-      "second",
+      "col1",
     );
     await page.keyboard.press("ArrowDown");
     assert.equal(
@@ -249,6 +229,19 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "Episodes use show-level recommendations",
     );
     await page.locator("nav [data-nav=home]").click();
+    failMembership = true;
+    await page.locator('#main .card[data-item="m1"]').first().click();
+    await page
+      .getByRole("button", { name: "Retry collections", exact: true })
+      .waitFor();
+    await page.locator('[data-row-key="similar:m1"]').scrollIntoViewIfNeeded();
+    await page.locator('[data-row-key="similar:m1"] .card').waitFor();
+    failMembership = false;
+    await page
+      .getByRole("button", { name: "Retry collections", exact: true })
+      .click();
+    await collection.locator('[data-item="col1"]').waitFor();
+    await page.locator("nav [data-nav=home]").click();
     holdSimilar = true;
     await page.locator('#main .card[data-item="m1"]').first().click();
     await page.locator(".detail-related").scrollIntoViewIfNeeded();
@@ -262,7 +255,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: collection membership, lazy/paged contents, self/duplicate filtering, independent row retries, cast/row remote navigation, deep Back restoration, empty rows, episode series context, and stale-page cancellation",
+      "PASS: collection links without eager contents, collection opening, self/duplicate filtering, cast/row remote navigation, Back restoration, empty rows, episode series context, and stale-page cancellation",
     );
   } finally {
     await browser.close();
