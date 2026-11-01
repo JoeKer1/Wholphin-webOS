@@ -501,6 +501,17 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       previewBounds.y + previewBounds.height <= guideBounds.y,
       "Preview does not cover programme rows while scrolling",
     );
+    if (process.env.APP_DIR && process.env.APP_DIR.includes("dist/tizen")) {
+      const before = await page.locator("#live-browse-info").boundingBox();
+      for (let i = 0; i < 8; i++) await page.keyboard.press("ArrowDown");
+      const after = await page.locator("#live-browse-info").boundingBox();
+      assert.equal(after.y, before.y, "Description stays pinned while channel focus scrolls");
+      assert.equal(await page.evaluate(() => window.scrollY), 0);
+      assert.ok(await page.locator("#main").evaluate(n => n.scrollTop > 0));
+      const videoAfter = await page.locator("#player").boundingBox();
+      assert.equal(videoAfter.y, previewBounds.y);
+      for (let i = 0; i < 8; i++) await page.keyboard.press("ArrowUp");
+    }
     await page.screenshot({ path: "/tmp/wholphin-live-preview.png" });
     await row("c4")
       .getByRole("button", { name: /Morning news/ })

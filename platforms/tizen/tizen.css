@@ -64,3 +64,42 @@
   flex: 0 0 220px;
   margin-right: 20px;
 }
+
+/* Keep the guide's browsing area independent of the native video plane. */
+html.platform-tizen,
+.platform-tizen body {
+  height: 100%;
+  overflow: hidden;
+}
+.platform-tizen .live-preview #player {
+  top: 24px;
+  right: 40px;
+  width: 480px;
+  height: 270px;
+  border: 0;
+  overflow: visible;
+}
+.platform-tizen .live-preview #live-preview-caption {
+  top: 100%;
+  bottom: auto;
+  min-height: 38px;
+  padding: 6px 12px;
+  background: #211b2a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.platform-tizen .live-preview .live-guide-page {
+  top: 350px;
+  height: calc(100vh - 350px);
+  overscroll-behavior: contain;
+}
+.platform-tizen .live-preview #live-browse-info {
+  top: 24px;
+  left: 144px;
+  right: 552px;
+  height: 308px;
+  max-height: 308px;
+  padding: 12px 20px;
+  background: #15121c;
+}

@@ -143,7 +143,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.53"' +
+      '", Version="0.2.54"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -849,7 +849,7 @@
       modeControl.disabled = true;
       vision.hidden = true;
     }
-    var about = section("About", "Ember for Jellyfin · v0.2.53");
+    var about = section("About", "Ember for Jellyfin · v0.2.54");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -7172,7 +7172,15 @@
       document.querySelector("header").scrollLeft = 0;
       return;
     }
-    node.scrollIntoView({ block: "nearest", inline: "nearest" });
+    if (P.id === "tizen" && main.classList.contains("live-guide-page") && main.contains(node)) {
+      // Older Tizen scrollIntoView scrolls the document as well as the guide.
+      var itemBounds = node.getBoundingClientRect(),
+        guideBounds = main.getBoundingClientRect();
+      if (itemBounds.top < guideBounds.top + 12)
+        main.scrollTop -= guideBounds.top + 12 - itemBounds.top;
+      else if (itemBounds.bottom > guideBounds.bottom - 12)
+        main.scrollTop += itemBounds.bottom - guideBounds.bottom + 12;
+    } else node.scrollIntoView({ block: "nearest", inline: "nearest" });
     if (
       (main.classList.contains("detail-page") && node.closest(".actions")) ||
       node.closest(".series-continue")
