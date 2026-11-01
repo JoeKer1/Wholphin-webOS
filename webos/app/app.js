@@ -1214,7 +1214,14 @@
       b.className = "card";
       b.dataset.item = item.Id;
       b.setAttribute("aria-label", item.Name);
+      if (item.Type === "Episode") b.episodeItem = item;
       b.addEventListener("focus", function () {
+        if (item.Type === "Episode") {
+          var description = main.querySelector(".series-continue-description");
+          if (description)
+            description.textContent =
+              item.Overview || "No description available.";
+        }
         prefetchFocusedPosters(b);
         if (document.getElementById("home-preview")) previewItem(item);
       });
@@ -1772,7 +1779,10 @@
       try {
         var data = await api(
           "/Users/" + session.user + "/Items",
-          C.libraryQuery(id, state.options, state.nextIndex, type),
+          Object.assign(
+            C.libraryQuery(id, state.options, state.nextIndex, type),
+            seasonContext ? { Fields: "Overview,PrimaryImageAspectRatio" } : {},
+          ),
           null,
           "GET",
           { signal: controller.signal },
@@ -2949,10 +2959,13 @@
         var content = el("div", null, continueRow);
         content.className = "series-continue-content";
         cards([episode], content, "landscape");
-        if (episode.Overview) {
-          var description = el("p", episode.Overview, content);
-          description.className = "series-continue-description";
-        }
+        var selected = document.activeElement.episodeItem || episode;
+        var description = el(
+          "p",
+          selected.Overview || "No description available.",
+          content,
+        );
+        description.className = "series-continue-description";
       } else if (
         results.some(function (result) {
           return result.status === "rejected";

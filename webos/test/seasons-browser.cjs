@@ -255,6 +255,22 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.screenshot({ path: "/tmp/wholphin-show-seasons.png" });
     await page.getByRole("button", { name: "Season 2", exact: true }).click();
     await page.locator(".library-grid [data-item=next]").waitFor();
+    await page.locator(".library-grid [data-item=next]").focus();
+    assert.equal(
+      await page.locator(".series-continue-description").textContent(),
+      "Episode synopsis for Next episode",
+    );
+    await page.locator(".series-continue .card").focus();
+    assert.equal(
+      await page.locator(".series-continue-description").textContent(),
+      "Episode synopsis for In progress episode",
+    );
+    assert.ok(
+      requests.some(
+        (r) => r.q.ParentId === "m2" && r.q.Fields.includes("Overview"),
+      ),
+    );
+
     assert.equal(
       await page.locator(".season-picker button").textContent(),
       "All seasons",
