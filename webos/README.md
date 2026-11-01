@@ -299,3 +299,7 @@ The sidebar stays hidden while startup profiles load and throughout profile/PIN 
 ### v0.2.43 — One Continue watching entry per show
 
 Continue watching groups in-progress episodes by series, retaining the episode with the newest LastPlayedDate (or the first server result when timestamps are absent). Next Up does not add another entry for that series. This applies to Home and TV Recommended and leaves all server resume points intact.
+
+### v0.2.44 — Fullscreen profile gate
+
+Profile selection fills the entire viewport with centered profile cards, without sidebar spacing, clock or background artwork. PIN entry stays within the same fullscreen view. There is no Back button into content; remote Back returns to profile selection. Home appears after a profile is selected successfully.

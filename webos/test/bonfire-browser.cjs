@@ -171,6 +171,23 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .getByRole("button", { name: "Kids, PIN required", exact: true })
       .waitFor();
     assert.equal(await page.locator(".profile-card").count(), 3);
+    const frame = await page.locator("#main").boundingBox();
+    assert.equal(frame.x, 0);
+    assert.equal(frame.width, 1920);
+    assert.equal(frame.height, 1080);
+    assert.equal(
+      await page.getByRole("button", { name: "Back", exact: true }).count(),
+      0,
+      "Selection has no bypass button",
+    );
+    assert.equal(await page.locator("#wall-clock").isVisible(), false);
+    await page.keyboard.press("Escape");
+    await page.locator(".profile-card").first().waitFor();
+    assert.equal(
+      await page.locator("header").isVisible(),
+      false,
+      "Back stays in picker",
+    );
     assert.equal(
       await page.locator("header").isVisible(),
       false,
@@ -308,7 +325,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     mode = "slow";
     await page.getByRole("button", { name: "Guest", exact: true }).click();
-    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.waitForTimeout(500);
     assert.equal(
       await page.evaluate(
@@ -344,7 +361,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .getByRole("button", { name: "Retry profiles", exact: true })
       .click();
     await page.getByRole("button", { name: "Guest", exact: true }).waitFor();
-    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Kids, PIN required", exact: true })
+      .click();
+    await page.getByLabel("Profile PIN", { exact: true }).fill("9797");
+    await page
+      .getByRole("button", { name: "Unlock profile", exact: true })
+      .click();
+    await page.getByRole("heading", { name: "Home", exact: true }).waitFor();
     await page.locator("nav [data-nav=settings]").click();
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await page.getByRole("button", { name: "Sign in", exact: true }).waitFor();

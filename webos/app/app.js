@@ -140,7 +140,7 @@
     return (
       'MediaBrowser Client="Ember", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.43"' +
+      '", Version="0.2.44"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -338,11 +338,7 @@
     if (activeGuide) activeGuide.focusChannel(playing.item.Id);
   }
   async function back() {
-    if (
-      main.classList.contains("profiles-page") &&
-      (main.querySelector(".profile-pin-form") || stack.length <= 1)
-    )
-      return profilesPage();
+    if (main.classList.contains("profiles-page")) return profilesPage();
     var moreMenu = document.getElementById("detail-more-options");
     if (moreMenu && !moreMenu.hidden && !playing) {
       moreMenu.hidden = true;
@@ -614,7 +610,7 @@
   function settings() {
     reset("Settings");
     selectNav("settings");
-    el("p", "Ember for Jellyfin · v0.2.43", main).className = "metadata";
+    el("p", "Ember for Jellyfin · v0.2.44", main).className = "metadata";
     el("p", "Connected to " + session.server, main).className = "metadata";
     button(
       "Switch profile",
@@ -1002,6 +998,7 @@
     homeController = controller;
     var content = el("div", null, main),
       busy = false;
+    content.className = "profile-content";
     function valid() {
       return (
         r === revision && session === current && !controller.signal.aborted
@@ -1168,7 +1165,6 @@
       button("Retry profiles", profilesPage, content);
     }
     if (!valid()) return;
-    button("Back", back, content);
     focusFirst();
   }
   async function completeSignIn(result, context) {

@@ -1671,3 +1671,44 @@ body:not(.signed-in) main {
 body.choosing-profile header {
   display: none;
 }
+
+body.choosing-profile #wall-clock,
+body.choosing-profile #backdrop,
+body.choosing-profile #backdrop-shade {
+  display: none;
+}
+body.choosing-profile main {
+  margin: 0;
+  width: 100%;
+  min-height: 100vh;
+  padding: 80px 96px;
+  display: flex;
+  flex-direction: column;
+  background: var(--profile-bg, #15121c);
+}
+body.choosing-profile main > h1 {
+  text-align: center;
+  margin: auto 0 28px;
+  flex-shrink: 0;
+}
+.profile-content {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto auto;
+  flex-shrink: 0;
+  text-align: center;
+}
+.profiles-page .profile-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 280px));
+  justify-content: center;
+}
+.profiles-page .profile-pin-form {
+  margin: 32px auto;
+  text-align: left;
+}
+.profiles-page .profile-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
