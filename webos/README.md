@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.22_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.23_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.22_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.22_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.23_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -211,3 +211,7 @@ Channel numbers and logos are informational labels rather than remote focus targ
 ### v0.2.22 — Collections and similar titles below Cast
 
 Movie/show details include a named poster row for each collection the title belongs to, then More like this using Jellyfin recommendations. Episodes use their series for collection membership and similar titles. Collection contents load near the viewport and fetch additional pages as the row scrolls. Posters stay lazy, empty rows disappear, and each failed row has an independent retry. D-pad Down moves from Cast into the rows; Up returns to Cast. Opening a title and pressing Back restores its card, including within later collection pages.
+
+### v0.2.23 — Channel label layout and fullscreen switching
+
+Channel labels stack a centred logo above the channel number/name, allowing up to two text lines within the existing guide row height. Selecting a different channel from preview starts it fullscreen. Back returns the new channel to guide preview, and selecting the already-playing channel still expands its existing stream without restarting.

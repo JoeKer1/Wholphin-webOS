@@ -78,7 +78,7 @@
     return (
       'MediaBrowser Client="Wholphin webOS", Device="LG TV", DeviceId="' +
       device +
-      '", Version="0.2.22"' +
+      '", Version="0.2.23"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -4356,7 +4356,7 @@
     }
     if (busy) return;
     busy = true;
-    var keepPreview = livePreview && live;
+    var wasLivePreview = livePreview && live;
     var request = ++playRequest,
       previous = playing,
       controller = new AbortController();
@@ -4599,7 +4599,7 @@
         resumeDeadline: Date.now() + 30000,
         reporting: Promise.resolve(),
         returnFocus:
-          previous && !keepPreview
+          previous && !wasLivePreview
             ? previous.returnFocus
             : document.activeElement,
       });
@@ -4616,7 +4616,7 @@
       renderSubtitleOverlay();
       subtitleTimer = setInterval(renderSubtitleOverlay, 100);
       player.hidden = false;
-      livePreview = !!keepPreview;
+      livePreview = false;
       document.body.classList.toggle("live-preview", livePreview);
       document.body.classList.toggle("is-playing", !livePreview);
       document.getElementById("live-preview-caption").textContent =

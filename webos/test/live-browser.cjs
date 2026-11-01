@@ -309,6 +309,27 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       0,
       "Channel labels are not selectable",
     );
+    const stationLayout = await page
+      .locator(".guide-channel-label")
+      .first()
+      .evaluate((label) => {
+        const image = label.querySelector("img").getBoundingClientRect(),
+          text = label.querySelector("span").getBoundingClientRect(),
+          row = label.closest(".guide-channel-row").getBoundingClientRect();
+        return {
+          above: image.bottom <= text.top,
+          fits: text.bottom <= row.bottom,
+          aligned:
+            Math.abs(
+              image.left + image.width / 2 - (text.left + text.width / 2),
+            ) < 2,
+        };
+      });
+    assert.deepEqual(
+      stationLayout,
+      { above: true, fits: true, aligned: true },
+      "Channel logo sits naturally above the centred text within the existing row height",
+    );
     await page.screenshot({ path: "/tmp/wholphin-live-guide.png" });
     await row("c3")
       .getByRole("button", { name: /Watch live/ })
@@ -405,8 +426,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page
         .locator("body")
         .evaluate((n) => n.classList.contains("live-preview")),
-      true,
-      "Switching channels stays in guide preview",
+      false,
+      "Selecting a different channel opens fullscreen",
     );
     assert.equal(
       requests.filter((r) => r.path === "/LiveStreams/Close").length,
@@ -416,6 +437,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     const startsAfterSwitch = requests.filter(
       (r) => r.path === "/Sessions/Playing",
     ).length;
+    assert.equal(
+      await page
+        .locator("body")
+        .evaluate((n) => n.classList.contains("is-playing")),
+      true,
+    );
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() =>
+      document.body.classList.contains("live-preview"),
+    );
     await click("Return to fullscreen");
     assert.equal(
       await page
