@@ -1397,3 +1397,74 @@ body:not(.signed-in) main {
   font-size: 32px;
   margin: 0 16px 24px;
 }
+
+.season-browser {
+  padding-top: 24px;
+}
+.season-browser-tabs {
+  display: flex;
+  overflow-x: auto;
+  padding: 8px;
+  margin-bottom: 24px;
+  scrollbar-width: none;
+}
+.season-browser-tabs button {
+  border: 0;
+  flex: 0 0 auto;
+  background: transparent;
+  border-radius: 0;
+  border-bottom: 4px solid transparent;
+  margin-right: 20px;
+  padding: 8px 16px;
+}
+.season-browser-tabs button[aria-selected="true"] {
+  border-bottom-color: #a67aff;
+}
+.season-browser h1 {
+  margin-bottom: 12px;
+}
+.episode-browser-name {
+  font-size: 32px;
+  margin: 0 0 14px;
+}
+.episode-browser-overview {
+  min-height: 78px;
+  max-width: 1200px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.rail.episode-browser-rail .card {
+  flex-basis: 420px;
+}
+.episode-browser-rail .card-title,
+.episode-browser-rail .card-subtitle {
+  display: none;
+}
+.episode-browser-actions {
+  margin-top: 8px;
+}
+.episode-stream-details:empty {
+  display: none;
+}
+.season-grid .card {
+  flex-basis: 225px;
+}
+.season-grid .card-title,
+.season-grid .card-subtitle {
+  display: block;
+}
+
+.series-detail {
+  padding-top: 60px;
+}
+.series-detail > .overview {
+  -webkit-line-clamp: 2;
+}
+.series-detail .series-continue-content .rail {
+  flex-basis: 280px;
+}
+.series-detail .series-continue .card {
+  flex-basis: 250px;
+}

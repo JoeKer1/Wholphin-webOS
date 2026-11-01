@@ -28,7 +28,7 @@ npm install -g @webos-tools/cli
 npm run package
 ```
 
-The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.31_all.ipk`.
+The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.32_all.ipk`.
 
 1. Install LG's **Developer Mode** app from the TV's app store and sign in with an LG developer account.
 2. Enable Developer Mode, reboot if requested, and enable Key Server. Note the TV IP address and passphrase.
@@ -37,7 +37,7 @@ The resulting package is `dist/com.github.damontecres.wholphin.webos_0.2.31_all.
 ```sh
 ares-setup-device
 ares-novacom --device myTV --getkey
-ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.31_all.ipk
+ares-install --device myTV dist/com.github.damontecres.wholphin.webos_0.2.32_all.ipk
 ares-launch --device myTV com.github.damontecres.wholphin.webos
 ```
 
@@ -247,3 +247,7 @@ The Collections row keeps focused cards fully visible, supports vertical remote-
 ### v0.2.31 — TV library tabs
 
 TV libraries open Recommended with a focus-driven preview and library-scoped Continue watching, Next Up, Recently Released, Recently Added, Top Rated Unwatched, and Suggestions rows. Suggestions currently shuffle unwatched series rather than using Android Wholphin’s cached recommendation service. Library preserves continuous scrolling and filters. Genres and Studios open filtered series grids. Collections checks membership with at most two concurrent requests, hides movie-only collections, and opens TV-series-only contents for mixed collections. Category results load in batches as the page scrolls. Use Left/Right across tabs, Enter to select, Down to enter content, and Up from the first recommendation row to return to tabs.
+
+### v0.2.32 — Series and season browsing
+
+Multi-season shows display one horizontal Seasons row with season names, years and unwatched counts when supplied. Start/Continue remains above it, and the series Play/Resume action uses that episode. Opening a season shows season tabs, a focus-driven episode title/metadata/description, a scrolling rail of episode stills, and Play/Resume, watched state, favorite and More options controls below. More options opens episode details including subtitle selection. Cast & Crew and Guest stars follow when the server provides them. Single-season shows open directly into this episode view. Season episodes load in batches of 48 with lazy stills, retry, request cancellation, and cached Back restoration.

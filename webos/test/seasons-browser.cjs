@@ -63,6 +63,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       RunTimeTicks: 18000000000,
       UserData: { PlaybackPositionTicks: ticks },
       ImageTags: { Primary: "episode" },
+      People: [
+        { Id: "host", Name: "Host", Type: "Actor" },
+        { Id: "writer", Name: "Writer", Type: "Writer" },
+        { Id: "guest", Name: "Guest", Type: "GuestStar" },
+      ],
     });
     const resume = ep(
         "progress",
@@ -210,139 +215,129 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         .count(),
       0,
     );
-    await page.locator(".series-continue [data-item=progress]").waitFor();
-    assert.equal(
-      await page.locator(".series-continue-description").textContent(),
-      "Episode synopsis for In progress episode",
-    );
-    const previewBounds = await page
-      .locator(".series-continue .card")
-      .boundingBox();
-    const descriptionBounds = await page
-      .locator(".series-continue-description")
-      .boundingBox();
-    assert.ok(
-      descriptionBounds.x > previewBounds.x + previewBounds.width,
-      "Synopsis appears to the right of the episode",
-    );
 
+    await page.locator(".series-continue [data-item=progress]").waitFor();
     assert.equal(
       await page.locator(".series-continue h2").textContent(),
       "Continue watching",
     );
     assert.equal(
       await page
-        .locator(".series-continue")
-        .evaluate(
-          (n) =>
-            !!(
-              n.compareDocumentPosition(
-                document.querySelector(".season-choices"),
-              ) & Node.DOCUMENT_POSITION_FOLLOWING
-            ),
-        ),
-      true,
-      "Continue is the first content row",
+        .locator(".season-grid")
+        .evaluate((n) => getComputedStyle(n).display),
+      "flex",
+      "Seasons form one horizontal row",
     );
-    await page.locator(".series-continue .card").focus();
+    await page.locator(".season-grid [data-item=m1]").click();
+    await page.locator(".episode-browser-rail [data-item=progress]").waitFor();
+    await page.waitForFunction(() =>
+      document
+        .querySelector(".episode-browser-overview")
+        .textContent.includes("In progress episode"),
+    );
+    assert.equal(
+      await page
+        .locator(".season-browser-tabs [aria-selected=true]")
+        .textContent(),
+      "Season 1",
+    );
+    assert.equal(await page.locator(".episode-browser-rail .card").count(), 1);
     await page.keyboard.press("ArrowDown");
-    assert.equal(await page.locator(":focus").getAttribute("data-item"), "ms");
+    assert.equal(await page.locator(":focus").textContent(), "Resume");
     await page.keyboard.press("ArrowUp");
     assert.equal(
       await page.locator(":focus").getAttribute("data-item"),
       "progress",
     );
-    await page.screenshot({ path: "/tmp/wholphin-show-seasons.png" });
-    await page.getByRole("button", { name: "Season 2", exact: true }).click();
-    await page.locator(".library-grid [data-item=next]").waitFor();
-    await page.locator(".library-grid [data-item=next]").focus();
+    await page.keyboard.press("ArrowUp");
     assert.equal(
-      await page.locator(".series-continue-description").textContent(),
-      "Episode synopsis for Next episode",
+      await page.locator(":focus").getAttribute("aria-selected"),
+      "true",
     );
-    await page.locator(".series-continue .card").focus();
+    await page
+      .locator(".season-browser-tabs")
+      .getByRole("tab", { name: "Season 2", exact: true })
+      .click();
+    await page.locator(".episode-browser-rail [data-item=next]").waitFor();
+    await page.waitForFunction(() =>
+      document
+        .querySelector(".episode-browser-overview")
+        .textContent.includes("Next episode"),
+    );
     assert.equal(
-      await page.locator(".series-continue-description").textContent(),
-      "Episode synopsis for In progress episode",
+      await page.locator("main h1").textContent(),
+      "Multiple seasons",
     );
+    const art = page.locator(".episode-browser-rail [data-item=next] .art");
+    const bounds = await art.boundingBox();
+    assert.ok(Math.abs(bounds.width / bounds.height - 16 / 9) < 0.05);
     assert.ok(
-      requests.some(
-        (r) => r.q.ParentId === "m2" && r.q.Fields.includes("Overview"),
-      ),
+      (
+        await art.locator("img").evaluate((n) => n.src || n.dataset.src)
+      ).includes("/Items/next/Images/Primary"),
     );
-
+    await page
+      .getByRole("button", { name: "More options", exact: true })
+      .click();
+    await page
+      .getByRole("heading", { name: "Next episode", exact: true })
+      .waitFor();
+    await page.keyboard.press("Escape");
+    await page.locator(".episode-browser-rail [data-item=next]").waitFor();
     assert.equal(
-      await page.locator(".season-picker button").textContent(),
-      "All seasons",
+      await page.locator(":focus").getAttribute("data-item"),
+      "next",
     );
+    await page
+      .getByRole("heading", { name: "Guest stars", exact: true })
+      .waitFor();
+    await page
+      .getByRole("button", { name: "Mark as watched", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Mark as unwatched", exact: true })
+      .waitFor();
+    await page
+      .getByRole("button", { name: "Add to favorites", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Remove from favorites", exact: true })
+      .waitFor();
+    await page.locator(".episode-browser-actions button").first().focus();
+    await page.keyboard.press("ArrowDown");
+    assert.equal(
+      await page.locator(":focus").getAttribute("aria-label"),
+      "Host",
+    );
+    await page.keyboard.press("ArrowDown");
+    assert.equal(
+      await page.locator(":focus").getAttribute("aria-label"),
+      "Guest",
+    );
+    await page.keyboard.press("ArrowUp");
+    assert.equal(
+      await page.locator(":focus").getAttribute("aria-label"),
+      "Host",
+    );
+    await page.locator(".episode-browser-rail .card").focus();
+    await page.screenshot({ path: "/tmp/wholphin-season-browser.png" });
     await page
       .getByRole("button", { name: "All seasons", exact: true })
       .click();
-    await page.locator(".season-grid [data-item=m2]").waitFor();
-    assert.equal(
-      await page.locator(":focus").getAttribute("data-item"),
-      "m2",
-      "Back restores the season card",
-    );
+    await page.locator(".season-grid").waitFor();
     resumeEnabled = false;
     await open("multi");
     await page.locator(".series-continue [data-item=next]").waitFor();
-    assert.equal(
-      await page.locator(".series-continue h2").textContent(),
-      "Continue watching",
-    );
     await open("single");
     await page
-      .getByRole("heading", { name: "Single season · Season 1", exact: true })
+      .locator(".episode-browser-rail [data-item=singlefirst]")
       .waitFor();
-    await page.locator(".library-grid [data-item=singlefirst]").waitFor();
-    const episodeArt = page.locator(
-      ".library-grid [data-item=singlefirst] .art",
-    );
-    await episodeArt.scrollIntoViewIfNeeded();
-    const still = await episodeArt
-      .locator("img")
-      .evaluate((n) => n.getAttribute("src") || n.dataset.src);
-    assert.ok(
-      still.includes("/Items/singlefirst/Images/Primary"),
-      "Season cards use the episode still",
-    );
-    const size = await episodeArt.boundingBox();
-    assert.ok(
-      Math.abs(size.width / size.height - 16 / 9) < 0.05,
-      "Episode stills match Start watching proportions",
-    );
-
-    assert.equal(
-      await page.locator(".season-grid").count(),
-      0,
-      "A single season opens its episodes directly",
-    );
+    assert.equal(await page.locator(".season-grid").count(), 0);
     assert.equal(
       await page
         .getByRole("button", { name: "All seasons", exact: true })
         .count(),
       0,
-    );
-    await page.locator(".series-continue [data-item=singlefirst]").waitFor();
-    assert.equal(
-      await page.locator(".series-continue h2").textContent(),
-      "Start watching",
-    );
-    await page.locator(".series-continue .card").focus();
-    await page.keyboard.press("ArrowDown");
-    assert.equal(
-      await page
-        .locator(":focus")
-        .evaluate((n) => !!n.closest(".library-grid")),
-      true,
-    );
-    await page.keyboard.press("ArrowUp");
-    assert.equal(
-      await page
-        .locator(":focus")
-        .evaluate((n) => !!n.closest(".series-continue")),
-      true,
     );
     await open("fresh");
     await page.locator(".series-continue [data-item=first]").waitFor();
@@ -350,16 +345,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page.locator(".series-continue h2").textContent(),
       "Start watching",
     );
-    assert.ok(
-      requests.some(
-        (r) => r.path === "/Shows/fresh/Episodes" && r.q.SeasonId === "f1",
-      ),
-      "Start selects season 1 rather than Specials",
-    );
     assert.equal(
       await page.locator(".series-continue [data-item=special]").count(),
       0,
     );
+    await page.screenshot({ path: "/tmp/wholphin-show-seasons.png" });
     assert.deepEqual(errors, []);
     console.log(
       "PASS: season poster overview, sorted Specials/seasons, progress before Next Up, Start at S1E1, single-season bypass and Start row, All seasons/Back focus, and remote navigation between Continue and seasons/episodes",

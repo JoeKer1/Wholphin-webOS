@@ -806,17 +806,20 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await click("Season 1");
     await page.locator('[data-item="e2"]').waitFor();
     await page
-      .getByRole("heading", { name: "Test show · Season 1", exact: true })
+      .getByRole("heading", { name: "Test show", exact: true })
       .waitFor();
     await click("All seasons");
     await click("Season 2");
     await page.locator('[data-item="e3"]').waitFor();
-    assert.equal(await page.locator('.library-grid [data-item="e1"]').count(), 0);
+    assert.equal(
+      await page.locator('.library-grid [data-item="e1"]').count(),
+      0,
+    );
     await page.locator('[data-item="e3"]').click();
     await page.keyboard.press("Escape");
     await page.locator('[data-item="e3"]').waitFor();
     await page
-      .getByRole("heading", { name: "Test show · Season 2", exact: true })
+      .getByRole("heading", { name: "Test show", exact: true })
       .waitFor();
     await page.locator('[data-item="e3"]').click();
     await click("View seasons");
