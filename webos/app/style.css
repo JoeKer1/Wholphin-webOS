@@ -141,18 +141,15 @@ nav button[aria-current="page"] {
 nav .settings-entry {
   margin-top: auto;
 }
-header.drawer-open,
-header:focus-within {
+header.drawer-open {
   width: 330px;
   background: #1e1928;
   border-right: 1px solid #393240;
 }
-header.drawer-open nav button,
-header:focus-within nav button {
+header.drawer-open nav button {
   width: 292px;
 }
-header.drawer-open #brand strong,
-header:focus-within #brand strong {
+header.drawer-open #brand strong {
   display: block;
   visibility: visible;
 }

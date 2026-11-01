@@ -1,6 +1,6 @@
 {
   "id": "com.github.damontecres.wholphin.webos",
-  "version": "0.2.51",
+  "version": "0.2.53",
   "vendor": "Ember contributors",
   "type": "web",
   "main": "index.html",

@@ -3,7 +3,6 @@
   function serverUrl(value) {
     var address = value.trim();
     if (!address) throw new Error("Enter your Jellyfin server address.");
-    var hasScheme = /^https?:\/\//i.test(address);
     if (
       !/^[a-z][a-z0-9+.-]*:/i.test(address) ||
       /^[^/:]+:\d+(?:\/|$)/.test(address)
@@ -28,7 +27,9 @@
       throw new Error(
         "Enter an HTTP or HTTPS server URL without credentials or query parameters.",
       );
-    if (!hasScheme && !url.port) url.port = "8096";
+    var authority = address.split("/")[2] || "",
+      explicitPort = /:\d+$/.test(authority);
+    if (/^192\.168\./.test(url.hostname) && !explicitPort) url.port = "8096";
     return url.href.replace(/\/+$/, "");
   }
   function query(values) {

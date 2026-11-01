@@ -1,0 +1,66 @@
+#av-player {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+.platform-tizen #video {
+  visibility: hidden;
+}
+/* Older Tizen engines may lack CSS Grid; preserve the TV's six-column layout. */
+.legacy-grid .grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+.legacy-grid .grid > .card {
+  flex: 0 0 calc(16.6667% - 24px);
+  margin: 0 12px 32px;
+}
+.legacy-grid .profile-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.legacy-grid .profile-grid > button {
+  flex: 0 0 260px;
+  margin: 14px;
+}
+.legacy-grid .settings-layout {
+  display: flex;
+}
+.legacy-grid .settings-categories {
+  flex: 0 0 310px;
+  margin-right: 48px;
+}
+.legacy-grid .settings-pane {
+  flex: 1;
+}
+.legacy-grid .guide-headings,
+.legacy-grid .guide-channel-row {
+  display: flex;
+}
+.legacy-grid .guide-headings > *,
+.legacy-grid .guide-channel-row > * {
+  flex: 1;
+  margin-right: 20px;
+}
+.legacy-grid .guide-headings > :first-child,
+.legacy-grid .guide-channel-row > :first-child {
+  flex: 0 0 340px;
+}
+.legacy-grid .home-pin-results {
+  display: flex;
+  flex-wrap: wrap;
+}
+.legacy-grid .home-pin-results > button {
+  flex: 0 0 46%;
+  margin: 1%;
+}
+.legacy-grid .playback-info-row {
+  display: flex;
+}
+.legacy-grid .playback-info-row > :first-child {
+  flex: 0 0 220px;
+  margin-right: 20px;
+}

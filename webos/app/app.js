@@ -1,10 +1,11 @@
 (function () {
   "use strict";
-  var C = window.WholphinCore,
+  var P = window.EmberPlatform,
+    C = window.WholphinCore,
     main = document.getElementById("main"),
     nav = document.getElementById("nav"),
     status = document.getElementById("status"),
-    video = document.getElementById("video"),
+    video = P.createPlayer(document.getElementById("video")),
     player = document.getElementById("player");
   var session = null,
     playing = null,
@@ -138,9 +139,11 @@
   }
   function auth(context) {
     return (
-      'MediaBrowser Client="Ember", Device="LG TV", DeviceId="' +
+      'MediaBrowser Client="Ember", Device="' +
+      P.deviceName +
+      '", DeviceId="' +
       device +
-      '", Version="0.2.51"' +
+      '", Version="0.2.53"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -402,6 +405,8 @@
         for (var i = 0; i < nodes.length; i++)
           if (nodes[i].dataset.item === page.focus) nodes[i].focus();
       }
+    } else if (P.id === "tizen") {
+      if (window.confirm("Exit Ember?")) P.exit();
     } else if (window.webOS && window.webOS.platformBack)
       window.webOS.platformBack();
     else if (window.PalmSystem) {
@@ -791,13 +796,19 @@
       ),
       decoder = decoderOptions();
     function modeValue() {
-      return decoder.native ? "LG C1 native (experimental)" : "Compatibility";
+      return P.nativePlayback === false
+        ? "Samsung AVPlay (Compatibility)"
+        : decoder.native
+          ? "LG C1 native (experimental)"
+          : "Compatibility";
     }
-    row(
+    var modeControl = row(
       device,
       "Playback mode",
       modeValue,
-      "Compatibility works with the widest range of files. Native enables supported C1 formats.",
+      P.id === "tizen"
+        ? "Samsung AVPlay with Jellyfin compatibility transcoding."
+        : "Compatibility works with the widest range of files. Native enables supported C1 formats.",
       function (control) {
         decoder.native = !decoder.native;
         localStorage.setItem(
@@ -834,7 +845,11 @@
       },
     );
     vision.disabled = !decoder.native;
-    var about = section("About", "Ember for Jellyfin · v0.2.51");
+    if (P.nativePlayback === false) {
+      modeControl.disabled = true;
+      vision.hidden = true;
+    }
+    var about = section("About", "Ember for Jellyfin · v0.2.53");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -2070,7 +2085,7 @@
       posterObserver = new IntersectionObserver(
         function (entries) {
           entries.forEach(function (entry) {
-            if (entry.isIntersecting) loadPoster(entry.target);
+            if (entry.intersectionRatio > 0) loadPoster(entry.target);
           });
         },
         { root: null, rootMargin: "160px 240px" },
@@ -2588,7 +2603,7 @@
       homeRowObserver = new IntersectionObserver(
         function (entries) {
           entries.forEach(function (entry) {
-            if (entry.isIntersecting && entry.target.loadHomeRow)
+            if (entry.intersectionRatio > 0 && entry.target.loadHomeRow)
               entry.target.loadHomeRow();
           });
         },
@@ -3330,7 +3345,11 @@
     }
     function geometry() {
       var style = getComputedStyle(grid);
-      columns = style.gridTemplateColumns.split(/\s+/).length || 6;
+      columns = document.documentElement.classList.contains("legacy-grid")
+        ? innerWidth <= 1100
+          ? 4
+          : 6
+        : style.gridTemplateColumns.split(/\s+/).length || 6;
       var width = (grid.clientWidth - 20 - 24 * (columns - 1)) / columns;
       rowHeight = width * (seasonContext ? 0.5625 : 1.5) + 75 + 32;
     }
@@ -5418,7 +5437,7 @@
         function (entries) {
           if (!valid() || !detailRowObserver) return;
           entries.forEach(function (entry) {
-            if (entry.isIntersecting) {
+            if (entry.intersectionRatio > 0) {
               detailRowObserver.unobserve(entry.target);
               entry.target.loadPage();
             }
@@ -6612,7 +6631,9 @@
         ? { native: false, reason: "Live TV uses compatibility HLS" }
         : options.compatibility
           ? { native: false, reason: options.policyReason }
-          : C.nativePolicy(sourceMetadata, decoder, deliveredSubtitleIndex);
+          : P.nativePlayback === false
+            ? { native: false, reason: "Samsung compatibility playback" }
+            : C.nativePolicy(sourceMetadata, decoder, deliveredSubtitleIndex);
       var nativeMode = policy.native;
       var deviceProfile = C.profile({
         native: nativeMode,
@@ -7168,7 +7189,7 @@
     }
   }
   document.addEventListener("keydown", function (e) {
-    var key = e.keyCode;
+    var key = P.keyCode(e);
     if (livePreview && key === 413) {
       e.preventDefault();
       run(stop);

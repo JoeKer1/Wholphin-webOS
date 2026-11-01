@@ -5,3 +5,10 @@ webos/dist/
 .env.*
 *.pem
 *.key
+
+/dist/
+.local/
+*.p12
+*.pri
+profiles.xml
+device-profile.xml

@@ -92,18 +92,22 @@ test("accepts server addresses without a scheme", () => {
   );
   assert.equal(
     C.serverUrl("media.example.com/jellyfin/"),
-    "http://media.example.com:8096/jellyfin",
+    "http://media.example.com/jellyfin",
   );
   assert.equal(C.serverUrl("localhost:8096"), "http://localhost:8096");
   assert.throws(() => C.serverUrl(""));
   assert.throws(() => C.serverUrl("not a server"));
 });
 
-test("uses Jellyfin port for bare hosts and preserves explicit reverse proxy URLs", () => {
+test("uses Jellyfin port only for 192.168 hosts without an explicit port", () => {
   assert.equal(C.serverUrl("192.168.50.243"), "http://192.168.50.243:8096");
+  assert.equal(C.serverUrl("http://192.168.50.243"), "http://192.168.50.243:8096");
+  assert.equal(C.serverUrl("http://192.168.50.243:80"), "http://192.168.50.243");
+  assert.equal(C.serverUrl("https://192.168.50.243:443"), "https://192.168.50.243");
+  assert.equal(C.serverUrl("10.0.0.2"), "http://10.0.0.2");
   assert.equal(
     C.serverUrl("media.local/jellyfin"),
-    "http://media.local:8096/jellyfin",
+    "http://media.local/jellyfin",
   );
   assert.equal(
     C.serverUrl("http://media.example.com/jellyfin"),
