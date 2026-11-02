@@ -2110,3 +2110,31 @@ body.choosing-profile main.profiles-page[data-profile-theme]:not([data-profile-t
 #playback-panel.subtitle-picker button { font-size: 22px; padding: 10px 16px; margin: 6px 0; }
 #playback-panel.subtitle-picker .subtitle-track-detail { font-size: 17px; margin-top: 4px; }
 #playback-panel.subtitle-picker .subtitle-panel-close { top: 12px; right: 16px; width: auto; margin: 0; }
+
+/* Appearance editing shares one set of explicit choices in Settings and playback. */
+.subtitle-editor { max-width: 960px; }
+.subtitle-editor .subtitle-preview { height: 180px; margin: 12px 0; overflow: hidden; }
+.subtitle-editor-hint, .subtitle-editor-note { font-size: 22px; line-height: 1.4; margin: 12px 0; }
+.subtitle-editor-note { color: #c9c2d0; }
+.subtitle-editor-fields, .subtitle-editor-choices { min-height: 330px; }
+.subtitle-editor button { border-radius: 6px; }
+.subtitle-editor-row { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 60px; padding: 12px 18px; margin: 6px 0; text-align: left; }
+.subtitle-editor-value { margin-left: 20px; color: #e7daf8; }
+.subtitle-editor-choices h3 { margin: 10px 0; font-size: 26px; }
+.subtitle-editor-choices button { display: block; width: 100%; margin: 6px 0; min-height: 52px; padding: 8px 18px; text-align: left; }
+.subtitle-editor-choices [aria-checked="true"]::after { content: " ✓"; }
+.subtitle-editor-actions { display: flex; justify-content: flex-end; padding-top: 12px; border-top: 1px solid #65586e; }
+.subtitle-editor-actions button { margin: 0 0 0 12px; }
+.subtitle-editor-actions button:first-child { margin-left: 0; }
+#playback-panel.subtitle-appearance-panel { top: 40px; bottom: 40px !important; max-height: none; overflow: hidden; }
+#playback-panel.subtitle-appearance-panel .subtitle-editor .subtitle-preview { height: 140px; }
+#playback-panel.subtitle-appearance-panel .subtitle-editor p { font-size: 20px; line-height: 1.35; }
+#playback-panel.subtitle-appearance-panel .subtitle-editor-row { display: flex; margin: 6px 0; padding: 10px 18px; min-height: 56px; }
+#playback-panel.subtitle-appearance-panel .subtitle-editor-actions button { width: auto; margin: 0 0 0 12px; padding: 12px 16px; font-size: 22px; }
+@media (prefers-reduced-motion: reduce) {
+  .subtitle-editor *, .subtitle-editor *::after { transition: none !important; }
+}
+
+.subtitle-editor .subtitle-editor-save { background: #c5a8ee; border-color: #c5a8ee; color: #19151f; }
+
+#playback-panel.subtitle-appearance-panel .subtitle-editor-actions button:first-child { margin-left: 0; }

@@ -211,6 +211,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         await page.locator("#player-options").click();
       await page.locator("#subtitle-" + kind).click();
     }
+    async function chooseAppearance(name, value) {
+      await page.getByRole("button", {name: new RegExp("^" + name + ": ")}).click();
+      await page.getByRole("radio", {name: value, exact:true}).click();
+    }
     async function appearance() {
       await config("appearance");
       await page.locator("#playback-panel .subtitle-preview").waitFor();
@@ -235,9 +239,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await subs();
     await page.screenshot({path:"/private/tmp/ember-subtitle-menu-before.png"});
     await appearance();
-    await click("Text size: 48");
+    await chooseAppearance("Text size", "Extra large");
     await page.screenshot({ path: "/tmp/wholphin-subtitle-appearance.png" });
-    await click("Apply subtitle appearance");
+    await click("Save appearance");
     await wait(() => starts().length === 2);
     assert.equal(
       infos().at(-1).body.SubtitleStreamIndex,
@@ -292,10 +296,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.screenshot({path:"/private/tmp/ember-subtitle-menu-after.png"});
     await click("Close");
     await appearance();
-    await click("Text color: white");
-    await click("Text background: None");
-    await click("Text position: Bottom");
-    await click("Apply subtitle appearance");
+    await chooseAppearance("Text color", "Yellow");
+    await chooseAppearance("Background", "Translucent black");
+    await chooseAppearance("Position", "Raised");
+    await click("Save appearance");
     await config("timing");
     await click("Later 0.5 s");
     await page.keyboard.press("Escape");
@@ -368,17 +372,17 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     failText = false;
     await appearance();
-    await click("Text rendering: Styled on TV");
-    await click("Apply subtitle appearance");
+    await chooseAppearance("Subtitle style", "Original");
+    await click("Save appearance");
     assert.equal(
       starts().length,
       5,
       "Already server-rendered playback should continue without reload",
     );
     await appearance();
-    await click("Text rendering: Server (original)");
+    await chooseAppearance("Subtitle style", "Custom");
     holdText = true;
-    await click("Apply subtitle appearance");
+    await click("Save appearance");
     await wait(() => !!releaseText);
     await page.keyboard.press("Escape");
     await page.evaluate(() =>
@@ -415,7 +419,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await click("Subtitle appearance");
     await page.locator("main .subtitle-preview").waitFor();
     await click("Reset appearance");
-    await click("Apply subtitle appearance");
+    await click("Save appearance");
     const pref = await page.evaluate(() =>
       JSON.parse(
         localStorage.getItem(

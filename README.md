@@ -2,7 +2,7 @@
 
 Ember is an unofficial, experimental Jellyfin client for LG webOS, Samsung Tizen and Android-based Fire TV devices, inspired by [Wholphin for Android TV](https://github.com/damontecres/Wholphin). This repository contains the standalone TV implementation; it does not require an Android build or a Jellyfin Web deployment.
 
-Current version: **0.2.67**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
+Current version: **0.2.69**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
 
 The app was previously named Wholphin for webOS. Existing installations update in place and keep their sign-in and settings.
 
@@ -12,7 +12,7 @@ The app was previously named Wholphin for webOS. Existing installations update i
 
 - Password and Quick Connect sign-in, customizable Home, library-specific rows and seasonal holiday rows.
 - Continuous library browsing, season selection, sorting/filtering, search, favorites and item details.
-- Resume playback, audio/subtitle selection, remembered track languages, styled SRT/WebVTT subtitles with size/color/background/position/delay controls, chapters and playback queue.
+- Resume playback, audio/subtitle selection, remembered track languages, styled SRT/WebVTT subtitles with previewed size/color/background/position choices, plus per-video/track timing in player configuration, chapters and playback queue.
 - Search and download SRT/WebVTT subtitles through configured Jellyfin providers, before or during playback.
 - Fire TV libass rendering for SSA/ASS, external text sidecars and in-place switching of supported loaded subtitles. LG/Tizen PGS continues to require server burn-in.
 - Next-episode autoplay, Up Next previews/countdown and configurable Still watching confirmation.

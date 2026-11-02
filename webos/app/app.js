@@ -143,7 +143,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.68"' +
+      '", Version="0.2.69"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -784,7 +784,7 @@
       subtitles,
       "Subtitle appearance",
       "",
-      "Text size, color, background and timing.",
+      "Preview and choose text size, color, background and position.",
       function () {
         return go(function () {
           reset("Subtitle appearance");
@@ -869,7 +869,7 @@
       modeControl.disabled = !P.playbackPolicy;
       vision.hidden = true;
     }
-    var about = section("About", "Ember for Jellyfin · v0.2.57");
+    var about = section("About", "Ember for Jellyfin · v0.2.69");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -5832,90 +5832,100 @@
   }
   function renderSubtitleAppearance(container, inPlayer) {
     var draft = subtitleOptions();
-    el(
-      "p",
-      "TV styling supports SRT and WebVTT text. Fire TV renders supported image subtitles and ASS/SSA locally with original styling; other unsupported formats may require server rendering.",
-      container,
-    );
-    if (inPlayer)
-      el(
-        "p",
-        playing && playing.subtitleCues
-          ? "Current subtitles: styled on TV."
-          : "Current subtitles: Off or using original player/server styling.",
-        container,
-      );
-    var preview = el("div", null, container);
+    var editor = el("div", null, container);
+    editor.className = "subtitle-editor";
+    var preview = el("div", null, editor);
     preview.className = "subtitle-preview";
+    preview.setAttribute("aria-label", "Subtitle preview");
     var sample = el("div", null, preview);
     sample.className = "subtitle-sample";
     el("span", "This is how your subtitles will look.", sample);
+    var hint = el("p", "Preview your changes, then choose Save appearance. Saved for this profile on this TV.", editor);
+    hint.className = "subtitle-editor-hint";
+    var fields = el("div", null, editor);
+    fields.className = "subtitle-editor-fields";
+    var choices = el("div", null, editor);
+    choices.className = "subtitle-editor-choices";
+    choices.hidden = true;
+    var settings = [
+      ["enabled", "Subtitle style", [false, true], ["Original", "Custom"]],
+      ["size", "Text size", [32, 40, 48, 56, 64], ["Small", "Medium", "Large", "Extra large", "Largest"]],
+      ["color", "Text color", ["white", "yellow", "cyan"], ["White", "Yellow", "Cyan"]],
+      ["background", "Background", ["none", "half", "solid"], ["None", "Translucent black", "Solid black"]],
+      ["position", "Position", ["bottom", "raised", "top"], ["Bottom", "Raised", "Top"]],
+    ];
+    var controls = [], opened = null;
+    function value(setting) { return setting[3][setting[2].indexOf(draft[setting[0]])]; }
     function refresh() {
       applySubtitleStyle(sample, draft);
+      controls.forEach(function (control, i) {
+        var setting = settings[i];
+        control.textContent = "";
+        el("span", setting[1], control);
+        el("span", value(setting), control).className = "subtitle-editor-value";
+        control.setAttribute("aria-label", setting[1] + ": " + value(setting));
+      });
     }
-    var settings = [
-      [
-        "enabled",
-        "Text rendering",
-        [false, true],
-        [P.nativeSubtitle ? "Original styling" : "Server (original)", "Styled on TV"],
-      ],
-      ["size", "Text size", [32, 40, 48, 56, 64]],
-      ["color", "Text color", ["white", "yellow", "cyan"]],
-      [
-        "background",
-        "Text background",
-        ["none", "half", "solid"],
-        ["None", "Translucent black", "Solid black"],
-      ],
-      [
-        "position",
-        "Text position",
-        ["bottom", "raised", "top"],
-        ["Bottom", "Raised", "Top"],
-      ],
-    ];
-    var controls = [];
-    function label(setting) {
-      var index = setting[2].indexOf(draft[setting[0]]);
-      return (
-        setting[1] +
-        ": " +
-        (setting[3] ? setting[3][index] : draft[setting[0]]) +
-        (setting[0] === "delay" ? " s (+ later, − earlier)" : "")
-      );
+    function closeChoices() {
+      if (!opened) return;
+      var opener = opened;
+      opened = null;
+      choices.hidden = true;
+      fields.hidden = false;
+      opener.setAttribute("aria-expanded", "false");
+      opener.focus();
     }
     settings.forEach(function (setting) {
-      var control = button(
-        label(setting),
-        function () {
-          var values = setting[2];
-          draft[setting[0]] =
-            values[(values.indexOf(draft[setting[0]]) + 1) % values.length];
-          if (setting[0] !== "enabled") {
-            draft.enabled = true;
-            controls[0].textContent = label(settings[0]);
-          }
-          control.textContent = label(setting);
-          refresh();
-        },
-        container,
-      );
+      var control = button("", function () {
+        opened = control;
+        fields.hidden = true;
+        choices.hidden = false;
+        choices.textContent = "";
+        control.setAttribute("aria-expanded", "true");
+        el("h3", setting[1], choices);
+        var list = el("div", null, choices);
+        list.setAttribute("role", "radiogroup");
+        list.setAttribute("aria-label", setting[1]);
+        var options = setting[2].map(function (choice, index) {
+          var option = button(setting[3][index], function () {
+            draft[setting[0]] = choice;
+            if (setting[0] !== "enabled") draft.enabled = true;
+            refresh();
+            closeChoices();
+          }, list);
+          option.setAttribute("role", "radio");
+          option.setAttribute("aria-checked", String(draft[setting[0]] === choice));
+          return option;
+        });
+        options[Math.max(0, setting[2].indexOf(draft[setting[0]]))].focus();
+      }, fields);
+      control.className = "subtitle-editor-row";
+      control.setAttribute("aria-expanded", "false");
       controls.push(control);
     });
-    button(
-      "Reset appearance",
-      function () {
-        draft = C.subtitleStyle({ enabled: !P.nativeSubtitle });
-        controls.forEach(function (control, index) {
-          control.textContent = label(settings[index]);
-        });
-        refresh();
-      },
-      container,
-    );
-    button(
-      "Apply subtitle appearance",
+    editor.addEventListener("keydown", function (event) {
+      var key = event.keyCode;
+      if (opened && (key === 27 || key === 461 || key === 10009)) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeChoices();
+      }
+    });
+    var note = el("p", "Custom appearance applies to SRT and WebVTT text. Other formats keep their original appearance. Adjust timing from the player Options menu.", editor);
+    note.className = "subtitle-editor-note";
+    var actions = el("div", null, editor);
+    actions.className = "subtitle-editor-actions";
+    button("Reset appearance", function () {
+      draft = C.subtitleStyle({ enabled: !P.nativeSubtitle });
+      closeChoices();
+      refresh();
+    }, actions);
+    button("Cancel", function () {
+      if (inPlayer) closePlaybackPanel();
+      else return back();
+    }, actions);
+    var saveAppearance = button(
+      "Save appearance",
       async function () {
         draft = C.subtitleStyle(draft);
         var active = inPlayer && playing;
@@ -5928,9 +5938,8 @@
           JSON.stringify(draft),
         );
         if (!active) {
-          message(
-            "Subtitle appearance saved. Select Styled on TV to apply appearance settings to text tracks.",
-          );
+          await back();
+          message("Subtitle appearance saved.");
           return;
         }
         if (active.subtitleCues && draft.enabled) {
@@ -5975,8 +5984,9 @@
           );
         }
       },
-      container,
+      actions,
     );
+    saveAppearance.className = "subtitle-editor-save";
     refresh();
   }
   function decoderOptions() {
@@ -6287,6 +6297,7 @@
       timing: "Subtitle timing",
     }[kind];
     panel.classList.toggle("subtitle-picker", kind === "subtitles");
+    panel.classList.toggle("subtitle-appearance-panel", kind === "appearance");
     panel.setAttribute("aria-label", title);
     el("h2", title, panel);
     var close = button("Close", closePlaybackPanel, panel);
