@@ -861,3 +861,14 @@ test("subtitle menu labels use language, format and roles rather than release fi
   assert.equal(tracks[0].external,true);
   assert(!tracks.some(t=>t.label.includes("junk")));
 });
+
+test("subtitle timing belongs to one video, source and stable track identity", () => {
+  const track = {Type:"Subtitle",Index:4,IsExternal:true,Path:"/media/movie.en.srt",Codec:"subrip",Language:"eng"};
+  const source = {Id:"source",MediaStreams:[track]};
+  const key = C.subtitleTimingKey({Id:"movie"},source,4);
+  assert.equal(key,C.subtitleTimingKey({Id:"movie"},{...source,MediaStreams:[{...track,Index:8}]},8));
+  assert.notEqual(key,C.subtitleTimingKey({Id:"another-movie"},source,4));
+  assert.notEqual(key,C.subtitleTimingKey({Id:"movie"},{...source,Id:"another-source"},4));
+  assert.notEqual(key,C.subtitleTimingKey({Id:"movie"},{...source,MediaStreams:[{...track,Path:"/media/movie.es.srt"}]},4));
+  assert.equal(C.subtitleTimingKey({Id:"movie"},source,-1),"");
+});

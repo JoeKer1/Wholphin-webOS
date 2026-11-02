@@ -471,6 +471,13 @@
     result.forEach(function (track) { if (track.duplicate) track.label += " · Track " + (track.index + 1); });
     return result;
   }
+  function subtitleTimingKey(item, source, index) {
+    if (!item || !source) return "";
+    var stream = (source.MediaStreams || []).find(function (entry) { return entry.Type === "Subtitle" && entry.Index === index; });
+    if (!stream) return "";
+    var ordinal = (source.MediaStreams || []).filter(function (entry) { return entry.Type === "Subtitle" && !!entry.IsExternal === !!stream.IsExternal; }).indexOf(stream);
+    return JSON.stringify([item.Id, source.Id, stream.Path || [!!stream.IsExternal, ordinal, stream.Title || "", !!stream.IsForced, !!stream.IsHearingImpaired], stream.Codec, stream.Language]);
+  }
   function trackLanguage(language) {
     var value = String(language || "")
       .trim()
@@ -1195,6 +1202,7 @@
     neighbor: neighbor,
     tracks: tracks,
     subtitleTracks: subtitleTracks,
+    subtitleTimingKey: subtitleTimingKey,
     trackPreference: trackPreference,
     preferredTrack: preferredTrack,
     chapters: chapters,

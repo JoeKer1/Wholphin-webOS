@@ -108,7 +108,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     });
     await page.addInitScript(() => {
       // Exercise explicit server-rendering opt-out and its fallback path.
-      localStorage.setItem("wholphin-subtitle-appearance:https://jellyfin.test:user", JSON.stringify({enabled:false}));
+      localStorage.setItem("wholphin-subtitle-appearance:https://jellyfin.test:user", JSON.stringify({enabled:false,delay:5}));
       localStorage.setItem(
         "wholphin-session",
         JSON.stringify({
@@ -204,12 +204,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         await page.locator("#player-options").click();
       await page.locator("#subtitles").click();
     }
+    async function config(kind) {
+      if (await page.locator("#playback-panel").isVisible())
+        await page.keyboard.press("Escape");
+      if (await page.locator("#player-tools").isHidden())
+        await page.locator("#player-options").click();
+      await page.locator("#subtitle-" + kind).click();
+    }
     async function appearance() {
-      await subs();
-      await page
-        .locator("#playback-panel")
-        .getByRole("button", { name: "Subtitle appearance", exact: true })
-        .click();
+      await config("appearance");
       await page.locator("#playback-panel .subtitle-preview").waitFor();
     }
     await page.goto(
@@ -221,14 +224,17 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       ).href,
     );
     await click("Subtitle test");
+    const selector = page.locator("#detail-subtitles");
+    assert.equal(await selector.evaluate(n => getComputedStyle(n.previousElementSibling).display), "block");
+    assert.ok((await selector.boundingBox()).height >= 56, "Movie subtitle selector should be a full-size control");
+    await page.screenshot({path:"/private/tmp/ember-movie-subtitle-selector.png"});
     await click("Play from beginning");
     await wait(() => starts().length === 1);
     await at(100);
     await page.locator("#toggle").click();
     await subs();
     await page.screenshot({path:"/private/tmp/ember-subtitle-menu-before.png"});
-    await click("Subtitle appearance");
-    await page.locator("#playback-panel .subtitle-preview").waitFor();
+    await appearance();
     await click("Text size: 48");
     await page.screenshot({ path: "/tmp/wholphin-subtitle-appearance.png" });
     await click("Apply subtitle appearance");
@@ -261,11 +267,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     await subs();
     assert.equal(await page.locator(":focus").getAttribute("aria-label"),"English · SRT");
-    await click("Subtitle timing");
+    await config("timing");
     await at(100.75);
     await click("Earlier 0.5 s");
     await page.waitForFunction(()=>document.getElementById("subtitle-overlay").hidden);
     assert.match(await page.locator(".subtitle-timing-value").textContent(),/0.5 s earlier/);
+    const timing = await page.evaluate(() => JSON.parse(localStorage.getItem("wholphin-subtitle-timing:https://jellyfin.test:user")));
+    assert.equal(Object.values(timing)[0].delay, -0.5);
+    assert.equal(JSON.parse(Object.keys(timing)[0])[0], "movie");
+
     assert.equal(starts().length,2,"Timing changes must not restart the video");
     assert.equal(await page.locator("#video").evaluate(v=>v.paused),true);
     await click("Reset timing");
@@ -277,15 +287,18 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await click("Reset timing");
     await at(100);
     await page.keyboard.press("Escape");
-    assert.equal(await page.locator("#playback-panel").getAttribute("data-kind"),"subtitles");
+    assert.equal(await page.locator(":focus").getAttribute("id"),"subtitle-timing");
+    await subs();
     await page.screenshot({path:"/private/tmp/ember-subtitle-menu-after.png"});
     await click("Close");
     await appearance();
     await click("Text color: white");
     await click("Text background: None");
     await click("Text position: Bottom");
-    await click("Subtitle delay: 0 s (+ later, − earlier)");
     await click("Apply subtitle appearance");
+    await config("timing");
+    await click("Later 0.5 s");
+    await page.keyboard.press("Escape");
     assert.equal(
       starts().length,
       2,
@@ -328,10 +341,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await wait(() => starts().length === 3);
     assert.equal(infos().at(-1).body.SubtitleStreamIndex, 12);
     await subs();
-    await click("Subtitle timing");
+    await config("timing");
     assert.equal(await page.getByRole("button",{name:"Earlier 0.5 s",exact:true}).isDisabled(),true);
     await page.keyboard.press("Escape");
-    await click("Close");
     await subs();
     await click("Japanese · ASS");
     await wait(() => starts().length === 4);

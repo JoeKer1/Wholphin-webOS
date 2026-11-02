@@ -143,7 +143,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.67"' +
+      '", Version="0.2.68"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -366,8 +366,13 @@
     }
     if (activeListing && activeListing.closeOptions()) return;
     if (!document.getElementById("playback-panel").hidden) {
-      if (["appearance", "timing"].indexOf(document.getElementById("playback-panel").dataset.kind) >= 0)
-        return openPlaybackPanel("subtitles");
+      var section = document.getElementById("playback-panel").dataset.kind;
+      if (["appearance", "timing"].indexOf(section) >= 0) {
+        closePlaybackPanel(false);
+        document.getElementById("player-options").click();
+        document.getElementById("subtitle-" + section).focus();
+        return;
+      }
       closePlaybackPanel();
       return;
     }
@@ -796,6 +801,7 @@
       function () {
         localStorage.removeItem(accountKey("track-preferences"));
         localStorage.removeItem(accountKey("subtitle-choices"));
+        localStorage.removeItem(accountKey("subtitle-timing"));
         message(
           "Remembered audio/subtitle choices cleared. New videos will use Jellyfin defaults.",
         );
@@ -5755,7 +5761,22 @@
     };
   }
   function subtitleOptions() {
-    return C.subtitleStyle(readPreference("subtitle-appearance", { enabled: !P.nativeSubtitle }));
+    var style = C.subtitleStyle(readPreference("subtitle-appearance", { enabled: !P.nativeSubtitle }));
+    // Legacy appearance delays are global and must never carry into another video.
+    style.delay = 0;
+    return style;
+  }
+  function subtitleDelay(item, source, index) {
+    var key = C.subtitleTimingKey(item, source, index), saved = readPreference("subtitle-timing", {})[key];
+    return saved ? C.subtitleStyle({ delay: saved.delay }).delay : 0;
+  }
+  function saveSubtitleDelay(active) {
+    var key = C.subtitleTimingKey(active.item, active.source, active.subtitleIndex);
+    if (!key) return;
+    var saved = readPreference("subtitle-timing", {});
+    saved[key] = { delay: active.subtitleStyle.delay, updated: Date.now() };
+    Object.keys(saved).sort(function (a, b) { return saved[b].updated - saved[a].updated; }).slice(100).forEach(function (old) { delete saved[old]; });
+    localStorage.setItem(accountKey("subtitle-timing"), JSON.stringify(saved));
   }
   var subtitleOverlay = el("div", null, player);
   subtitleOverlay.id = "subtitle-overlay";
@@ -5853,7 +5874,6 @@
         ["bottom", "raised", "top"],
         ["Bottom", "Raised", "Top"],
       ],
-      ["delay", "Subtitle delay", [-10, -5, -2, -1, -0.5, 0, 0.5, 1, 2, 5, 10]],
     ];
     var controls = [];
     function label(setting) {
@@ -5914,6 +5934,7 @@
           return;
         }
         if (active.subtitleCues && draft.enabled) {
+          draft.delay = subtitleDelay(active.item, active.source, active.subtitleIndex);
           active.subtitleStyle = draft;
           applySubtitleStyle(subtitleOverlay, draft);
           renderSubtitleOverlay();
@@ -6133,6 +6154,8 @@
       !active || active.live || !C.tracks(active.source, "Audio").length;
     document.getElementById("subtitles").disabled =
       !active || active.live || !C.tracks(active.source, "Subtitle").length;
+    document.getElementById("subtitle-timing").disabled = !active || active.live;
+    document.getElementById("subtitle-appearance").disabled = !active || active.live;
     document.getElementById("chapters").disabled =
       !active || active.live || !C.chapters(active.item).length;
     document.getElementById("previous-video").hidden = !!(active && active.live);
@@ -6215,16 +6238,14 @@
     function adjust(delta) {
       if (playing !== active || !local) return;
       active.subtitleStyle.delay = delta == null ? 0 : Math.max(-10, Math.min(10, (Number(active.subtitleStyle.delay) || 0) + delta));
-      var saved = subtitleOptions();
-      saved.delay = active.subtitleStyle.delay;
-      localStorage.setItem(accountKey("subtitle-appearance"), JSON.stringify(saved));
+      saveSubtitleDelay(active);
       renderSubtitleOverlay();
       refresh();
     }
     [["Earlier 0.5 s", -0.5], ["Later 0.5 s", 0.5], ["Reset timing", null]].forEach(function (entry) {
       button(entry[0], function () { adjust(entry[1]); }, controls).disabled = !local;
     });
-    if (local) el("p", "Saved for this account on this TV. Reset to 0 when another video does not need an adjustment.", container);
+    if (local) el("p", "Remembered only for this video's selected subtitle track.", container);
     refresh();
   }
   var panelRequest = 0;
@@ -6265,23 +6286,12 @@
       appearance: "Subtitle appearance",
       timing: "Subtitle timing",
     }[kind];
-    if (subtitleSection) title = "Subtitles";
+    panel.classList.toggle("subtitle-picker", kind === "subtitles");
     panel.setAttribute("aria-label", title);
     el("h2", title, panel);
     var close = button("Close", closePlaybackPanel, panel);
     if (subtitleSection) close.className = "subtitle-panel-close";
     close.focus();
-    if (subtitleSection) {
-      var tabs = el("div", null, panel);
-      tabs.className = "subtitle-panel-tabs";
-      tabs.setAttribute("role", "navigation");
-      tabs.setAttribute("aria-label", "Subtitle sections");
-      [["subtitles", "Tracks", "Subtitle tracks"], ["timing", "Timing", "Subtitle timing"], ["appearance", "Appearance", "Subtitle appearance"]].forEach(function (entry) {
-        var tab = button(entry[1], function () { return openPlaybackPanel(entry[0]); }, tabs);
-        tab.setAttribute("aria-label", entry[2]);
-        if (entry[0] === kind) tab.setAttribute("aria-current", "page");
-      });
-    }
     var content = el("div", null, panel);
     el("p", "Loading…", content);
     showControls();
@@ -6393,13 +6403,15 @@
     } else {
       var subtitle = kind === "subtitles",
         current = subtitle ? active.subtitleIndex : active.audioIndex;
+      var trackHost = subtitle ? el("div", null, content) : content;
+      if (subtitle) trackHost.className = "subtitle-picker-tracks";
       function option(index, label, detail) {
         var entry = button(
           label,
           function () {
             return switchTrack(subtitle, index);
           },
-          content,
+          trackHost,
         );
         entry.setAttribute("aria-label", label);
         entry.setAttribute("aria-pressed", String(index === current));
@@ -6447,7 +6459,7 @@
       var tracks = subtitle ? C.subtitleTracks(active.source) : C.tracks(active.source, "Audio");
       if (subtitle) tracks.sort(function (a, b) { return Number(localSubtitle(b.index)) - Number(localSubtitle(a.index)) || a.index - b.index; });
       tracks.forEach(function (track) {
-        option(track.index, track.label, subtitle ? [track.external ? "External" : "Embedded", localSubtitle(track.index) ? "On TV · No subtitle burn-in" : "Server rendering · Video transcoding"].join(" · ") : null);
+        option(track.index, track.label, subtitle ? [track.external ? "External" : "Embedded", localSubtitle(track.index) ? "No burn-in" : "Requires video conversion"].join(" · ") : null);
       });
       if (subtitle && findButton) content.appendChild(findButton);
       if (!subtitle) el("p", "Language choices are remembered for this account on this TV.", content);
@@ -6478,6 +6490,7 @@
       busy = true;
       try {
         var style = subtitleOptions(), cues = null;
+        style.delay = subtitleDelay(active.item, active.source, index);
         if (style.enabled && C.textSubtitle(active.source, index)) {
           var text = await api("/Videos/" + encodeURIComponent(active.item.Id) + "/" + encodeURIComponent(active.source.Id) + "/Subtitles/" + index + "/Stream.vtt",
             { StartPositionTicks: 0, CopyTimestamps: true, AddVttTimeMap: false }, null, "GET", { signal: active.extrasController.signal, subtitleText: true });
@@ -6705,6 +6718,11 @@
       });
     };
   });
+  ["timing", "appearance"].forEach(function (kind) {
+    document.getElementById("subtitle-" + kind).onclick = function () {
+      run(function () { return openPlaybackPanel(kind); });
+    };
+  });
   document.getElementById("previous-video").onclick = function () {
     run(async function () {
       if (!playing || playing.live || !playbackHistory.length) return;
@@ -6913,6 +6931,7 @@
       var subtitleStyle = subtitleOptions(),
         subtitleCues = null,
         subtitleNotice = "";
+      subtitleStyle.delay = subtitleDelay(item, sourceMetadata, subtitleIndex);
       var selectedSubtitle = C.textSubtitle(sourceMetadata, subtitleIndex);
       if (!live && subtitleStyle.enabled && selectedSubtitle) {
         try {
