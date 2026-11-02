@@ -90,9 +90,12 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.getByRole('button',{name:'Idle test movie',exact:true}).first().click();
         await page.getByRole('button',{name:'Play from beginning',exact:true}).click();
         await page.locator('#player').waitFor({state:'visible'});
+        await page.waitForFunction(()=>!document.getElementById('video').paused);
         await page.clock.fastForward(301000);
+        assert.equal(await page.locator('#video').evaluate(n=>n.paused),false,'Playback remains active past the idle threshold');
         assert.equal(await page.locator('#screensaver').count(),0,'Active playback prevents idle screensaver');
-        await page.locator('#toggle').press('Enter');
+        await page.evaluate(()=>document.dispatchEvent(new KeyboardEvent('keydown',{keyCode:19,bubbles:true,cancelable:true})));
+        assert.equal(await page.locator('#video').evaluate(n=>n.paused),true,'Paused-state guard is exercised');
         await page.clock.fastForward(301000);
         assert.equal(await page.locator('#screensaver').count(),0,'Paused playback is left undisturbed');
       }
