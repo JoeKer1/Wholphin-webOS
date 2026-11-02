@@ -123,3 +123,9 @@ autoplay; manual in-player audio selection takes priority for that playback.
 Missing preferred audio falls back to the normal profile/server choice. Subtitle
 defaults use the selected audio language, so Japanese audio can automatically
 enable English captions. Run `npm run test:anime-audio` for platform checks.
+
+### Profile language sync
+
+Ember syncs subtitle defaults (mode, preferred language and English for non-English audio) and the anime audio language through Jellyfin’s per-user display preferences. Bonfire profiles use their own Jellyfin user IDs, so their choices remain separate. LG, Samsung and Fire TV use the same Ember settings namespace; no Bonfire update is required.
+
+Settings refresh when a profile opens or Settings opens. Explicit changes save to the server immediately. A local cache keeps preferences usable offline, and pending changes retry the next time the profile or Settings opens. On first sync, existing device preferences migrate only when no server preference exists; otherwise the server choice wins. Individual-title track choices, subtitle timing and appearance remain local. Devices need Ember 0.2.77 or newer to participate.

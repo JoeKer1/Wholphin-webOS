@@ -138,7 +138,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.76"' +
+      '", Version="0.2.77"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -672,8 +672,10 @@
     homeCache.clear(); previewCache.clear(); queueItems = []; listingStates.clear();
     navigation(); login();
   }
-  function settings() {
-    reset("Settings");
+  async function settings() {
+    var settingsRevision = reset("Settings");
+    await syncLanguagePreferences();
+    if (settingsRevision !== revision) return;
     selectNav("settings");
     main.className = "settings-page";
     var layout = el("div", null, main),
@@ -825,16 +827,17 @@
     row(playback, "Anime audio language", function () {
       var code = readPreference("audio-defaults", {}).animeLanguage;
       return {jpn: "Japanese", eng: "English", spa: "Spanish", fra: "French", deu: "German", kor: "Korean", zho: "Chinese"}[code] || "Use normal audio preference";
-    }, "For Anime libraries and titles tagged with the Anime genre. Saved only for this profile on this TV.", function (control) {
+    }, "For Anime libraries and titles tagged with the Anime genre. Syncs across Ember devices for this profile.", function (control) {
       var choices = [["", "Use normal audio preference"], ["jpn", "Japanese"], ["eng", "English"], ["spa", "Spanish"], ["fra", "French"], ["deu", "German"], ["kor", "Korean"], ["zho", "Chinese"]];
       settingChoices("Anime audio language", choices, readPreference("audio-defaults", {}).animeLanguage || "", function (value) {
-        localStorage.setItem(accountKey("audio-defaults"), JSON.stringify({animeLanguage: value}));
+        saveLanguagePreference("audio-defaults", {animeLanguage: value});
         control.refreshSetting();
       }, control);
     }, function () {
       var code = readPreference("audio-defaults", {}).animeLanguage;
       return "Anime audio language: " + ({jpn: "Japanese", eng: "English", spa: "Spanish", fra: "French", deu: "German", kor: "Korean", zho: "Chinese"}[code] || "Use normal audio preference");
     });
+    el("p", languageSyncText(), playback).className = "language-sync-status";
     var subtitles = section("Subtitles", "Keep dialogue comfortable to read.");
     row(subtitles, "Subtitle defaults", "", "Preferred language and English subtitles for non-English audio, saved per profile.", function () { return go(subtitleDefaultsSettings); });
     row(
@@ -930,7 +933,7 @@
       vision.hidden = true;
     }
     row(device, "Screensaver", "", "Artwork, idle delay and clock for this profile.", function () { return go(screensaverSettings); });
-    var about = section("About", "Ember for Jellyfin · v0.2.76");
+    var about = section("About", "Ember for Jellyfin · v0.2.77");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -1105,6 +1108,75 @@
     } catch (_) {
       return fallback;
     }
+  }
+  // One shared client namespace across platforms; Bonfire profiles have distinct user IDs.
+  var languageSyncQueue = Promise.resolve(), languageSyncStatus = {};
+  function languageKey(account, suffix) {
+    return "wholphin-" + suffix + ":" + account.server + ":" + account.user;
+  }
+  function storedLanguage(account, suffix, fallback) {
+    try { return JSON.parse(localStorage.getItem(languageKey(account, suffix))) || fallback; }
+    catch (_) { return fallback; }
+  }
+  function languageSyncText() {
+    return languageSyncStatus[accountKey("language-sync")] === "saved"
+      ? "Synced for this profile across Ember devices."
+      : "Saved on this TV. Server sync will retry when you open this profile or Settings.";
+  }
+  function updateLanguageSyncStatus(account, status) {
+    languageSyncStatus[languageKey(account, "language-sync")] = status;
+    if (session && session.server === account.server && session.user === account.user)
+      Array.prototype.forEach.call(document.querySelectorAll(".language-sync-status"), function (node) { node.textContent = languageSyncText(); });
+  }
+  function syncLanguagePreferences() {
+    var account = profileAccount();
+    var task = languageSyncQueue.then(async function () {
+      try {
+        var query = {userId: account.user, client: "ember"},
+          options = {session: account, timeoutMs: 4000},
+          document = await api("/DisplayPreferences/usersettings", query, null, "GET", options);
+        if (!document || !document.CustomPrefs || typeof document.CustomPrefs !== "object" || Array.isArray(document.CustomPrefs))
+          throw new Error("Invalid display preferences");
+        var dirty = storedLanguage(account, "language-sync-pending", {}), uploaded = {}, write = false;
+        ["subtitle-defaults", "audio-defaults"].forEach(function (suffix) {
+          var local = storedLanguage(account, suffix, null), remote = null;
+          try { remote = JSON.parse(document.CustomPrefs["ember-" + suffix]); } catch (_) {}
+          // Only accept known fields and values from other devices.
+          if (remote && suffix === "subtitle-defaults" &&
+              ["remember", "language", "off"].indexOf(remote.mode) >= 0 &&
+              ["eng", "spa", "fra", "deu", "ita", "por", "jpn", "kor", "zho", "hin"].indexOf(remote.language) >= 0 && typeof remote.foreignEnglish === "boolean")
+            remote = {mode: remote.mode, language: remote.language, foreignEnglish: remote.foreignEnglish};
+          else if (remote && suffix === "audio-defaults" &&
+              ["", "jpn", "eng", "spa", "fra", "deu", "kor", "zho"].indexOf(remote.animeLanguage) >= 0)
+            remote = {animeLanguage: remote.animeLanguage};
+          else remote = null;
+          if (local && (dirty[suffix] || !remote)) {
+            uploaded[suffix] = JSON.stringify(local);
+            document.CustomPrefs["ember-" + suffix] = uploaded[suffix];
+            write = true;
+          } else if (remote) localStorage.setItem(languageKey(account, suffix), JSON.stringify(remote));
+        });
+        if (write) {
+          await api("/DisplayPreferences/usersettings", query, document, "POST", options);
+          var pending = storedLanguage(account, "language-sync-pending", {});
+          Object.keys(uploaded).forEach(function (suffix) {
+            if (localStorage.getItem(languageKey(account, suffix)) === uploaded[suffix]) delete pending[suffix];
+          });
+          localStorage.setItem(languageKey(account, "language-sync-pending"), JSON.stringify(pending));
+        }
+        updateLanguageSyncStatus(account, "saved");
+      } catch (_) { updateLanguageSyncStatus(account, "offline"); }
+    });
+    languageSyncQueue = task.catch(function () {});
+    return task;
+  }
+  function saveLanguagePreference(suffix, value) {
+    localStorage.setItem(accountKey(suffix), JSON.stringify(value));
+    var pending = readPreference("language-sync-pending", {});
+    pending[suffix] = true;
+    localStorage.setItem(accountKey("language-sync-pending"), JSON.stringify(pending));
+    updateLanguageSyncStatus(profileAccount(), "pending");
+    return syncLanguagePreferences();
   }
   function homeOptions() {
     return readPreference("home-options", {
@@ -1636,6 +1708,8 @@
   }
   async function startSession() {
     var current = session;
+    await syncLanguagePreferences();
+    if (session !== current) return;
     reset("Loading profiles…");
     document.body.classList.add("choosing-profile");
     try {
@@ -1888,6 +1962,7 @@
     navigation();
     stack = [];
     if (context.profileAccount) {
+      await syncLanguagePreferences();
       await go(home);
       discoverBonfire();
     } else await startSession();
@@ -5990,14 +6065,15 @@
   }
   function subtitleDefaultsSettings() {
     reset("Subtitle defaults");
-    el("p", "Saved only for this profile on this TV. A manual choice for a title takes priority.", main);
+    el("p", languageSyncText(), main).className = "language-sync-status";
+    el("p", "A manual choice for a title takes priority.", main);
     var options = subtitleDefaults(), list = el("div", null, main);
     list.className = "screensaver-settings";
     function choice(key, label, choices) {
       var control = button("", function () {
         settingChoices(label, choices, options[key], function (value) {
           options[key] = value;
-          localStorage.setItem(accountKey("subtitle-defaults"), JSON.stringify(options));
+          saveLanguagePreference("subtitle-defaults", options);
           refresh();
         }, control);
       }, list);
