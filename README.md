@@ -137,3 +137,7 @@ Open **Seerr** in the sidebar or **Settings → Playback → Seerr**, enter your
 Includes trending movies/shows, movie and TV discovery, upcoming movies, search, My requests, automatic loading of additional results, title availability and links back to available Jellyfin items. Request movies or individual TV seasons, with optional 4K when your Seerr account permits it. Requests require confirmation; Seerr controls permissions, quotas and approval.
 
 This first integration is Fire TV only. Bonfire profile selection does not automatically log in to Seerr; connect the desired Seerr account separately for each profile. Native HTTP/CSRF/cookie regression instructions are in [test/native/README.md](test/native/README.md).
+
+### Text subtitle recovery (v0.2.79+)
+
+SRT/WebVTT/ASS/SSA extraction retries once after temporary server/network failures or empty extraction results before using server rendering. The retry is cancelled when playback is stopped; authentication errors, missing tracks and oversized files are not retried. If a text track has already fallen back to burn-in, selecting that same track again retries extraction while retaining position and paused state. Bitmap tracks keep their existing fallback. The shared path is tested in LG, Samsung and Fire TV bundles.

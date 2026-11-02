@@ -138,7 +138,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.78"' +
+      '", Version="0.2.79"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -198,7 +198,7 @@
         var limit = 2097152;
         if (Number(response.headers.get("content-length")) > limit) {
           if (response.body) await response.body.cancel();
-          throw new Error("Subtitle file is too large.");
+          throw Object.assign(new Error("Subtitle file is too large."), {code: "SUBTITLE_TOO_LARGE"});
         }
         var reader = response.body.getReader(),
           chunks = [],
@@ -210,7 +210,7 @@
             bytes += part.value.length;
             if (bytes > limit) {
               await reader.cancel();
-              throw new Error("Subtitle file is too large.");
+              throw Object.assign(new Error("Subtitle file is too large."), {code: "SUBTITLE_TOO_LARGE"});
             }
             chunks.push(part.value);
           }
@@ -935,7 +935,7 @@
       vision.hidden = true;
     }
     row(device, "Screensaver", "", "Artwork, idle delay and clock for this profile.", function () { return go(screensaverSettings); });
-    var about = section("About", "Ember for Jellyfin · v0.2.78");
+    var about = section("About", "Ember for Jellyfin · v0.2.79");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -6314,6 +6314,40 @@
     el("p", "When enabled, English subtitles are selected for known non-English audio if a matching track is available. Missing or unknown audio languages do not trigger this rule.", main);
     focusContent(list.querySelector("button"));
   }
+  async function loadSubtitleCues(item, source, index, signal) {
+    var account = profileAccount();
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if ((signal && signal.aborted) || !session || session.server !== account.server || session.user !== account.user)
+        throw new DOMException("Subtitle loading cancelled.", "AbortError");
+      try {
+        var text = await api("/Videos/" + encodeURIComponent(item.Id) + "/" + encodeURIComponent(source.Id) + "/Subtitles/" + index + "/Stream.vtt",
+          {StartPositionTicks: 0, CopyTimestamps: true, AddVttTimeMap: false}, null, "GET",
+          {session: account, signal: signal, subtitleText: true, timeoutMs: attempt ? 10000 : 20000});
+        var cues = C.parseSubtitles(text);
+        if (!cues.length) throw new Error("No subtitle cues were returned.");
+        return cues;
+      } catch (error) {
+        if (attempt || (signal && signal.aborted) || error.code === "SUBTITLE_TOO_LARGE" ||
+            (error.status && error.status !== 408 && error.status < 500)) throw error;
+        // Jellyfin may still be extracting an embedded track after a failed first response.
+        await new Promise(function (resolve, reject) {
+          function cancel() {
+            clearTimeout(timer);
+            if (signal) signal.removeEventListener("abort", cancel);
+            reject(new DOMException("Subtitle loading cancelled.", "AbortError"));
+          }
+          var timer = setTimeout(function () {
+            if (signal) signal.removeEventListener("abort", cancel);
+            resolve();
+          }, 300);
+          if (signal) {
+            if (signal.aborted) cancel();
+            else signal.addEventListener("abort", cancel);
+          }
+        });
+      }
+    }
+  }
   function subtitleOptions() {
     var style = C.subtitleStyle(readPreference("subtitle-appearance", { enabled: !P.nativeSubtitle }));
     // Legacy appearance delays are global and must never carry into another video.
@@ -7056,7 +7090,8 @@
     if (!active || active.live || busy || !active.started) return;
     var type = subtitle ? "Subtitle" : "Audio";
     var preference = C.trackPreference(active.source, type, index);
-    if ((subtitle ? active.subtitleIndex : active.audioIndex) === index) {
+    if ((subtitle ? active.subtitleIndex : active.audioIndex) === index &&
+        !(subtitle && index >= 0 && !active.subtitleCues && subtitleOptions().enabled && C.textSubtitle(active.source, index))) {
       rememberTrack(type, preference);
       if (subtitle) saveSubtitleChoice(active.item.Id, active.source, index);
       closePlaybackPanel();
@@ -7071,10 +7106,7 @@
         var style = subtitleOptions(), cues = null;
         style.delay = subtitleDelay(active.item, active.source, index);
         if (style.enabled && C.textSubtitle(active.source, index)) {
-          var text = await api("/Videos/" + encodeURIComponent(active.item.Id) + "/" + encodeURIComponent(active.source.Id) + "/Subtitles/" + index + "/Stream.vtt",
-            { StartPositionTicks: 0, CopyTimestamps: true, AddVttTimeMap: false }, null, "GET", { signal: active.extrasController.signal, subtitleText: true });
-          cues = C.parseSubtitles(text);
-          if (!cues.length) throw new Error("No subtitle cues returned");
+          cues = await loadSubtitleCues(active.item, active.source, index, active.extrasController.signal);
         }
         if (playing !== active) return;
         if (nativeSwitch) {
@@ -7529,32 +7561,13 @@
           )
             subtitleCues = previous.subtitleCues;
           else {
-            var text = await api(
-              "/Videos/" +
-                encodeURIComponent(item.Id) +
-                "/" +
-                encodeURIComponent(sourceMetadata.Id) +
-                "/Subtitles/" +
-                subtitleIndex +
-                "/Stream.vtt",
-              {
-                StartPositionTicks: 0,
-                CopyTimestamps: true,
-                AddVttTimeMap: false,
-              },
-              null,
-              "GET",
-              { signal: controller.signal, subtitleText: true },
-            );
-            subtitleCues = C.parseSubtitles(text);
-            if (!subtitleCues.length)
-              throw new Error("No subtitle cues were returned.");
+            subtitleCues = await loadSubtitleCues(item, sourceMetadata, subtitleIndex, controller.signal);
           }
         } catch (error) {
           if (controller.signal.aborted) throw error;
           subtitleCues = null;
           subtitleNotice =
-            "TV subtitle styling unavailable; using server-rendered subtitles for this video.";
+            "Text subtitles could not load; using server-rendered subtitles for this video. Select the track again to retry.";
         }
       }
       var deliveredSubtitleIndex = subtitleCues ? -1 : subtitleIndex;
