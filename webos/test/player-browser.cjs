@@ -396,7 +396,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       123.25,
     );
     await control("subtitles");
-    await click("English subtitles");
+    await click("English · Subtitle");
     await started(3);
     assert.equal(infos().at(-1).body.SubtitleStreamIndex, 9);
     assert.equal(infos().at(-1).body.AudioStreamIndex, 5);
@@ -565,7 +565,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await started(before + 6);
     holdNegotiation = true;
     await control("subtitles");
-    await click("English subtitles");
+    await click("English · Subtitle");
     await waitFor(() => !!releaseNegotiation);
     await page.keyboard.press("Escape");
     await page.evaluate(() =>
@@ -604,7 +604,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     assert.equal(infos().at(-1).body.SubtitleStreamIndex, -1);
     await control("subtitles");
-    await click("Spanish subtitles");
+    await click("Spanish · Subtitle");
     await started(++count);
     assert.equal((await saved()).Subtitle.language, "es");
     await page.locator("#next-video").click();
@@ -878,7 +878,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.waitForFunction(
       () =>
         document.getElementById("detail-subtitles").textContent ===
-        "Spanish subtitles (+2)",
+        "Spanish · Subtitle (+2)",
     );
     await page
       .getByRole("combobox", { name: "Subtitles before playback" })
@@ -892,7 +892,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     assert.equal(await page.locator("#detail-subtitle-menu").isHidden(), true);
     assert.equal(
       await page.locator("#detail-subtitles").textContent(),
-      "Spanish subtitles (+2)",
+      "Spanish · Subtitle (+2)",
     );
 
     await page

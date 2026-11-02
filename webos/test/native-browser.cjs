@@ -359,7 +359,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     await play();
     await control("subtitles");
-    await click("English subtitles");
+    await click("English · SRT");
     await waitFor(() => starts().at(-1).body.SubtitleStreamIndex === 9);
     assert.equal(
       infos().at(-1).body.DeviceProfile.Name,

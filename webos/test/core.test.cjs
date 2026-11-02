@@ -844,3 +844,20 @@ test("Home custom rows reorder, hide and set artwork without losing seasonal ide
   );
   assert.ok(rows.some((x) => x.pinType === "playlist" && x.pinId === "list"));
 });
+
+test("subtitle menu labels use language, format and roles rather than release filenames", () => {
+  const source={MediaStreams:[
+    {Type:"Subtitle",Index:4,Codec:"subrip",Language:"eng",DisplayTitle:"Long release name - [extra junk]",IsExternal:true},
+    {Type:"Subtitle",Index:9,Codec:"srt",Language:"en"},
+    {Type:"Subtitle",Index:12,Codec:"PGSSUB",Language:"spa",IsForced:true},
+    {Type:"Subtitle",Index:13,Codec:"ass",Language:"jpn",IsHearingImpaired:true}
+  ]};
+  const tracks=C.subtitleTracks(source);
+  assert.deepEqual(tracks.map(t=>t.index),[4,9,12,13]);
+  assert.equal(tracks[0].label,"English · SRT · Track 5");
+  assert.equal(tracks[1].label,"English · SRT · Track 10");
+  assert.equal(tracks[2].label,"Spanish · PGS · Forced");
+  assert.equal(tracks[3].label,"Japanese · ASS · Hearing impaired");
+  assert.equal(tracks[0].external,true);
+  assert(!tracks.some(t=>t.label.includes("junk")));
+});

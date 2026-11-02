@@ -455,6 +455,22 @@
         return { index: stream.Index, label: label };
       });
   }
+  function subtitleTracks(source) {
+    var names = { en:"English", es:"Spanish", fr:"French", de:"German", it:"Italian", pt:"Portuguese", ja:"Japanese", ko:"Korean", zh:"Chinese", hi:"Hindi", ru:"Russian", ar:"Arabic", nl:"Dutch", sv:"Swedish", no:"Norwegian", da:"Danish", fi:"Finnish", pl:"Polish", cs:"Czech", el:"Greek", he:"Hebrew", tr:"Turkish", th:"Thai", vi:"Vietnamese", id:"Indonesian", ro:"Romanian", hu:"Hungarian", uk:"Ukrainian", fa:"Persian" },
+      formats = { subrip:"SRT", srt:"SRT", webvtt:"VTT", vtt:"VTT", pgssub:"PGS", pgs:"PGS", dvdsub:"VobSub", ass:"ASS", ssa:"SSA", mov_text:"Text", ttml:"TTML" };
+    var result = tracks(source, "Subtitle").map(function (track) {
+      var stream = source.MediaStreams.find(function (entry) { return entry.Type === "Subtitle" && entry.Index === track.index; }),
+        language = trackLanguage(stream.Language), codec = String(stream.Codec || "").toLowerCase(),
+        label = [names[language] || (language ? language.toUpperCase() : "Unknown language"),
+          formats[codec] || "Subtitle", stream.IsForced ? "Forced" : "", stream.IsHearingImpaired ? "Hearing impaired" : ""].filter(Boolean).join(" · ");
+      return { index: track.index, label: label, external: !!stream.IsExternal };
+    });
+    result.forEach(function (track) {
+      if (result.filter(function (entry) { return entry.label === track.label; }).length > 1) track.duplicate = true;
+    });
+    result.forEach(function (track) { if (track.duplicate) track.label += " · Track " + (track.index + 1); });
+    return result;
+  }
   function trackLanguage(language) {
     var value = String(language || "")
       .trim()
@@ -1178,6 +1194,7 @@
     stream: stream,
     neighbor: neighbor,
     tracks: tracks,
+    subtitleTracks: subtitleTracks,
     trackPreference: trackPreference,
     preferredTrack: preferredTrack,
     chapters: chapters,

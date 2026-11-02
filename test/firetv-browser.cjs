@@ -52,7 +52,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.equal(await page.evaluate(()=>nativeCommands.filter(c=>c.action==='load').length),beforeTracks);
   assert.equal(await page.locator('#player').isVisible(),true);
   await page.locator('#subtitles').click();
-  await page.getByRole('button',{name:'English ASS',exact:true}).click();
+  await page.getByRole('button',{name:'English · ASS',exact:true}).click();
   await page.waitForFunction(()=>nativeCommands.some(c=>c.action==='tracks'&&c.tracks.subtitle===0));
   await page.locator('#playback-panel[hidden]').waitFor({state:'attached'});
   assert.equal(await page.evaluate(()=>nativeCommands.filter(c=>c.action==='load').length),beforeTracks);

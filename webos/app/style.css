@@ -2096,3 +2096,13 @@ body.choosing-profile main.profiles-page[data-profile-theme]:not([data-profile-t
 #subtitle-search button { display: block; width: 100%; margin: 12px 0; text-align: left; }
 #subtitle-search label { display: block; margin: 16px 0 8px; }
 #subtitle-search select { width: 100%; }
+
+#playback-panel .subtitle-panel-tabs { display: flex; margin: 16px 0 24px; gap: 12px; }
+#playback-panel .subtitle-panel-tabs button { flex: 1; width: auto; margin: 0; text-align: center; border-radius: 8px; }
+#playback-panel .subtitle-panel-tabs [aria-current="page"] { border-bottom: 3px solid #bb86fc; }
+#playback-panel .subtitle-track-option { position: relative; padding-right: 54px; }
+#playback-panel .subtitle-track-option[aria-pressed="true"]::after { position: absolute; right: 18px; top: 18px; }
+.subtitle-track-detail { display: block; margin-top: 8px; font-size: 20px; color: #c9c2d0; }
+#playback-panel .subtitle-timing-value { font-size: 36px; margin: 24px 0; }
+
+#playback-panel .subtitle-panel-close { position: absolute; top: 20px; right: 24px; width: auto; margin: 0; padding: 10px 18px; font-size: 22px; }

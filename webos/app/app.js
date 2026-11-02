@@ -143,7 +143,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.66"' +
+      '", Version="0.2.67"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -366,6 +366,8 @@
     }
     if (activeListing && activeListing.closeOptions()) return;
     if (!document.getElementById("playback-panel").hidden) {
+      if (["appearance", "timing"].indexOf(document.getElementById("playback-panel").dataset.kind) >= 0)
+        return openPlaybackPanel("subtitles");
       closePlaybackPanel();
       return;
     }
@@ -5011,7 +5013,7 @@
               return Array.isArray(entry.MediaStreams);
             }) || {},
           tracks = [{ index: -1, label: "Off" }].concat(
-            C.tracks(source, "Subtitle"),
+            C.subtitleTracks(source),
           ),
           saved = readPreference("subtitle-choices", {})[item.Id],
           chosen =
@@ -6196,6 +6198,35 @@
     if (active.item.Type === "Episode" && active.item.SeriesId)
       loadFollowing(active);
   }
+  function renderSubtitleTiming(container, active) {
+    el("h3", "Subtitle timing", container);
+    var local = !!active.subtitleCues;
+    el("p", local ? "Move text earlier if it appears after the dialogue, or later if it appears too soon. Changes apply immediately."
+      : "Timing adjustment needs a locally rendered SRT or WebVTT track. Select a text track and use Styled on TV in Appearance.", container);
+    var value = el("p", "", container);
+    value.className = "subtitle-timing-value";
+    value.setAttribute("aria-live", "polite");
+    var controls = el("div", null, container);
+    controls.className = "subtitle-timing-controls";
+    function refresh() {
+      var delay = Number(active.subtitleStyle.delay) || 0;
+      value.textContent = !delay ? "On time · 0.0 s" : Math.abs(delay).toFixed(1) + " s " + (delay < 0 ? "earlier" : "later");
+    }
+    function adjust(delta) {
+      if (playing !== active || !local) return;
+      active.subtitleStyle.delay = delta == null ? 0 : Math.max(-10, Math.min(10, (Number(active.subtitleStyle.delay) || 0) + delta));
+      var saved = subtitleOptions();
+      saved.delay = active.subtitleStyle.delay;
+      localStorage.setItem(accountKey("subtitle-appearance"), JSON.stringify(saved));
+      renderSubtitleOverlay();
+      refresh();
+    }
+    [["Earlier 0.5 s", -0.5], ["Later 0.5 s", 0.5], ["Reset timing", null]].forEach(function (entry) {
+      button(entry[0], function () { adjust(entry[1]); }, controls).disabled = !local;
+    });
+    if (local) el("p", "Saved for this account on this TV. Reset to 0 when another video does not need an adjustment.", container);
+    refresh();
+  }
   var panelRequest = 0;
   function closePlaybackPanel(restore) {
     panelRequest++;
@@ -6223,6 +6254,8 @@
       Math.max(230, document.getElementById("controls").offsetHeight + 16) +
       "px";
     panel.textContent = "";
+    panel.dataset.kind = kind;
+    var subtitleSection = ["subtitles", "timing", "appearance"].indexOf(kind) >= 0;
     var title = {
       audio: "Audio tracks",
       subtitles: "Subtitles",
@@ -6230,10 +6263,25 @@
       queue: "Playback queue",
       info: "Playback information",
       appearance: "Subtitle appearance",
+      timing: "Subtitle timing",
     }[kind];
+    if (subtitleSection) title = "Subtitles";
     panel.setAttribute("aria-label", title);
     el("h2", title, panel);
-    button("Close", closePlaybackPanel, panel).focus();
+    var close = button("Close", closePlaybackPanel, panel);
+    if (subtitleSection) close.className = "subtitle-panel-close";
+    close.focus();
+    if (subtitleSection) {
+      var tabs = el("div", null, panel);
+      tabs.className = "subtitle-panel-tabs";
+      tabs.setAttribute("role", "navigation");
+      tabs.setAttribute("aria-label", "Subtitle sections");
+      [["subtitles", "Tracks", "Subtitle tracks"], ["timing", "Timing", "Subtitle timing"], ["appearance", "Appearance", "Subtitle appearance"]].forEach(function (entry) {
+        var tab = button(entry[1], function () { return openPlaybackPanel(entry[0]); }, tabs);
+        tab.setAttribute("aria-label", entry[2]);
+        if (entry[0] === kind) tab.setAttribute("aria-current", "page");
+      });
+    }
     var content = el("div", null, panel);
     el("p", "Loading…", content);
     showControls();
@@ -6320,6 +6368,7 @@
           content,
         );
     } else if (kind === "appearance") renderSubtitleAppearance(content, true);
+    else if (kind === "timing") renderSubtitleTiming(content, active);
     else if (kind === "queue") renderQueue(content, true);
     else if (kind === "chapters") {
       var chapters = C.chapters(active.item);
@@ -6344,7 +6393,7 @@
     } else {
       var subtitle = kind === "subtitles",
         current = subtitle ? active.subtitleIndex : active.audioIndex;
-      function option(index, label) {
+      function option(index, label, detail) {
         var entry = button(
           label,
           function () {
@@ -6352,17 +6401,15 @@
           },
           content,
         );
+        entry.setAttribute("aria-label", label);
         entry.setAttribute("aria-pressed", String(index === current));
+        if (detail) {
+          entry.className = "subtitle-track-option";
+          el("span", detail, entry).className = "subtitle-track-detail";
+        }
       }
       if (subtitle) {
-        button(
-          "Subtitle appearance",
-          function () {
-            return openPlaybackPanel("appearance");
-          },
-          content,
-        );
-        button("Find subtitles…", function () {
+        var findButton = button("Find subtitles…", function () {
           return findSubtitles(active.item, active.source, async function (updated, track) {
             if (playing !== active) return;
             // Jellyfin can insert external tracks before the audio tracks.
@@ -6393,24 +6440,25 @@
         }, content);
         option(-1, "Off");
       }
-      C.tracks(active.source, subtitle ? "Subtitle" : "Audio").forEach(
-        function (track) {
-          option(track.index, track.label);
-        },
-      );
-      el(
-        "p",
-        "Language choices are remembered for this account on this TV. Tracks without language metadata apply only to the current video. Reset saved choices in Settings.",
-        content,
-      );
-      if (subtitle)
-        el(
-          "p",
-          active.subtitleCues
-            ? "Text subtitles are styled on this TV. Appearance changes and supported track switches apply without restarting playback."
-            : active.nativeMode && P.nativeSubtitle ? "Subtitles render locally on this TV. Supported tracks switch in place without restarting the video." : "Subtitles are rendered by the server. Enable Styled on TV in Subtitle appearance for SRT/WebVTT size, color, background, position and delay controls.",
-          content,
-        );
+      function localSubtitle(index) {
+        return !!((C.textSubtitle(active.source, index) && subtitleOptions().enabled) ||
+          (active.nativeMode && active.method === "DirectPlay" && P.nativeSubtitle && P.nativeSubtitle(active.source, index)));
+      }
+      var tracks = subtitle ? C.subtitleTracks(active.source) : C.tracks(active.source, "Audio");
+      if (subtitle) tracks.sort(function (a, b) { return Number(localSubtitle(b.index)) - Number(localSubtitle(a.index)) || a.index - b.index; });
+      tracks.forEach(function (track) {
+        option(track.index, track.label, subtitle ? [track.external ? "External" : "Embedded", localSubtitle(track.index) ? "On TV · No subtitle burn-in" : "Server rendering · Video transcoding"].join(" · ") : null);
+      });
+      if (subtitle && findButton) content.appendChild(findButton);
+      if (!subtitle) el("p", "Language choices are remembered for this account on this TV.", content);
+      else {
+        var currentOption = content.querySelector('[aria-pressed="true"]');
+        if (currentOption) focusContent(currentOption);
+      }
+    }
+    if (kind === "timing" || kind === "appearance") {
+      var first = content.querySelector("button:not(:disabled)");
+      if (first) focusContent(first);
     }
   }
   async function switchTrack(subtitle, index) {

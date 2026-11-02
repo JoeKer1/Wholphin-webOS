@@ -4,6 +4,10 @@ Ember is a standalone Jellyfin player for webOS TV, originally inspired by Wholp
 
 Implemented: Wholphin-style focused-item backdrops and summaries, collapsible navigation drawer, poster rows, favorites browsing/toggle, cast details, server URL/password login, saved session and sign out, continuous library/folder browsing with sorting and filters, continue watching, next up, recently added, title search, item details, resume, playback controls, remote directional navigation, and Jellyfin playback progress/stopped reporting. Magic Remote pointer clicks use standard buttons and inputs.
 
+## Subtitle controls
+
+The in-player subtitle panel separates Tracks, Timing and Appearance. Track labels use language, format and accessibility flags; each shows whether the TV can render it locally or video burn-in is required. Timing offers immediate half-second earlier/later adjustments for local text cues without restarting playback. These adjustments are saved for the TV account and should be reset for videos that do not need them. Automatic alignment to dialogue can be handled by Bazarr audio synchronization when downloading subtitles; Ember does not analyze the movie audio itself.
+
 ## Subtitle downloads
 
 Choose **Find subtitles…** in a movie or episode subtitle menu, or in the player’s Subtitles panel. Search by language and select **Download and use**. Ember shows SRT/WebVTT results, prioritizes exact file matches, waits for Jellyfin’s track refresh, then selects the new track. Jellyfin needs a configured subtitle provider, subtitle management permission for the signed-in user, and permission to write subtitle files. SRT/WebVTT text renders locally by default on webOS/Tizen, unless the user explicitly selects Server (original) in Subtitle appearance; PGS still uses server burn-in there. New Fire TV sidecars may reload the player at its current position to attach the track.
