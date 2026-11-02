@@ -194,6 +194,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await route.fulfill({ json });
     });
     await page.addInitScript(() => {
+      // This suite exercises manual track changes; automatic language rules have separate coverage.
+      localStorage.setItem("wholphin-subtitle-defaults:https://jellyfin.test:user", JSON.stringify({foreignEnglish:false}));
       if (!localStorage.getItem("wholphin-session"))
         localStorage.setItem(
           "wholphin-session",

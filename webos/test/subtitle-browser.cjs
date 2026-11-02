@@ -351,11 +351,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await subs();
     await click("Japanese · ASS");
     await wait(() => starts().length === 4);
-    assert.equal(infos().at(-1).body.SubtitleStreamIndex, 14);
+    assert.equal(infos().at(-1).body.SubtitleStreamIndex, -1, "ASS is extracted as WebVTT instead of burned in");
     assert.equal(
       requests.filter((r) => r.path.includes("/Subtitles/")).length,
-      1,
-      "Bitmap/ASS tracks must keep original server rendering",
+      2,
+      "SRT and ASS use soft subtitles; bitmap tracks keep server rendering",
     );
     failText = true;
     await subs();
@@ -432,7 +432,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     assert.equal(pref.delay, 0);
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: TV text styling, secure cue rendering, absolute resume/timing/delay, paused apply, live appearance changes without reload, Off, bitmap/ASS preservation, extraction fallback, cancellation and reset",
+      "PASS: TV text styling, secure cue rendering, absolute resume/timing/delay, paused apply, live appearance changes without reload, Off, bitmap fallback/ASS extraction, extraction fallback, cancellation and reset",
     );
   } finally {
     await browser.close();

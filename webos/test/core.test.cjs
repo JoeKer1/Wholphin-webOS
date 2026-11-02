@@ -738,7 +738,7 @@ test("subtitle styling accepts only bounded known values and text codecs", () =>
   };
   assert.equal(C.textSubtitle(source, 9).Index, 9);
   assert.equal(C.textSubtitle(source, 12), undefined);
-  assert.equal(C.textSubtitle(source, 14), undefined);
+  assert.equal(C.textSubtitle(source, 14).Index, 14);
 });
 test("subtitle cues preserve absolute timing, overlap, seeks and delay without HTML rendering", () => {
   const cues = C.parseSubtitles(
@@ -871,4 +871,18 @@ test("subtitle timing belongs to one video, source and stable track identity", (
   assert.notEqual(key,C.subtitleTimingKey({Id:"movie"},{...source,Id:"another-source"},4));
   assert.notEqual(key,C.subtitleTimingKey({Id:"movie"},{...source,MediaStreams:[{...track,Path:"/media/movie.es.srt"}]},4));
   assert.equal(C.subtitleTimingKey({Id:"movie"},source,-1),"");
+});
+
+test("subtitle defaults are language-specific and automatically cover non-English audio", () => {
+ const source={DefaultAudioStreamIndex:1,DefaultSubtitleStreamIndex:4,MediaStreams:[
+  {Type:"Audio",Index:1,Language:"en"},{Type:"Audio",Index:2,Language:"jpn"},{Type:"Audio",Index:3,Language:"und"},
+  {Type:"Subtitle",Index:4,Language:"eng",Codec:"pgssub"},{Type:"Subtitle",Index:5,Language:"en",Codec:"srt"},
+  {Type:"Subtitle",Index:6,Language:"spa",Codec:"srt"}]};
+ assert.equal(C.defaultSubtitle(source,1,{mode:"off",foreignEnglish:true}),-1,"English audio does not trigger foreign rule");
+ assert.equal(C.defaultSubtitle(source,2,{mode:"off",foreignEnglish:true}),5,"Prefer soft English text to bitmap captions");
+ assert.equal(C.defaultSubtitle(source,3,{mode:"off",foreignEnglish:true}),-1,"Unknown audio does not guess");
+ assert.equal(C.defaultSubtitle(source,1,{mode:"language",language:"spa"}),6);
+ assert.equal(C.defaultSubtitle(source,1,{mode:"language",language:"fra"}),-1);
+ assert.equal(C.defaultSubtitle(source,2,{mode:"off",foreignEnglish:false}),-1);
+ assert.equal(C.defaultSubtitle(source,1,{mode:"remember"},{off:true}),-1);
 });

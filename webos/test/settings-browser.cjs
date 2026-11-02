@@ -88,8 +88,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page.evaluate(() =>
         document.activeElement.getAttribute("aria-label"),
       ),
-      "Subtitle appearance",
+      "Subtitle defaults",
     );
+    await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     await page
       .getByRole("heading", { name: "Subtitle appearance", exact: true })
