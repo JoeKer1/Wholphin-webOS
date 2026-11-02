@@ -11,7 +11,8 @@
     "test": "npm --prefix webos test && node --test test/*.test.cjs",
     "check": "npm --prefix webos run check",
     "build:firetv": "node tools/build.mjs firetv",
-    "package:firetv": "node tools/package.mjs firetv"
+    "package:firetv": "node tools/package.mjs firetv",
+    "test:menus": "npm run build && node test/menu-platform-browser.cjs"
   },
   "devDependencies": {
     "@babel/core": "^7.28.0",

@@ -71,3 +71,14 @@ Fire TV build, sideload, security and hardware validation details are in [platfo
 ## License and attribution
 
 Distributed under the [GNU GPL version 2](LICENSE), retaining the upstream Wholphin license. Wholphin branding/assets and the UI inspiration originate from [damontecres/Wholphin](https://github.com/damontecres/Wholphin); credit belongs to its contributors. Seasonal query presets are credited to [KefinTweaks](https://github.com/ranaldsgift/KefinTweaks), as documented in the source and webOS README. The Ember TV application is a separate implementation maintained here.
+
+### Shared menu regression checks
+
+After changing shared menus or remote navigation, run `npm run test:menus`.
+This builds LG webOS, Samsung Tizen and Fire TV assets, then exercises the same
+settings, nested subtitle appearance, Back/focus restoration and Home editor
+flows against each platform bundle. Tizen and Fire TV also run with the legacy
+layout fallback and missing APIs supplied by their compatibility bundle.
+Set `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` if Playwright/Chromium are outside the
+normal module and browser locations. These fixture checks complement device
+validation; they do not verify native playback or actual TV firmware rendering.

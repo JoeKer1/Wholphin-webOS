@@ -11,7 +11,8 @@
         document.getElementById("player-options").click();
         return;
       }
-      document.dispatchEvent(new KeyboardEvent("keydown", { keyCode: code, which: code, bubbles: true, cancelable: true }));
+      // Bubble from the focused control so nested menus can handle Back first.
+      (document.activeElement || document).dispatchEvent(new KeyboardEvent("keydown", { keyCode: code, which: code, bubbles: true, cancelable: true }));
     },
   };
   function capabilities() {
