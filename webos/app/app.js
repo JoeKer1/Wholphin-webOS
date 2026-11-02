@@ -143,7 +143,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.64"' +
+      '", Version="0.2.65"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -2350,6 +2350,22 @@
       return row;
     });
   }
+  async function setWatched(item, watched, signal) {
+    var context = session;
+    var data = await api(
+      "/Users/" + encodeURIComponent(context.user) + "/PlayedItems/" + encodeURIComponent(item.Id),
+      null, null, watched ? "POST" : "DELETE", { session: context, signal: signal },
+    );
+    // Jellyfin resets the resume point for both watched-state mutations.
+    item.UserData = Object.assign({}, item.UserData, {
+      Played: watched, PlaybackPositionTicks: 0, PlayedPercentage: watched ? 100 : 0,
+    }, watched ? {} : { PlayCount: 0, LastPlayedDate: null }, data || {});
+    if (session !== context) return;
+    // Home recommendations and filtered/season listings also depend on watched state.
+    homeCache.clear();
+    listingStates.clear();
+    previewCache.clear();
+  }
   async function home(tvLibraryItem) {
     var r = reset(tvLibraryItem ? tvLibraryItem.Name : "Home"),
       options = homeOptions();
@@ -2940,12 +2956,7 @@
           remove = !!(item.UserData && item.UserData.Played);
         watched.disabled = true;
         try {
-          await request(
-            "/Users/" + session.user + "/PlayedItems/" + item.Id,
-            null,
-            remove ? "DELETE" : "POST",
-          );
-          item.UserData = Object.assign({}, item.UserData, { Played: !remove });
+          await setWatched(item, !remove, controller.signal);
           if (valid() && selected.Id === item.Id) paint(item);
         } finally {
           if (valid()) watched.disabled = false;
@@ -5199,15 +5210,16 @@
       var subtitlePicker = subtitles.picker;
       var detailSubtitleOptions = subtitles.options;
       var ticks = (item.UserData && item.UserData.PlaybackPositionTicks) || 0;
+      var resumeButton = null;
       if (ticks)
-        button(
+        resumeButton = button(
           "Resume",
           function () {
             return play(item, ticks, true, false, detailSubtitleOptions());
           },
           actions,
         );
-      button(
+      var startButton = button(
         "Play from beginning",
         function () {
           return play(item, 0, false, false, detailSubtitleOptions());
@@ -5230,18 +5242,18 @@
           movieWatched.disabled = true;
           try {
             var remove = !!(item.UserData && item.UserData.Played);
-            await api(
-              "/Users/" +
-                session.user +
-                "/PlayedItems/" +
-                encodeURIComponent(item.Id),
-              null,
-              null,
-              remove ? "DELETE" : "POST",
-            );
-            item.UserData = Object.assign({}, item.UserData, {
-              Played: !remove,
-            });
+            await setWatched(item, !remove);
+            if (!movieWatched.isConnected) return;
+            ticks = item.UserData.PlaybackPositionTicks || 0;
+            if (resumeButton) {
+              resumeButton.hidden = !ticks;
+              if (!ticks) {
+                resumeButton.classList.remove("primary-action");
+                startButton.classList.add("primary-action");
+                labelAction(startButton, "Play from beginning");
+              }
+            }
+            itemMetadata(item, metadata);
             labelAction(
               movieWatched,
               !remove ? "Mark as unwatched" : "Mark as watched",
