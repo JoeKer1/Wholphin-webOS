@@ -28,6 +28,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     const c=JSON.parse(raw);nativeCommands.push(c);
     const event=(type)=>setTimeout(()=>window.EmberFireTV.receive({...nativeState,type,seekStart:0,seekEnd:120000}),0);
     if(c.action==='load'){nativeState={position:0,duration:120000,paused:true,id:c.id};if(window.failNextNativeLoad&&c.url.includes('/stream?')){window.failNextNativeLoad=false;event('error');}else event('loadedmetadata');}
+    if(c.action==='tracks')event('trackschanged');
     if(c.action==='play'){nativeState.paused=false;event('play');event('playing');}
     if(c.action==='pause'){nativeState.paused=true;event('pause');}
     if(c.action==='seek'){nativeState.position=c.ms;event('seeked');}
@@ -42,6 +43,19 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.ok(native.body.EnableDirectPlay && native.body.EnableDirectStream);
   assert.equal(native.body.MaxAudioChannels,6);
   assert.ok(await page.evaluate(()=>nativeCommands.some(c=>c.action==='load'&&c.url.includes('/stream?')&&c.tracks.subtitle===0&&c.tracks.audio===0)));
+
+  const beforeTracks = await page.evaluate(()=>nativeCommands.filter(c=>c.action==='load').length);
+  await page.locator('#subtitles').click();
+  await page.getByRole('button',{name:'Off',exact:true}).click();
+  await page.waitForFunction(()=>nativeCommands.some(c=>c.action==='tracks'&&c.tracks.subtitle===-1));
+  await page.locator('#playback-panel[hidden]').waitFor({state:'attached'});
+  assert.equal(await page.evaluate(()=>nativeCommands.filter(c=>c.action==='load').length),beforeTracks);
+  assert.equal(await page.locator('#player').isVisible(),true);
+  await page.locator('#subtitles').click();
+  await page.getByRole('button',{name:'English ASS',exact:true}).click();
+  await page.waitForFunction(()=>nativeCommands.some(c=>c.action==='tracks'&&c.tracks.subtitle===0));
+  await page.locator('#playback-panel[hidden]').waitFor({state:'attached'});
+  assert.equal(await page.evaluate(()=>nativeCommands.filter(c=>c.action==='load').length),beforeTracks);
 
   assert.equal(await page.locator('#player').evaluate(n=>getComputedStyle(n).backgroundColor),'rgba(0, 0, 0, 0)');
   await page.evaluate(()=>EmberFireTV.key(457));

@@ -10,10 +10,11 @@ The APK bundles Ember's shared UI from `webos/app` with a Fire TV platform adapt
 - Dolby AC-3/E-AC-3 are advertised only when decoding or the current audio route supports them. Output channels are bounded by that route; DTS/TrueHD are not advertised.
 - Media3 decoder initialization fallback is enabled. Runtime failures retry Jellyfin compatibility negotiation at the same position, with the selected tracks and paused state retained.
 - Direct-play audio and embedded subtitle selection maps Jellyfin stream indices to native track ordinals. Unsupported/mismatched native tracks fail into compatibility instead of silently selecting a different language.
-- Embedded SSA/ASS, PGS, SRT/WebVTT and MOV text can use native Media3 subtitle rendering. Styled SRT/WebVTT web overlays remain available. External or unsupported subtitles use the existing overlay or server conversion path. Full libass font/animation rendering and MPV are not bundled.
+- Embedded PGS, SRT/WebVTT and MOV text use native Media3 subtitle rendering. SSA/ASS uses libass 0.5.1 with a canvas overlay and MKV font attachment support, matching Wholphin on older Fire OS devices. Supported external ASS/SSA, SRT, WebVTT and TTML sidecars can retain Direct Play. Styled SRT/WebVTT web overlays remain available. Supported, already-loaded native subtitles switch on/off without restarting the video; unsupported tracks retain server conversion fallback. External PGS sidecars and MPV are not supported.
+- Find subtitles in the pre-play subtitle menu or player to search configured Jellyfin providers for SRT/WebVTT downloads. The server stores downloads and must grant the user subtitle management permission. Newly downloaded native sidecars may require a brief player reload at the current position; existing subtitle switches stay in place.
 - Live TV keeps its existing compatibility HLS and preview/tuner lifecycle.
 
-These changes follow the device-profile and renderer-fallback approach in upstream Wholphin's `PlayerFactory` and `DeviceProfileService`; the bundled interface stays shared across platforms. Physical Fire TV decoding, passthrough and subtitle rendering still need device validation.
+These changes follow the device-profile and renderer-fallback approach in upstream Wholphin's `PlayerFactory` and `DeviceProfileService`; the bundled interface stays shared across platforms. Direct Play and embedded PGS on/off have been exercised on Fire TV hardware. ASS styling/font fidelity, audio passthrough and subtitle timing still need broader device validation.
 
 ## Build
 

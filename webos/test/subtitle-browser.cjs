@@ -294,15 +294,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.screenshot({ path: "/tmp/wholphin-styled-subtitles.png" });
     await subs();
     await click("Off");
-    await wait(() => starts().length === 3);
+    await wait(() => page.locator("#playback-panel").isHidden());
+    assert.equal(starts().length, 2, "Turning off local subtitles does not restart video");
     assert.equal(await page.locator("#subtitle-overlay").isHidden(), true);
     await subs();
     await click("Spanish image");
-    await wait(() => starts().length === 4);
+    await wait(() => starts().length === 3);
     assert.equal(infos().at(-1).body.SubtitleStreamIndex, 12);
     await subs();
     await click("Japanese ASS");
-    await wait(() => starts().length === 5);
+    await wait(() => starts().length === 4);
     assert.equal(infos().at(-1).body.SubtitleStreamIndex, 14);
     assert.equal(
       requests.filter((r) => r.path.includes("/Subtitles/")).length,
@@ -312,7 +313,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     failText = true;
     await subs();
     await click("English text");
-    await wait(() => starts().length === 6);
+    await wait(() => starts().length === 5);
     assert.equal(
       infos().at(-1).body.SubtitleStreamIndex,
       9,
@@ -328,7 +329,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await click("Apply subtitle appearance");
     assert.equal(
       starts().length,
-      6,
+      5,
       "Already server-rendered playback should continue without reload",
     );
     await appearance();
@@ -348,13 +349,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.waitForTimeout(100);
     assert.equal(
       starts().length,
-      6,
+      5,
       "A late subtitle response must not restart stopped playback",
     );
     await page.locator("nav [data-nav=home]").click();
     await click("Subtitle test");
     await click("Play from beginning");
-    await wait(() => starts().length === 7);
+    await wait(() => starts().length === 6);
     assert.equal(
       infos().at(-1).body.SubtitleStreamIndex,
       -1,

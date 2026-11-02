@@ -53,3 +53,13 @@ test('Fire TV HTTP artwork uses local blobs, releases them, and ignores replaced
  await new Promise(r=>setImmediate(r));
  assert.equal(img.src,'https://secure.test/new');
 });
+test('Native subtitle changes are acknowledged without replacing the video and cancel on stop',async()=>{
+ const f=fixture();f.context.setTimeout=setTimeout;f.context.clearTimeout=clearTimeout;
+ f.p.src='https://media.test/movie.mkv';f.p.load();f.receive('loadedmetadata');
+ const before=f.commands.filter(c=>c.action==='load').length;
+ const changed=f.p.selectTracks({audio:0,subtitle:1});
+ assert.equal(f.commands.at(-1).action,'tracks');f.receive('trackschanged');await changed;
+ assert.equal(f.commands.filter(c=>c.action==='load').length,before);
+ const rejected=f.p.selectTracks({audio:0,subtitle:2});f.receive('tracksfailed');await assert.rejects(rejected,/unavailable/);
+ const cancelled=f.p.selectTracks({audio:0,subtitle:-1});f.p.removeAttribute('src');f.p.load();await assert.rejects(cancelled,/cancelled/);
+});

@@ -34,6 +34,18 @@ import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 import androidx.webkit.WebViewAssetLoader;
 import org.json.JSONObject;
+import org.json.JSONArray;
+import java.util.ArrayList;
+import androidx.media3.datasource.DefaultDataSource;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.extractor.DefaultExtractorsFactory;
+import io.github.peerless2012.ass.media.AssHandler;
+import io.github.peerless2012.ass.media.AssHandlerConfig;
+import io.github.peerless2012.ass.media.factory.AssRenderersFactory;
+import io.github.peerless2012.ass.media.parser.AssSubtitleParserFactory;
+import io.github.peerless2012.ass.media.type.AssRenderType;
+import io.github.peerless2012.ass.media.widget.AssSubtitleView;
+import io.github.peerless2012.ass.media.kt.AssPlayerKt;
 
 /** Bundled Ember UI over native video; remote pages cannot navigate into the bridge. */
 @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
@@ -43,6 +55,9 @@ public final class MainActivity extends Activity {
     private WebView web;
     private PlayerView video;
     private ExoPlayer player;
+    private AssHandler assHandler;
+    private AssSubtitleView assView;
+    private int externalSubtitle = -1;
     private int generation;
     private boolean destroyed, metadataSent, seeking;
     private boolean foreground;
@@ -141,14 +156,24 @@ public final class MainActivity extends Activity {
             if (tracks != null && tracks.optBoolean("unavailable")) { send("error"); return; }
             audioTrack = tracks == null ? -1 : tracks.optInt("audio", -1);
             subtitleTrack = tracks == null ? -1 : tracks.optInt("subtitle", -1);
+            externalSubtitle = tracks == null ? -1 : tracks.optInt("externalIndex", -1);
             tracksApplied = false;
             DefaultRenderersFactory renderers = new DefaultRenderersFactory(this).setEnableDecoderFallback(true);
-            player = new ExoPlayer.Builder(this, renderers).build();
+            assHandler = new AssHandler(AssRenderType.OVERLAY_CANVAS, new AssHandlerConfig(10000, 128, 1920 * 1080));
+            AssSubtitleParserFactory parser = new AssSubtitleParserFactory(assHandler);
+            DefaultMediaSourceFactory sources = new DefaultMediaSourceFactory(new DefaultDataSource.Factory(this),
+                AssPlayerKt.withAssMkvSupport(new DefaultExtractorsFactory(), parser, assHandler))
+                .setSubtitleParserFactory(parser);
+            player = new ExoPlayer.Builder(this, new AssRenderersFactory(assHandler, renderers))
+                .setMediaSourceFactory(sources).build();
+            assHandler.init(player);
+            assView = new AssSubtitleView(this, assHandler);
+            video.getSubtitleView().addView(assView, new FrameLayout.LayoutParams(-1, -1));
             player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA)
                 .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true);
             player.setHandleAudioBecomingNoisy(true);
             player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitleTrack < 0).build());
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitleTrack < 0 && externalSubtitle < 0).build());
             final int token = generation;
             player.addListener(new Player.Listener() {
                 private boolean current() { return player != null && token == generation; }
@@ -183,7 +208,23 @@ public final class MainActivity extends Activity {
             });
             video.setPlayer(player);
             video.setVisibility(View.VISIBLE);
-            player.setMediaItem(MediaItem.fromUri(uri));
+            MediaItem.Builder media = new MediaItem.Builder().setUri(uri);
+            ArrayList<MediaItem.SubtitleConfiguration> captions = new ArrayList<>();
+            JSONArray external = tracks == null ? null : tracks.optJSONArray("external");
+            if (external != null) for (int i = 0; i < Math.min(32, external.length()); i++) {
+                JSONObject entry = external.getJSONObject(i);
+                Uri text = Uri.parse(entry.getString("url"));
+                if (!uri.getScheme().equals(text.getScheme()) || !uri.getAuthority().equals(text.getAuthority()) || text.getUserInfo() != null)
+                    throw new IllegalArgumentException("Invalid subtitle origin");
+                String mime = entry.getString("mime");
+                if (!mime.equals("text/x-ssa") && !mime.equals("application/x-subrip") && !mime.equals("text/vtt") && !mime.equals("application/ttml+xml"))
+                    throw new IllegalArgumentException("Unsupported subtitle type");
+                captions.add(new MediaItem.SubtitleConfiguration.Builder(text).setMimeType(mime)
+                    .setId("ember-external-" + entry.getInt("index"))
+                    .setLanguage(entry.optString("language", "und")).build());
+            }
+            media.setSubtitleConfigurations(captions);
+            player.setMediaItem(media.build());
             player.prepare();
             return;
         }
@@ -191,6 +232,19 @@ public final class MainActivity extends Activity {
         if (name.equals("close")) { release(); return; }
         if (player == null) return;
         switch (name) {
+            case "tracks":
+                JSONObject selection = command.getJSONObject("tracks");
+                int previousAudio = audioTrack, previousSubtitle = subtitleTrack, previousExternal = externalSubtitle;
+                audioTrack = selection.optInt("audio", -1);
+                subtitleTrack = selection.optInt("subtitle", -1);
+                externalSubtitle = selection.optInt("externalIndex", -1);
+                tracksApplied = false;
+                if (applyTracks(player.getCurrentTracks())) send("trackschanged");
+                else {
+                    audioTrack = previousAudio; subtitleTrack = previousSubtitle; externalSubtitle = previousExternal;
+                    tracksApplied = true; send("tracksfailed");
+                }
+                break;
             case "play": if (foreground) player.play(); break;
             case "pause": player.pause(); break;
             case "seek":
@@ -221,15 +275,20 @@ public final class MainActivity extends Activity {
         if (tracksApplied || player == null) return true;
         TrackSelectionParameters.Builder selection = player.getTrackSelectionParameters().buildUpon()
             .clearOverridesOfType(C.TRACK_TYPE_AUDIO).clearOverridesOfType(C.TRACK_TYPE_TEXT)
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitleTrack < 0);
-        boolean audioFound = audioTrack < 0, subtitleFound = subtitleTrack < 0;
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitleTrack < 0 && externalSubtitle < 0);
+        boolean audioFound = audioTrack < 0, subtitleFound = subtitleTrack < 0 && externalSubtitle < 0;
         int audio = 0, subtitles = 0;
         for (Tracks.Group group : tracks.getGroups()) {
             for (int i = 0; i < group.length; i++) {
                 if (group.getType() == C.TRACK_TYPE_AUDIO && audio++ == audioTrack && group.isTrackSupported(i)) {
                     selection.addOverride(new TrackSelectionOverride(group.getMediaTrackGroup(), i)); audioFound = true;
                 }
-                if (group.getType() == C.TRACK_TYPE_TEXT && subtitles++ == subtitleTrack && group.isTrackSupported(i)) {
+                String trackId = group.getTrackFormat(i).id;
+                boolean externalTrack = trackId != null && trackId.startsWith("ember-external-");
+                boolean chosenText = externalSubtitle >= 0 ? ("ember-external-" + externalSubtitle).equals(trackId)
+                    : !externalTrack && subtitles == subtitleTrack;
+                if (group.getType() == C.TRACK_TYPE_TEXT && !externalTrack) subtitles++;
+                if (group.getType() == C.TRACK_TYPE_TEXT && chosenText && group.isTrackSupported(i)) {
                     selection.addOverride(new TrackSelectionOverride(group.getMediaTrackGroup(), i)); subtitleFound = true;
                 }
             }
@@ -256,6 +315,10 @@ public final class MainActivity extends Activity {
         } catch (Exception ignored) { /* Activity is closing. */ }
     }
     private void release() {
+        if (assView != null) {
+            video.getSubtitleView().removeView(assView);
+            assView = null;
+        }
         metadataSent = false;
         seeking = false;
         if (player != null) {
@@ -264,6 +327,7 @@ public final class MainActivity extends Activity {
             player = null;
             old.release();
         }
+        if (assHandler != null) { assHandler.release(); assHandler = null; }
         video.setVisibility(View.GONE);
     }
     private void key(int code) {

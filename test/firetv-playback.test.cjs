@@ -7,7 +7,7 @@ const source={Id:'source',MediaStreams:[{Type:'Video',Codec:'hevc',VideoRangeTyp
 test('Fire TV direct-play policy requires a detected decoder and excludes HDR or unsupported subtitles',()=>{
  assert.equal(F.policy(source,{native:true},15,caps).native,true);
  assert.equal(F.policy(source,{native:false},15,caps).native,false);
- assert.equal(F.policy(source,{native:true},22,caps).native,false);
+ assert.equal(F.policy(source,{native:true},22,caps).native,true);
  assert.equal(F.policy(source,{native:true},-1,{}).native,false);
  const hdr=structuredClone(source);hdr.MediaStreams[0].VideoRangeType='HDR10';
  assert.equal(F.policy(hdr,{native:true},-1,caps).native,false);
@@ -45,4 +45,16 @@ test('HDR10 and eight-channel decoded Opus direct play require display HDR and d
  assert.equal(p.CodecProfiles.find(c=>c.Codec==='ac3').Conditions[0].Value,'6');
  hdr.MediaStreams[0].VideoRangeType='DOVI';
  assert.equal(F.policy(hdr,{native:true},-1,hardware).native,false);
+});
+test('External captions keep direct play and use server-relative authenticated subtitle URLs',()=>{
+ const context={server:'https://media.test/jellyfin',itemId:'movie/id',token:'token&secret'};
+ const t=F.tracks({method:'DirectPlay',source:{Id:'source'}},source,3,22,null,true,context);
+ assert.equal(t.externalIndex,22);assert.equal(t.subtitle,-1);
+ assert.equal(t.external[0].mime,'application/x-subrip');
+ const url=new URL(t.external[0].url);
+ assert.equal(url.origin,'https://media.test');assert.equal(url.pathname,'/jellyfin/Videos/movie%2Fid/source/Subtitles/22/Stream.srt');
+ assert.equal(url.searchParams.get('api_key'),'token&secret');
+ const bad=structuredClone(source);bad.MediaStreams.find(s=>s.Index===22).Codec='pgssub';
+ assert.equal(F.policy(bad,{native:true},22,caps).native,false);
+ const p=F.profile(caps,C.profile());assert.ok(p.SubtitleProfiles.some(s=>s.Format==='ass'&&s.Method==='External'));
 });

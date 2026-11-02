@@ -143,7 +143,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.62"' +
+      '", Version="0.2.64"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -247,6 +247,7 @@
     if (node) node.focus();
   }
   function reset(title) {
+    closeSubtitleSearch(false);
     main.removeAttribute("data-profile-theme");
     document.body.classList.remove("choosing-profile");
     if (livePreview && title !== "Live TV") run(stop);
@@ -341,6 +342,7 @@
     if (activeGuide) activeGuide.focusChannel(playing.item.Id);
   }
   async function back() {
+    if (subtitleSearch && !subtitleSearch.hidden) { closeSubtitleSearch(); return; }
     if (main.classList.contains("profiles-page")) return profilesPage();
     var moreMenu = document.getElementById("detail-more-options");
     if (moreMenu && !moreMenu.hidden && !playing) {
@@ -4794,6 +4796,139 @@
       }
     });
   }
+  var subtitleSearch = el("section", null, document.body),
+    subtitleSearchController = null,
+    subtitleSearchFocus = null;
+  subtitleSearch.id = "subtitle-search";
+  subtitleSearch.hidden = true;
+  subtitleSearch.setAttribute("role", "dialog");
+  subtitleSearch.setAttribute("aria-modal", "true");
+  subtitleSearch.setAttribute("aria-label", "Download subtitles");
+  function closeSubtitleSearch(restore) {
+    if (!subtitleSearch) return;
+    if (subtitleSearchController) subtitleSearchController.abort();
+    subtitleSearchController = null;
+    subtitleSearch.hidden = true;
+    subtitleSearch.textContent = "";
+    if (restore !== false && subtitleSearchFocus && subtitleSearchFocus.isConnected)
+      subtitleSearchFocus.focus();
+  }
+  async function findSubtitles(item, source, downloaded) {
+    closeSubtitleSearch(false);
+    var controller = new AbortController(), context = session, view = revision;
+    subtitleSearchController = controller;
+    subtitleSearchFocus = document.activeElement;
+    function valid() {
+      return !controller.signal.aborted && session === context && revision === view &&
+        !subtitleSearch.hidden && (!playing || playing.item.Id === item.Id);
+    }
+    subtitleSearch.hidden = false;
+    el("h2", "Download subtitles", subtitleSearch);
+    button("Close", closeSubtitleSearch, subtitleSearch).focus();
+    el("p", "Find SRT or WebVTT subtitles to render on this TV without burn-in. Downloads are saved to your Jellyfin server.", subtitleSearch);
+    var label = el("label", "Language", subtitleSearch),
+      language = el("select", null, subtitleSearch);
+    language.id = "subtitle-search-language";
+    label.htmlFor = language.id;
+    var preferred = readPreference("track-preferences", {}).Subtitle || {},
+      initial = preferred.language || "eng";
+    [["eng", "English"], ["spa", "Spanish"], ["fra", "French"], ["deu", "German"], ["ita", "Italian"], ["por", "Portuguese"], ["jpn", "Japanese"], ["kor", "Korean"], ["zho", "Chinese"], ["hin", "Hindi"]].forEach(function (entry) {
+      var option = el("option", entry[1], language);
+      option.value = entry[0];
+    });
+    language.value = initial;
+    if (!language.value) language.value = "eng";
+    var search = button("Search", searchSubtitles, subtitleSearch),
+      results = el("div", null, subtitleSearch),
+      request = 0;
+    results.setAttribute("aria-live", "polite");
+    // Language lookup is optional; searching still works if the server denies it.
+    api("/Localization/Languages", null, null, "GET", { signal: controller.signal }).then(function (languages) {
+      if (!valid() || !Array.isArray(languages)) return;
+      var selected = language.value;
+      languages.forEach(function (entry) {
+        var code = entry.ThreeLetterISOLanguageName;
+        if (!/^[a-z]{3}$/.test(code || "") || Array.prototype.some.call(language.options, function (option) { return option.value === code; })) return;
+        var option = el("option", entry.DisplayName || entry.Name || code, language);
+        option.value = code;
+      });
+      language.value = selected;
+    }).catch(function () {});
+    async function searchSubtitles() {
+      var token = ++request, code = language.value;
+      results.textContent = "Searching…";
+      search.disabled = true;
+      language.disabled = true;
+      try {
+        var matches = await api("/Items/" + encodeURIComponent(item.Id) + "/RemoteSearch/Subtitles/" + encodeURIComponent(code), null, null, "GET", { signal: controller.signal, timeoutMs: 60000 });
+        if (!valid() || token !== request) return;
+        matches = (Array.isArray(matches) ? matches : []).filter(function (entry) {
+          return entry.Id && /^(srt|subrip|vtt|webvtt)$/i.test(entry.Format || "");
+        }).sort(function (a, b) {
+          return Number(!!b.IsHashMatch) - Number(!!a.IsHashMatch) ||
+            Number(/^(srt|subrip)$/i.test(b.Format)) - Number(/^(srt|subrip)$/i.test(a.Format)) ||
+            (Number(b.CommunityRating) || 0) - (Number(a.CommunityRating) || 0) ||
+            (Number(b.DownloadCount) || 0) - (Number(a.DownloadCount) || 0);
+        });
+        results.textContent = "";
+        if (!matches.length) el("p", "No compatible subtitles found. Try another language, or check the subtitle provider in Jellyfin.", results);
+        matches.slice(0, 100).forEach(function (entry) {
+          var text = [entry.Name || "Subtitle", entry.ProviderName, String(entry.Format).toUpperCase(),
+            entry.IsHashMatch ? "Exact file match" : "", entry.HearingImpaired ? "Hearing impaired" : "", entry.Forced ? "Forced" : ""].filter(Boolean).join(" · ");
+          button("Download and use: " + text, function () { return download(entry); }, results);
+        });
+        var first = results.querySelector("button");
+        if (first) focusContent(first);
+      } catch (error) {
+        if (valid() && token === request) results.textContent = error.status === 403
+          ? "This Jellyfin account does not have permission to search or download subtitles."
+          : "Subtitle search failed. Check the provider configuration in Jellyfin and try again.";
+      } finally { if (valid() && token === request) { search.disabled = false; language.disabled = false; } }
+    }
+    async function download(entry) {
+      search.disabled = true;
+      language.disabled = true;
+      results.textContent = "Downloading…";
+      var before = (source.MediaStreams || []).filter(function (track) { return track.Type === "Subtitle" && track.IsExternal; });
+      try {
+        await api("/Items/" + encodeURIComponent(source.Id || item.Id) + "/RemoteSearch/Subtitles/" + encodeURIComponent(entry.Id), null, null, "POST", { signal: controller.signal, timeoutMs: 60000 });
+        for (var attempt = 0; attempt < 8; attempt++) {
+          if (!valid()) return;
+          var metadata = await api("/Items/" + encodeURIComponent(item.Id) + "/PlaybackInfo", { UserId: context.user }, null, "GET", { signal: controller.signal }),
+            updated = (metadata.MediaSources || []).find(function (candidate) { return candidate.Id === source.Id; }),
+            track = updated && (updated.MediaStreams || []).find(function (candidate) {
+              return candidate.IsExternal && C.textSubtitle(updated, candidate.Index) && !before.some(function (old) {
+                return old.Path && candidate.Path ? old.Path === candidate.Path : old.Index === candidate.Index && old.Codec === candidate.Codec && old.Language === candidate.Language && old.DisplayTitle === candidate.DisplayTitle;
+              });
+            });
+          if (!valid()) return;
+          if (track) {
+            if (!P.nativeSubtitle) {
+              var style = subtitleOptions();
+              style.enabled = true;
+              localStorage.setItem(accountKey("subtitle-appearance"), JSON.stringify(style));
+            }
+            saveSubtitleChoice(item.Id, updated, track.Index);
+            closeSubtitleSearch(false);
+            try {
+              await downloaded(updated, track);
+              message("Subtitle downloaded and selected.");
+            } catch (error) { message("Subtitle downloaded, but could not select it. " + error.message); }
+            return;
+          }
+          results.textContent = "Waiting for Jellyfin to refresh subtitle tracks…";
+          await new Promise(function (resolve) { setTimeout(resolve, 1500); });
+        }
+        throw new Error("Jellyfin has not exposed the downloaded track yet. Try reopening subtitles in a moment; check the provider and server write permissions if it does not appear.");
+      } catch (error) {
+        if (valid()) results.textContent = error.status === 403
+          ? "This Jellyfin account does not have permission to download subtitles."
+          : "Could not select the download. " + error.message;
+      } finally {
+        if (valid()) { search.disabled = false; language.disabled = false; search.focus(); }
+      }
+    }
+  }
   function subtitleControl(item, parent, onSource) {
     var subtitleSettings = el("div", null, parent);
     subtitleSettings.className = "detail-subtitle-settings";
@@ -4923,6 +5058,16 @@
           option.dataset.index = String(track.index);
           option.setAttribute("aria-selected", String(track.index === chosen));
         });
+        var find = button("Find subtitles…", function () {
+          subtitleMenu.hidden = true;
+          subtitlePicker.setAttribute("aria-expanded", "false");
+          return findSubtitles(item, source, async function (updated) {
+            item.MediaSources = [updated];
+            await loadDetailSubtitles();
+            subtitlePicker.focus();
+          });
+        }, subtitleMenu);
+        find.setAttribute("role", "option");
         selectTrack(
           tracks.find(function (track) {
             return track.index === chosen;
@@ -5654,7 +5799,7 @@
     var draft = subtitleOptions();
     el(
       "p",
-      "TV styling supports SRT and WebVTT text. Image subtitles and ASS/SSA retain server rendering and original styling.",
+      "TV styling supports SRT and WebVTT text. Fire TV renders supported image subtitles and ASS/SSA locally with original styling; other unsupported formats may require server rendering.",
       container,
     );
     if (inPlayer)
@@ -5662,7 +5807,7 @@
         "p",
         playing && playing.subtitleCues
           ? "Current subtitles: styled on TV."
-          : "Current subtitles: Off or rendered by server.",
+          : "Current subtitles: Off or using original player/server styling.",
         container,
       );
     var preview = el("div", null, container);
@@ -5678,7 +5823,7 @@
         "enabled",
         "Text rendering",
         [false, true],
-        ["Server (original)", "Styled on TV"],
+        [P.nativeSubtitle ? "Original styling" : "Server (original)", "Styled on TV"],
       ],
       ["size", "Text size", [32, 40, 48, 56, 64]],
       ["color", "Text color", ["white", "yellow", "cyan"]],
@@ -6205,6 +6350,35 @@
           },
           content,
         );
+        button("Find subtitles…", function () {
+          return findSubtitles(active.item, active.source, async function (updated, track) {
+            if (playing !== active) return;
+            // Jellyfin can insert external tracks before the audio tracks.
+            var oldAudio = (active.source.MediaStreams || []).filter(function (stream) { return stream.Type === "Audio"; }),
+              ordinal = oldAudio.findIndex(function (stream) { return stream.Index === active.audioIndex; }),
+              newAudio = (updated.MediaStreams || []).filter(function (stream) { return stream.Type === "Audio"; });
+            var oldSubtitle = (active.source.MediaStreams || []).find(function (stream) { return stream.Type === "Subtitle" && stream.Index === active.subtitleIndex; }),
+              mappedSubtitle = oldSubtitle && (updated.MediaStreams || []).find(function (stream) {
+                return stream.Type === "Subtitle" && (oldSubtitle.Path && stream.Path ? oldSubtitle.Path === stream.Path :
+                  stream.Codec === oldSubtitle.Codec && stream.Language === oldSubtitle.Language && stream.DisplayTitle === oldSubtitle.DisplayTitle && !!stream.IsExternal === !!oldSubtitle.IsExternal);
+              });
+            active.source = updated;
+            active.item = Object.assign({}, active.item, { MediaSources: [updated] });
+            active.subtitleIndex = mappedSubtitle ? mappedSubtitle.Index : -1;
+            if (ordinal >= 0 && newAudio[ordinal]) active.audioIndex = newAudio[ordinal].Index;
+            if (active.nativeMode) {
+              // Newly downloaded sidecars are not attached to the native media item yet.
+              // Reload in place; external stream indices may also have shifted.
+              await play(active.item, position(), false, false, {
+                trackChange: true, paused: video.paused, mediaSourceId: updated.Id,
+                audioIndex: active.audioIndex, subtitleIndex: track.Index,
+                pendingPreference: { type: "Subtitle", value: C.trackPreference(updated, "Subtitle", track.Index) },
+              });
+            } else await switchTrack(true, track.Index);
+            if (!playing || playing.item.Id !== active.item.Id || playing.subtitleIndex !== track.Index)
+              throw new Error("Choose the downloaded track from Subtitles to retry.");
+          });
+        }, content);
         option(-1, "Off");
       }
       C.tracks(active.source, subtitle ? "Subtitle" : "Audio").forEach(
@@ -6221,8 +6395,8 @@
         el(
           "p",
           active.subtitleCues
-            ? "Text subtitles are styled on this TV. Appearance changes apply immediately; changing tracks briefly reloads playback."
-            : "Subtitles are rendered by the server. Enable Styled on TV in Subtitle appearance for SRT/WebVTT size, color, background, position and delay controls.",
+            ? "Text subtitles are styled on this TV. Appearance changes and supported track switches apply without restarting playback."
+            : active.nativeMode && P.nativeSubtitle ? "Subtitles render locally on this TV. Supported tracks switch in place without restarting the video." : "Subtitles are rendered by the server. Enable Styled on TV in Subtitle appearance for SRT/WebVTT size, color, background, position and delay controls.",
           content,
         );
     }
@@ -6236,6 +6410,42 @@
       rememberTrack(type, preference);
       closePlaybackPanel();
       return;
+    }
+    var nativeSwitch = subtitle && active.nativeMode && active.method === "DirectPlay" && video.selectTracks && P.nativeSubtitle(active.source, index),
+      overlaySwitch = subtitle && (active.subtitleCues || active.subtitleIndex < 0) &&
+        (index < 0 || (subtitleOptions().enabled && C.textSubtitle(active.source, index)));
+    if (nativeSwitch || overlaySwitch) {
+      busy = true;
+      try {
+        var style = subtitleOptions(), cues = null;
+        if (style.enabled && C.textSubtitle(active.source, index)) {
+          var text = await api("/Videos/" + encodeURIComponent(active.item.Id) + "/" + encodeURIComponent(active.source.Id) + "/Subtitles/" + index + "/Stream.vtt",
+            { StartPositionTicks: 0, CopyTimestamps: true, AddVttTimeMap: false }, null, "GET", { signal: active.extrasController.signal, subtitleText: true });
+          cues = C.parseSubtitles(text);
+          if (!cues.length) throw new Error("No subtitle cues returned");
+        }
+        if (playing !== active) return;
+        if (nativeSwitch) {
+          var selection = P.playbackTracks(active, active.source, active.audioIndex, index, cues, true,
+            { server: session.server, itemId: active.item.Id, token: session.token });
+          await video.selectTracks(selection);
+        }
+        if (playing !== active) return;
+        active.subtitleIndex = index;
+        active.subtitleCues = cues;
+        active.subtitleStyle = style;
+        rememberTrack(type, preference);
+        saveSubtitleChoice(active.item.Id, active.source, index);
+        applySubtitleStyle(subtitleOverlay, style);
+        renderSubtitleOverlay();
+        closePlaybackPanel();
+        showControls();
+        run(function () { return report("/Progress"); });
+        return;
+      } catch (error) {
+        if (playing !== active) return;
+        message("Could not change subtitles in place. " + error.message);
+      } finally { busy = false; }
     }
     var ticks = position(),
       paused = video.paused;
@@ -6745,6 +6955,7 @@
       if (previous)
         await stop({
           transition: true,
+          keepPlayer: !!options.trackChange && !wasLivePreview,
           positionTicks: previous.item.Id === item.Id ? ticks : undefined,
         });
       if (request !== playRequest || document.hidden) return;
@@ -6832,7 +7043,7 @@
       else playerLogo.removeAttribute("src");
       document.getElementById("end-time").textContent = "";
       if (P.playbackTracks && video.configure)
-        video.configure(P.playbackTracks(selected, sourceMetadata, playing.audioIndex, playing.subtitleIndex, subtitleCues, nativeMode));
+        video.configure(P.playbackTracks(selected, sourceMetadata, playing.audioIndex, playing.subtitleIndex, subtitleCues, nativeMode, { server: session.server, itemId: item.Id, token: session.token }));
       video.src = selected.url + (ticks ? "#t=" + ticks / 10000000 : "");
       resumeTimer = setInterval(finishResume, 250);
       video.load();
@@ -6845,7 +7056,10 @@
         });
       }, 10000);
     } catch (error) {
-      if (request === playRequest) throw error;
+      if (request === playRequest) {
+        if (!playing && options.trackChange) { player.hidden = true; document.body.classList.remove("is-playing"); }
+        throw error;
+      }
     } finally {
       if (playController === controller) playController = null;
       busy = false;
@@ -7026,13 +7240,16 @@
     playing = null;
     livePreview = false;
     document.body.classList.remove("live-preview");
+    closeSubtitleSearch(false);
     stopped.extrasController.abort();
     closePlaybackPanel(false);
     video.pause();
     video.removeAttribute("src");
     video.load();
-    player.hidden = true;
-    document.body.classList.remove("is-playing");
+    if (!options.keepPlayer) {
+      player.hidden = true;
+      document.body.classList.remove("is-playing");
+    }
     if (
       !options.transition &&
       stopped.returnFocus &&
@@ -7281,6 +7498,20 @@
   }
   document.addEventListener("keydown", function (e) {
     var key = P.keyCode(e);
+    if (subtitleSearch && !subtitleSearch.hidden) {
+      if (key === 461 || key === 27) { e.preventDefault(); closeSubtitleSearch(); }
+      else if (key >= 37 && key <= 40) {
+        var options = Array.prototype.slice.call(subtitleSearch.querySelectorAll("button,select")).filter(function (node) { return !node.disabled; }),
+          index = options.indexOf(document.activeElement);
+        // Left/right changes the language; up/down moves between controls.
+        if (document.activeElement.tagName === "SELECT" && (key === 37 || key === 39)) {
+          var select = document.activeElement;
+          select.selectedIndex = Math.max(0, Math.min(select.options.length - 1, select.selectedIndex + (key === 37 ? -1 : 1)));
+        } else focusContent(options[Math.max(0, Math.min(options.length - 1, index + (key === 37 || key === 38 ? -1 : 1)))]);
+        e.preventDefault();
+      }
+      return;
+    }
     if (livePreview && key === 413) {
       e.preventDefault();
       run(stop);
@@ -7770,6 +8001,7 @@
     run(stop);
   });
   document.addEventListener("visibilitychange", function () {
+    if (document.hidden) closeSubtitleSearch(false);
     if (document.hidden && cancelQuickConnect) {
       login();
       message(

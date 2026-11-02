@@ -47,6 +47,7 @@
   }
   root.EmberPlatform = {
     loadImage: loadImage,
+    nativeSubtitle: function (source, index) { return root.EmberFirePlayback.nativeSubtitle(source, index); },
     playbackPolicy: function (source, options, index) { return root.EmberFirePlayback.policy(source, options, index, capabilities()); },
     playbackProfile: function (fallback) { return root.EmberFirePlayback.profile(capabilities(), fallback); },
     playbackTracks: function () { return root.EmberFirePlayback.tracks.apply(null, arguments); },
@@ -58,8 +59,14 @@
     exit: function () { command("exit"); },
     createPlayer: function (element) {
       var source = "", id = 0, ready = false, paused = true, seeking = false,
-        time = 0, duration = NaN, width = 0, height = 0, error = null,
+        time = 0, duration = NaN, width = 0, height = 0, error = null, trackChange = null,
         range = null, pending = [], lastRect = "", tracks = { audio: -1, subtitle: -1 };
+      function settleTracks(reason) {
+        if (!trackChange) return;
+        root.clearTimeout(trackChange.timer);
+        var change = trackChange; trackChange = null;
+        if (reason) change.reject(reason); else change.resolve();
+      }
       function emit(type) { element.dispatchEvent(new Event(type)); }
       function settle(reason) {
         var jobs = pending;
@@ -77,6 +84,10 @@
       }
       receive = function (data) {
         if (data.id !== id || !source) return;
+        if (data.type === "trackschanged" || data.type === "tracksfailed") {
+          settleTracks(data.type === "tracksfailed" ? new Error("Native subtitle track is unavailable") : null);
+          return;
+        }
         time = Math.max(0, Number(data.position) || 0) / 1000;
         duration = data.live ? Infinity : data.duration > 0 ? data.duration / 1000 : NaN;
         if (typeof data.paused === "boolean") paused = data.paused;
@@ -98,8 +109,17 @@
         addEventListener: element.addEventListener.bind(element),
         removeEventListener: element.removeEventListener.bind(element),
         configure: function (value) { tracks = value; },
+        selectTracks: function (value) {
+          if (!source || !ready || value.unavailable) return Promise.reject(new Error("Native tracks are unavailable"));
+          settleTracks(new Error("Track change replaced"));
+          return new Promise(function (resolve, reject) {
+            trackChange = { resolve: resolve, reject: reject, timer: root.setTimeout(function () { settleTracks(new Error("Track change timed out")); }, 5000) };
+            send("tracks", { tracks: value });
+          });
+        },
         load: function () {
           settle(new Error("Playback cancelled."));
+          settleTracks(new Error("Playback cancelled."));
           send("close");
           id++;
           ready = false; paused = true; seeking = false;

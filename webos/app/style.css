@@ -2078,3 +2078,21 @@ body.choosing-profile main.profiles-page[data-profile-theme]:not([data-profile-t
   background-size: var(--profile-pattern-size) var(--profile-pattern-size), cover;
   background-repeat: repeat, no-repeat;
 }
+
+#subtitle-search {
+  position: fixed;
+  z-index: 50;
+  top: 48px;
+  right: 56px;
+  bottom: 48px;
+  width: 760px;
+  overflow-y: auto;
+  padding: 28px;
+  background: #19151f;
+  border: 1px solid #65586e;
+}
+#subtitle-search h2 { margin: 0 0 20px; font-size: 32px; }
+#subtitle-search p { font-size: 23px; line-height: 1.4; }
+#subtitle-search button { display: block; width: 100%; margin: 12px 0; text-align: left; }
+#subtitle-search label { display: block; margin: 16px 0 8px; }
+#subtitle-search select { width: 100%; }
