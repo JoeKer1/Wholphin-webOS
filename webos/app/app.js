@@ -143,7 +143,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.65"' +
+      '", Version="0.2.66"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -5753,7 +5753,7 @@
     };
   }
   function subtitleOptions() {
-    return C.subtitleStyle(readPreference("subtitle-appearance", {}));
+    return C.subtitleStyle(readPreference("subtitle-appearance", { enabled: !P.nativeSubtitle }));
   }
   var subtitleOverlay = el("div", null, player);
   subtitleOverlay.id = "subtitle-overlay";
@@ -5884,7 +5884,7 @@
     button(
       "Reset appearance",
       function () {
-        draft = C.subtitleStyle({});
+        draft = C.subtitleStyle({ enabled: !P.nativeSubtitle });
         controls.forEach(function (control, index) {
           control.textContent = label(settings[index]);
         });

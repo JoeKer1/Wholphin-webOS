@@ -22,7 +22,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       stats = null,
       sessionId = null,
       tvDevice = null,
-      denyStats = false;
+      denyStats = false,
+      serveText = false,
+      audioCodec = null;
     function item() {
       return {
         Id: "movie",
@@ -57,8 +59,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
           {
             Type: "Audio",
             Index: 1,
-            Codec: container === "mkv" ? "dts" : "eac3",
-            Channels: 6,
+            Codec: audioCodec || (container === "mkv" ? "dts" : "eac3"),
+            Channels: audioCodec === "opus" ? 8 : 6,
             Language: "eng",
             DisplayTitle: "English surround",
           },
@@ -82,6 +84,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         body,
         query: Object.fromEntries(u.searchParams),
       });
+      if (serveText && u.pathname.includes("/Subtitles/")) return route.fulfill({contentType:"text/vtt",body:"WEBVTT\n\n00:01:39.000 --> 00:01:41.000\nLocal Matrix subtitle\n"});
       let json = { Items: [] };
       if (u.pathname.endsWith("/Views"))
         json = {
@@ -157,6 +160,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await route.fulfill({ json });
     });
     await page.addInitScript(() => {
+      // Exercise explicit server-rendering opt-out and its fallback path.
+      localStorage.setItem("wholphin-subtitle-appearance:https://jellyfin.test:user", JSON.stringify({enabled:false}));
       localStorage.setItem(
         "wholphin-session",
         JSON.stringify({
@@ -477,6 +482,29 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "An error while hidden must not start another video stream",
     );
     await page.evaluate(() => delete document.hidden);
+    // No saved appearance setting: LG must render text locally by default,
+    // including MKV/HEVC HDR video with audio that requires conversion.
+    container = "mkv";
+    range = "HDR10";
+    audioCodec = "opus";
+    defaultSubtitle = 9;
+    serveText = true;
+    denyStats = false;
+    await page.evaluate(() => {
+      ["subtitle-appearance", "subtitle-choices", "track-preferences"].forEach(key=>localStorage.removeItem("wholphin-"+key+":https://jellyfin.test:user"));
+    });
+    await play();
+    request = infos().at(-1).body;
+    assert(request.DeviceProfile.Name.includes("C1"));
+    assert.equal(request.SubtitleStreamIndex,-1,"Local SRT must be excluded from the server's video stream");
+    assert.equal(request.AllowVideoStreamCopy,true,"Subtitles must preserve HDR video-copy eligibility");
+    assert.equal(request.EnableDirectStream,true);
+    await atTime(100);
+    await page.waitForFunction(()=>!document.getElementById("subtitle-overlay").hidden);
+    assert.match(await page.locator("#subtitle-overlay").textContent(),/Local Matrix subtitle/);
+    text = await info();
+    assert(text.includes("Video copied; audio encoded"));
+    await stopped();
     await page.locator("nav [data-nav=settings]").click();
     await click("Playback mode: LG C1 native (experimental)");
     await page.locator("nav [data-nav=home]").click();

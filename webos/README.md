@@ -6,7 +6,7 @@ Implemented: Wholphin-style focused-item backdrops and summaries, collapsible na
 
 ## Subtitle downloads
 
-Choose **Find subtitles…** in a movie or episode subtitle menu, or in the player’s Subtitles panel. Search by language and select **Download and use**. Ember shows SRT/WebVTT results, prioritizes exact file matches, waits for Jellyfin’s track refresh, then selects the new track. Jellyfin needs a configured subtitle provider, subtitle management permission for the signed-in user, and permission to write subtitle files. Downloads enable local text rendering on webOS/Tizen; PGS still uses server burn-in there. New Fire TV sidecars may reload the player at its current position to attach the track.
+Choose **Find subtitles…** in a movie or episode subtitle menu, or in the player’s Subtitles panel. Search by language and select **Download and use**. Ember shows SRT/WebVTT results, prioritizes exact file matches, waits for Jellyfin’s track refresh, then selects the new track. Jellyfin needs a configured subtitle provider, subtitle management permission for the signed-in user, and permission to write subtitle files. SRT/WebVTT text renders locally by default on webOS/Tizen, unless the user explicitly selects Server (original) in Subtitle appearance; PGS still uses server burn-in there. New Fire TV sidecars may reload the player at its current position to attach the track.
 
 ## Run locally
 

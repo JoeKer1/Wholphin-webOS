@@ -107,6 +107,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       return route.fulfill({ json });
     });
     await page.addInitScript(() => {
+      // Exercise explicit server-rendering opt-out and its fallback path.
+      localStorage.setItem("wholphin-subtitle-appearance:https://jellyfin.test:user", JSON.stringify({enabled:false}));
       localStorage.setItem(
         "wholphin-session",
         JSON.stringify({
@@ -380,7 +382,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         ),
       ),
     );
-    assert.equal(pref.enabled, false);
+    assert.equal(pref.enabled, true);
     assert.equal(pref.size, 48);
     assert.equal(pref.delay, 0);
     assert.deepEqual(errors, []);
