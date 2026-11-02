@@ -64,6 +64,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
+    assert.equal(await page.locator(":focus").textContent(), "30 seconds");
+    await page.screenshot({path:"/private/tmp/ember-ux-settings-choice.png"});
+    await page.locator("#setting-options").getByRole("button", {name:"60 seconds",exact:true}).press("Enter");
     assert.equal(
       await page
         .getByRole("button", {
@@ -101,6 +104,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       exact: true,
     });
     await mode.click();
+    await page.locator("#setting-options").getByRole("button", {name:"LG C1 native (experimental)",exact:true}).click();
     assert.equal(
       await page
         .getByRole("button", {

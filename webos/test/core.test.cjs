@@ -368,10 +368,10 @@ test("track choices preserve Jellyfin stream indices and descriptive labels", ()
   };
   assert.deepEqual(C.tracks(source, "Audio"), [
     { index: 2, label: "English AAC stereo" },
-    { index: 7, label: "spa · AAC · 6 ch" },
+    { index: 7, label: "Spanish · AAC · 6 ch" },
   ]);
   assert.deepEqual(C.tracks(source, "Subtitle"), [
-    { index: 11, label: "eng · SRT · Forced" },
+    { index: 11, label: "English · SRT · Forced" },
   ]);
   assert.deepEqual(C.tracks({}, "Audio"), []);
 });

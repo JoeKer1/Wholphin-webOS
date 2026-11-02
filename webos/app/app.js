@@ -119,14 +119,9 @@
         img.alt = "";
       }
     }
-    if (text.textContent !== label) {
-      text.textContent = label;
-      text.style.setProperty(
-        "--action-label-width",
-        Math.ceil(text.scrollWidth) + "px",
-      );
-    }
+    text.textContent = label;
   }
+
   function message(text) {
     status.textContent = text || "";
   }
@@ -143,7 +138,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.69"' +
+      '", Version="0.2.70"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -342,6 +337,8 @@
     if (activeGuide) activeGuide.focusChannel(playing.item.Id);
   }
   async function back() {
+    var settingsMenu = document.getElementById("setting-options");
+    if (settingsMenu) { settingsMenu.closeMenu(); return; }
     if (subtitleSearch && !subtitleSearch.hidden) { closeSubtitleSearch(); return; }
     if (main.classList.contains("profiles-page")) return profilesPage();
     var moreMenu = document.getElementById("detail-more-options");
@@ -628,6 +625,53 @@
       else b.removeAttribute("aria-current");
     });
   }
+  function settingChoices(title, choices, current, choose, opener) {
+    var menu = el("section", null, main);
+    menu.id = "setting-options";
+    menu.className = "choice-menu";
+    menu.setAttribute("role", "dialog");
+    menu.setAttribute("aria-modal", "true");
+    menu.setAttribute("aria-label", title);
+    function close() { menu.remove(); if (opener.isConnected) opener.focus(); }
+    menu.closeMenu = close;
+    el("h2", title, menu);
+    button("Close options", close, menu).className = "menu-close";
+    choices.forEach(function (choice) {
+      var option = button(choice[1], function () { choose(choice[0]); close(); }, menu);
+      option.setAttribute("aria-pressed", String(choice[0] === current));
+    });
+    menu.addEventListener("keydown", function (event) {
+      var key = event.keyCode;
+      if ([27, 461, 10009].indexOf(key) >= 0) { event.preventDefault(); event.stopPropagation(); close(); }
+      else if ((key >= 37 && key <= 40) || key === 9) {
+        event.preventDefault(); event.stopPropagation();
+        var nodes = Array.prototype.slice.call(menu.querySelectorAll("button")), at = nodes.indexOf(document.activeElement);
+        var delta = key === 37 || key === 38 || (key === 9 && event.shiftKey) ? -1 : 1;
+        nodes[(at + delta + nodes.length) % nodes.length].focus();
+      }
+    });
+    (menu.querySelector('[aria-pressed="true"]') || menu.querySelector("button")).focus();
+  }
+  async function signOut() {
+    try { await stop(); } catch (_) {}
+    try {
+      var root = profileAccount();
+      await Promise.allSettled([
+        api("/Sessions/Logout", null, {}, "POST"),
+        root.token !== session.token ? api("/Sessions/Logout", null, {}, "POST", { session: root }) : Promise.resolve(),
+      ]);
+    } catch (_) {}
+    localStorage.removeItem("wholphin-session");
+    session = null;
+    bonfireAvailable = false;
+    bonfireProfile = null;
+    stack = [];
+    libraryItems = [];
+    libraryUpdated = 0;
+    libraryRequest = null;
+    homeCache.clear(); previewCache.clear(); queueItems = []; listingStates.clear();
+    navigation(); login();
+  }
   function settings() {
     reset("Settings");
     selectNav("settings");
@@ -755,15 +799,14 @@
         value,
         setting[3],
         function (control) {
-          var options = playbackOptions(),
-            values = setting[2];
-          options[setting[0]] =
-            values[(values.indexOf(options[setting[0]]) + 1) % values.length];
-          localStorage.setItem(
-            accountKey("playback-options"),
-            JSON.stringify(options),
-          );
-          control.refreshSetting();
+          var options = playbackOptions();
+          settingChoices(setting[1], setting[2].map(function (v) {
+            return [v, v ? v + (setting[0] === "countdown" ? " seconds" : " episodes") : "Off"];
+          }), options[setting[0]], function (v) {
+            options[setting[0]] = v;
+            localStorage.setItem(accountKey("playback-options"), JSON.stringify(options));
+            control.refreshSetting();
+          }, control);
         },
         function () {
           return setting[1] + ": " + value();
@@ -830,13 +873,16 @@
         ? (P.playbackName || "Samsung AVPlay") + " with Jellyfin compatibility transcoding."
         : "Compatibility works with the widest range of files. Native enables supported C1 formats.",
       function (control) {
-        decoder.native = !decoder.native;
-        localStorage.setItem(
-          accountKey("decoder-options"),
-          JSON.stringify(decoder),
-        );
-        control.refreshSetting();
-        vision.disabled = !decoder.native;
+        var before = decoder.native;
+        decoder.native = false; var compatible = modeValue();
+        decoder.native = true; var nativeName = modeValue();
+        decoder.native = before;
+        settingChoices("Playback mode", [[false, compatible], [true, nativeName]], before, function (native) {
+          decoder.native = native;
+          localStorage.setItem(accountKey("decoder-options"), JSON.stringify(decoder));
+          control.refreshSetting();
+          vision.disabled = !decoder.native;
+        }, control);
       },
       function () {
         return "Playback mode: " + modeValue();
@@ -869,7 +915,7 @@
       modeControl.disabled = !P.playbackPolicy;
       vision.hidden = true;
     }
-    var about = section("About", "Ember for Jellyfin · v0.2.69");
+    var about = section("About", "Ember for Jellyfin · v0.2.70");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -877,34 +923,7 @@
       "Sign out",
       "",
       "Disconnect this TV from the current account.",
-      async function () {
-        try {
-          await stop();
-        } catch (_) {}
-        try {
-          var root = profileAccount();
-          await Promise.allSettled([
-            api("/Sessions/Logout", null, {}, "POST"),
-            root.token !== session.token
-              ? api("/Sessions/Logout", null, {}, "POST", { session: root })
-              : Promise.resolve(),
-          ]);
-        } catch (_) {}
-        localStorage.removeItem("wholphin-session");
-        session = null;
-        bonfireAvailable = false;
-        bonfireProfile = null;
-        stack = [];
-        libraryItems = [];
-        libraryUpdated = 0;
-        libraryRequest = null;
-        homeCache.clear();
-        previewCache.clear();
-        queueItems = [];
-        listingStates.clear();
-        navigation();
-        login();
-      },
+      signOut,
     );
     pane.addEventListener("focusin", function (event) {
       var area = event.target.closest(".settings-section");
@@ -966,13 +985,15 @@
     var options = JSON.parse(JSON.stringify(homeOptions())),
       form = el("form", null, main);
     form.className = "home-options";
+    form.id = "home-options-form";
     main.classList.add("home-editor-page");
     el(
       "p",
       "Choose what appears on Home, then arrange each row. Changes apply only to this profile when you save.",
       form,
     ).className = "metadata";
-    var editorActions = el("div", null, form);
+    var editorActions = el("div", null, main);
+    main.insertBefore(editorActions, form);
     editorActions.className = "home-editor-actions";
     var rowsEditor,
       controller = new AbortController(),
@@ -1378,6 +1399,23 @@
     );
     editButton("Cancel changes", back, editorActions);
     var save = el("button", "Save and open Home", editorActions);
+    save.setAttribute("form", form.id);
+    var editorReturn = form.querySelector("input");
+    form.addEventListener("focusin", function (event) { editorReturn = event.target; });
+    form.addEventListener("keydown", function (event) {
+      if (event.keyCode !== 39 || !picker.hidden) return;
+      var node = event.target, line = node.closest(".home-row-setting");
+      if ((node.tagName === "INPUT" && node.type === "checkbox") ||
+          (line && node === line.querySelector("button:last-child"))) {
+        event.preventDefault(); event.stopPropagation(); save.focus();
+      }
+    });
+    editorActions.addEventListener("keydown", function (event) {
+      if (event.keyCode === 40 || (event.keyCode === 37 && event.target === editorActions.querySelector("button"))) {
+        event.preventDefault(); event.stopPropagation();
+        focusContent(editorReturn && editorReturn.isConnected ? editorReturn : form.querySelector("input"));
+      }
+    });
     save.type = "submit";
     form.onsubmit = function (event) {
       event.preventDefault();
@@ -1662,6 +1700,10 @@
       feedback.textContent = grid.children.length
         ? ""
         : "No profiles are available for this account.";
+      if (!grid.children.length) {
+        button("Retry profiles", profilesPage, content);
+        button("Sign out", signOut, content);
+      }
     } catch (error) {
       if (!valid()) return;
       feedback.textContent =
@@ -1671,6 +1713,7 @@
             ? "Your account session expired. Sign out and sign in again."
             : "Could not load Bonfire profiles. Try again.";
       button("Retry profiles", profilesPage, content);
+      button("Sign out", signOut, content);
     }
     if (!valid()) return;
     focusFirst();
@@ -1837,6 +1880,23 @@
       user = field("Username", "text"),
       password = field("Password", "password");
     password.required = false;
+    var serverError = el("p", "", form), userError = el("p", "", form);
+    serverError.id = "server-error"; userError.id = "username-error";
+    [serverError, userError].forEach(function (node) { node.className = "field-error"; node.setAttribute("role", "alert"); });
+    form.insertBefore(serverError, server.nextSibling);
+    form.insertBefore(userError, user.nextSibling);
+    server.setAttribute("aria-describedby", "server-error server-example");
+    user.setAttribute("aria-describedby", "username-error");
+    var example = el("p", "For example: http://192.168.1.10:8096 or https://media.example.com", form);
+    example.id = "server-example"; example.className = "field-hint";
+    form.insertBefore(example, serverError.nextSibling);
+    function validateServer() {
+      serverError.textContent = ""; server.removeAttribute("aria-invalid");
+      try { return C.serverUrl(server.value); }
+      catch (error) { serverError.textContent = error.message; server.setAttribute("aria-invalid", "true"); server.focus(); return null; }
+    }
+    server.addEventListener("input", function () { serverError.textContent = ""; server.removeAttribute("aria-invalid"); });
+    user.addEventListener("input", function () { userError.textContent = ""; user.removeAttribute("aria-invalid"); });
     var submit = el("button", "Sign in", form);
     submit.type = "submit";
     var loginError = el("p", "", form);
@@ -1847,9 +1907,13 @@
         submit.disabled = true;
         loginError.textContent = "";
         try {
-          var normalizedServer = C.serverUrl(server.value);
-          if (!user.value.trim())
-            throw new Error("Enter your Jellyfin username.");
+          var normalizedServer = validateServer();
+          if (!normalizedServer) return;
+          userError.textContent = ""; user.removeAttribute("aria-invalid");
+          if (!user.value.trim()) {
+            userError.textContent = "Enter your Jellyfin username.";
+            user.setAttribute("aria-invalid", "true"); user.focus(); return;
+          }
           server.value = normalizedServer;
           session = { server: normalizedServer };
           message("Connecting…");
@@ -1874,7 +1938,8 @@
     var quick = button(
       "Use Quick Connect",
       function () {
-        var normalized = C.serverUrl(server.value);
+        var normalized = validateServer();
+        if (!normalized) return;
         session = { server: normalized };
         password.value = "";
         return quickConnect(normalized);
@@ -3627,7 +3692,9 @@
       }[kind];
       dialog.setAttribute("aria-label", title);
       el("h2", title, dialog);
-      button("Close options", closeOptions, dialog).focus();
+      var dialogClose = button("Close options", closeOptions, dialog);
+      dialogClose.className = "menu-close";
+      dialogClose.focus();
       var content = el("div", null, dialog),
         choices;
       if (kind === "sort") choices = sortOptions;
@@ -3694,6 +3761,7 @@
           String(state.options[kind] === choice[0]),
         );
       });
+      focusContent(content.querySelector('[aria-pressed="true"]') || content.querySelector("button"));
     }
     ["sort", "watched", "genre", "year"].forEach(function (kind) {
       var label =
@@ -4843,7 +4911,7 @@
     }
     subtitleSearch.hidden = false;
     el("h2", "Download subtitles", subtitleSearch);
-    button("Close", closeSubtitleSearch, subtitleSearch).focus();
+    button("Close", closeSubtitleSearch, subtitleSearch).className = "menu-close";
     el("p", "Find SRT or WebVTT subtitles to render on this TV without burn-in. Downloads are saved to your Jellyfin server.", subtitleSearch);
     var label = el("label", "Language", subtitleSearch),
       language = el("select", null, subtitleSearch);
@@ -4861,6 +4929,7 @@
       results = el("div", null, subtitleSearch),
       request = 0;
     results.setAttribute("aria-live", "polite");
+    language.focus();
     // Language lookup is optional; searching still works if the server denies it.
     api("/Localization/Languages", null, null, "GET", { signal: controller.signal }).then(function (languages) {
       if (!valid() || !Array.isArray(languages)) return;
@@ -5388,14 +5457,7 @@
         },
         extraActions,
       );
-      button(
-        "Back",
-        function () {
-          extraActions.hidden = true;
-          return back();
-        },
-        extraActions,
-      );
+
     } else button("Back", back, actions);
     if (item.Type === "Series") {
       seriesReady = seriesRows(item, showSeasons, seasonsError);
@@ -6279,7 +6341,7 @@
     if (!active || (active.live && kind !== "queue" && kind !== "info")) return;
     var panel = document.getElementById("playback-panel"),
       token = ++panelRequest;
-    if (panel.hidden) panelReturnFocus = document.activeElement;
+    if (panel.hidden || !panel.contains(document.activeElement)) panelReturnFocus = document.activeElement;
     panel.hidden = false;
     panel.style.bottom =
       Math.max(230, document.getElementById("controls").offsetHeight + 16) +
@@ -6297,11 +6359,13 @@
       timing: "Subtitle timing",
     }[kind];
     panel.classList.toggle("subtitle-picker", kind === "subtitles");
+    panel.classList.toggle("compact-menu", kind === "audio" || kind === "chapters");
     panel.classList.toggle("subtitle-appearance-panel", kind === "appearance");
     panel.setAttribute("aria-label", title);
     el("h2", title, panel);
     var close = button("Close", closePlaybackPanel, panel);
-    if (subtitleSection) close.className = "subtitle-panel-close";
+    close.className = "menu-close";
+    if (subtitleSection) close.classList.add("subtitle-panel-close");
     close.focus();
     var content = el("div", null, panel);
     el("p", "Loading…", content);
@@ -6394,8 +6458,12 @@
     else if (kind === "chapters") {
       var chapters = C.chapters(active.item);
       if (!chapters.length) el("p", "No chapters available.", content);
+      var chapterIndex = 0;
       chapters.forEach(function (chapter, index) {
-        button(
+        if (chapter.StartPositionTicks / 10000000 <= video.currentTime) chapterIndex = index;
+      });
+      chapters.forEach(function (chapter, index) {
+        var chapterButton = button(
           formatTime(chapter.StartPositionTicks / 10000000) +
             " · " +
             (chapter.Name || "Chapter " + (index + 1)),
@@ -6410,7 +6478,10 @@
           },
           content,
         );
+        chapterButton.setAttribute("aria-pressed", String(index === chapterIndex));
       });
+      var currentChapter = content.querySelector('[aria-pressed="true"]');
+      if (currentChapter) focusContent(currentChapter);
     } else {
       var subtitle = kind === "subtitles",
         current = subtitle ? active.subtitleIndex : active.audioIndex;
@@ -6474,10 +6545,14 @@
       });
       if (subtitle && findButton) content.appendChild(findButton);
       if (!subtitle) el("p", "Language choices are remembered for this account on this TV.", content);
-      else {
+      {
         var currentOption = content.querySelector('[aria-pressed="true"]');
         if (currentOption) focusContent(currentOption);
       }
+    }
+    if (kind === "queue" || kind === "info") {
+      var entry = content.querySelector(".queue-entry button, .playback-info-row, button:not(:disabled)");
+      if (entry) focusContent(entry);
     }
     if (kind === "timing" || kind === "appearance") {
       var first = content.querySelector("button:not(:disabled)");
@@ -7786,9 +7861,19 @@
         document.getElementById("toggle").focus();
         return;
       }
-      if (tools.contains(focused) && key === 38) {
+      if (tools.contains(focused)) {
         e.preventDefault();
-        document.getElementById("player-options").focus();
+        var group = focused.closest(".player-tool-group"), groups = Array.prototype.slice.call(tools.querySelectorAll(".player-tool-group"));
+        var members = Array.prototype.slice.call(group.querySelectorAll("button:not(:disabled)")), column = members.indexOf(focused), row = groups.indexOf(group);
+        if (key === 37 || key === 39) {
+          (members[column + (key === 37 ? -1 : 1)] || focused).focus();
+        } else {
+          var nextGroup = groups[row + (key === 38 ? -1 : 1)];
+          if (nextGroup) {
+            var nextMembers = nextGroup.querySelectorAll("button:not(:disabled)");
+            if (nextMembers.length) nextMembers[Math.min(column, nextMembers.length - 1)].focus();
+          } else if (key === 38) document.getElementById("player-options").focus();
+        }
         return;
       }
     }

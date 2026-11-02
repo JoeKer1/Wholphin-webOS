@@ -36,8 +36,8 @@
         <div id="player-heading"><img id="player-logo" alt="" hidden /><time id="player-wall-clock"></time></div>
         <h2 id="playing-title"></h2>
         <p id="playing-year"></p>
-        <p id="end-time"></p>
         <div class="seek-row">
+          <p id="end-time"></p>
           <p id="clock"></p>
           <input
             id="timeline"
@@ -77,12 +77,9 @@
           </div>
         </div>
         <div id="player-tools" hidden>
-          <button id="chapters">Chapters</button>
-          <button id="queue">Queue</button>
-          <button id="fit">Fill screen</button>
-          <button id="playback-info">Playback info</button>
-          <button id="subtitle-timing">Subtitle timing</button>
-          <button id="subtitle-appearance">Subtitle appearance</button>
+          <div class="player-tool-group"><span>Playback</span><button id="chapters">Chapters</button><button id="queue">Queue</button></div>
+          <div class="player-tool-group"><span>Subtitles</span><button id="subtitle-timing" aria-label="Subtitle timing">Timing</button><button id="subtitle-appearance" aria-label="Subtitle appearance">Appearance</button></div>
+          <div class="player-tool-group"><span>Display &amp; diagnostics</span><button id="fit">Fill screen</button><button id="playback-info">Playback info</button></div>
         </div>
       </div>
       <section

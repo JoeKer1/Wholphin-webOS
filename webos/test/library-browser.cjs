@@ -230,6 +230,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     assert.equal(calls.length, before, "Back reuses loaded library items");
     await page.screenshot({ path: "/tmp/wholphin-library-scroll.png" });
     await page.locator("#library-sort").click();
+    assert.equal(await page.locator(":focus").getAttribute("aria-pressed"),"true");
+    await page.screenshot({path:"/private/tmp/ember-ux-library-sort.png"});
     await click("Date added (newest)");
     await page.getByText("48 of 240 items", { exact: true }).waitFor();
     assert.equal(calls.at(-1).SortBy, "DateCreated,SortName");

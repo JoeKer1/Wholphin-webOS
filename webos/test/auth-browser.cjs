@@ -78,6 +78,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         .getByRole("button", { name: "Use Quick Connect", exact: true })
         .click();
     }
+    await page.getByRole("button", {name:"Use Quick Connect",exact:true}).click();
+    assert.equal(await page.locator(":focus").getAttribute("id"),"field-0");
+    assert.equal(await page.getByLabel("Server URL",{exact:true}).getAttribute("aria-invalid"),"true");
+    assert.ok(await page.locator("#server-error").textContent());
+    await page.screenshot({path:"/private/tmp/ember-ux-inline-error.png"});
+    await page.getByLabel("Server URL",{exact:true}).fill("https://jellyfin.test");
+    await page.getByRole("button", {name:"Sign in",exact:true}).click();
+    assert.equal(await page.locator(":focus").getAttribute("id"),"field-2");
+    assert.match(await page.locator("#username-error").textContent(),/username/);
     await start();
     await page.getByText("123456", { exact: true }).waitFor();
     assert.ok(

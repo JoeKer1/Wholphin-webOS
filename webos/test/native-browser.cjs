@@ -291,6 +291,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     }
     await page.locator("nav [data-nav=settings]").click();
     await click("Playback mode: Compatibility");
+    await page.locator("#setting-options").getByRole("button",{name:"LG C1 native (experimental)",exact:true}).click();
     await click("Dolby Vision MP4 (experimental): Off");
     await page.locator("nav [data-nav=home]").click();
     await click("4K test");
@@ -507,6 +508,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await stopped();
     await page.locator("nav [data-nav=settings]").click();
     await click("Playback mode: LG C1 native (experimental)");
+    await page.locator("#setting-options").getByRole("button",{name:"Compatibility",exact:true}).click();
     await page.locator("nav [data-nav=home]").click();
     await click("4K test");
     await play();

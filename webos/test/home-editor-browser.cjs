@@ -88,6 +88,18 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page.locator(".home-row-editor").waitFor();
     }
     await editor();
+    const reset = page.getByRole("button", {name:"Reset row order and artwork",exact:true});
+    await reset.focus();
+    await page.keyboard.press("ArrowUp");
+    await page.screenshot({path:"/private/tmp/ember-ux-home-toolbar.png"});
+    const saveBar = await page.locator(".home-editor-actions").boundingBox();
+    assert.ok(saveBar.y >= 0 && saveBar.y + saveBar.height < 1080, "Save/Cancel stays visible at the bottom of the form");
+    await page.locator(".home-options input[type=checkbox]").first().focus();
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await page.locator(":focus").textContent(),"Save and open Home");
+    await page.keyboard.press("ArrowDown");
+    assert.equal(await page.locator(":focus").getAttribute("type"),"checkbox");
+
     await page.getByRole("button", { name: "Pin genre", exact: true }).click();
     await page.getByLabel("Search genres").fill("Com");
     await page.getByLabel("Search genres").press("Enter");

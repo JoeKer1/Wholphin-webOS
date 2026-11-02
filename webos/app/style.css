@@ -1527,7 +1527,7 @@ body:not(.signed-in) main {
     opacity 170ms ease 30ms;
 }
 .icon-action:focus .action-label {
-  max-width: var(--action-label-width, 340px);
+  max-width: 640px;
   margin-left: 12px;
   opacity: 1;
 }
@@ -2138,3 +2138,39 @@ body.choosing-profile main.profiles-page[data-profile-theme]:not([data-profile-t
 .subtitle-editor .subtitle-editor-save { background: #c5a8ee; border-color: #c5a8ee; color: #19151f; }
 
 #playback-panel.subtitle-appearance-panel .subtitle-editor-actions button:first-child { margin-left: 0; }
+
+/* Use intrinsic text width after fonts/layout settle; never cache a clipped width. */
+.actions .icon-action { flex-shrink: 0; }
+.action-label { width: max-content; flex-shrink: 0; }
+.home-editor-actions { flex-shrink: 0; }
+.home-editor-page .home-options > label { scroll-margin-top: 110px; }
+#library-options { bottom: auto; max-height: calc(100vh - 170px); }
+#library-options h2, .choice-menu h2 { margin-right: 170px; }
+#library-options .menu-close, #playback-panel .menu-close, .choice-menu .menu-close { position: absolute; top: 18px; right: 24px; width: auto; margin: 0; padding: 10px 16px; font-size: 22px; }
+.choice-menu { position: fixed; top: 120px; right: 80px; width: 700px; max-height: calc(100vh - 200px); overflow-y: auto; z-index: 10; padding: 28px; background: #19151f; border: 1px solid #65586e; }
+.choice-menu > button:not(.menu-close) { display: block; width: 100%; margin: 12px 0; text-align: left; }
+.choice-menu [aria-pressed="true"]::after { content: " ✓"; }
+.field-error { color: #ffc2bc; margin: 8px 0; }
+.field-error:empty { display: none; }
+.field-hint { color: #c9c2d0; font-size: 20px; margin: 8px 0 20px; }
+input[aria-invalid="true"] { border-color: #ffc2bc; }
+#playback-panel.compact-menu { top: auto; height: auto; max-height: calc(100vh - 320px); width: 580px; padding: 24px; }
+#playback-panel.compact-menu h2 { margin-right: 100px; }
+#playback-panel.compact-menu p { font-size: 20px; }
+#player-tools .player-tool-group { display: flex; align-items: center; margin-bottom: 8px; }
+#player-tools .player-tool-group > span { width: 270px; flex-shrink: 0; color: #ddd; font-size: 22px; }
+#player-tools .player-tool-group button { margin-bottom: 0; }
+
+.settings-pane { padding-left: 12px; padding-top: 12px; }
+#subtitle-search { bottom: auto; max-height: calc(100vh - 96px); }
+#subtitle-search h2 { margin-right: 110px; }
+#subtitle-search .menu-close { position: absolute; top: 18px; right: 24px; width: auto; margin: 0; padding: 10px 16px; font-size: 22px; }
+
+main.home-editor-page { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 40px; }
+.home-editor-page > h1 { flex-shrink: 0; }
+.home-editor-page .home-editor-actions { position: static; }
+.home-editor-page .home-options { overflow-y: auto; min-height: 0; flex: 1; padding: 8px; margin-top: 12px; }
+.seek-row { padding-top: 30px; }
+#end-time { top: 0; right: 0; margin: 0; }
+
+.profile-content > button { margin: 8px; }

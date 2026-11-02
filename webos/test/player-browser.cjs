@@ -301,6 +301,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await waitFor(() => starts().length >= count);
     }
     await click("Movie one");
+    const expandedAction = page.getByRole("button",{name:"Play from beginning",exact:true});
+    await expandedAction.focus();
+    await page.waitForFunction(() => {
+      const label = document.querySelector(".icon-action:focus .action-label");
+      return label && label.clientWidth >= label.scrollWidth && getComputedStyle(label).opacity === "1";
+    });
+    await page.screenshot({path:"/private/tmp/ember-ux-action-label.png"});
+
     await click("More options");
     await click("Add to queue");
     await page.locator("nav [data-nav=home]").click();
@@ -344,6 +352,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.keyboard.press("Enter");
     assert.equal(await page.locator(":focus").getAttribute("id"), "toggle");
     await page.locator("#player-options").click();
+    await page.keyboard.press("ArrowDown");
+    assert.equal(await page.locator(":focus").getAttribute("id"), "subtitle-timing");
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await page.locator(":focus").getAttribute("id"), "subtitle-appearance");
+    await page.keyboard.press("ArrowDown");
+    assert.equal(await page.locator(":focus").getAttribute("id"), "playback-info");
+    await page.screenshot({path:"/private/tmp/ember-ux-player-groups.png"});
     await page.keyboard.press("Escape");
     assert.equal(await page.locator("#player-tools").isHidden(), true);
     assert.equal(
@@ -378,13 +393,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page
       .getByRole("button", { name: "Spanish stereo", exact: true })
       .waitFor();
+    assert.equal(await page.locator(":focus").getAttribute("aria-pressed"),"true");
     await page.keyboard.press("ArrowDown");
     assert.ok(
       await page
         .locator("#playback-panel")
         .evaluate((p) => p.contains(document.activeElement)),
     );
-    await page.screenshot({ path: "/tmp/wholphin-player-audio.png" });
+    assert.ok((await page.locator("#playback-panel").boundingBox()).height < 400);
+    await page.screenshot({ path: "/private/tmp/ember-ux-audio.png" });
     await click("Spanish stereo");
     await started(2);
     assert.equal(infos().at(-1).body.AudioStreamIndex, 5);
@@ -418,6 +435,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "Track switch preserves pause",
     );
     await control("chapters");
+    assert.match(await page.locator(":focus").textContent(),/0:00/);
+    await page.screenshot({path:"/private/tmp/ember-ux-chapters.png"});
     await click("5:00 · The discovery");
     assert.equal(
       await page.locator("#video").evaluate((v) => v.currentTime),

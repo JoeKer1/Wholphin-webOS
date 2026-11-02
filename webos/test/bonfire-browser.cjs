@@ -17,7 +17,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     let available = true,
-      mode = "normal";
+      mode = "normal", empty = false;
     const profiles = [
       {
         profileUserId: "master",
@@ -65,7 +65,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
           "Profile requests use the active valid credential",
         );
         return route.fulfill({
-          json: profiles.map((p) =>
+          json: (empty ? [] : profiles).map((p) =>
             Object.fromEntries(
               Object.entries(p).map(([k, v]) => [
                 k[0].toUpperCase() + k.slice(1),
@@ -359,6 +359,18 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .getByRole("button", { name: "Unlock profile", exact: true })
       .click();
     await page.getByRole("heading", { name: "Home", exact: true }).waitFor();
+    empty = true;
+    await page.locator("nav [data-nav=profiles]").click();
+    await page.getByText("No profiles are available for this account.",{exact:true}).waitFor();
+    assert.equal(await page.getByRole("button",{name:"Sign out",exact:true}).isVisible(),true);
+    assert.equal(await page.locator(":focus").textContent(),"Retry profiles");
+    await page.screenshot({path:"/private/tmp/ember-ux-profiles.png"});
+    empty = false;
+    await page.getByRole("button",{name:"Retry profiles",exact:true}).click();
+    await page.getByRole("button",{name:"Kids, PIN required",exact:true}).click();
+    await page.getByLabel("Profile PIN",{exact:true}).fill("9797");
+    await page.getByRole("button",{name:"Unlock profile",exact:true}).click();
+    await page.getByRole("heading",{name:"Home",exact:true}).waitFor();
     available = false;
     await page.locator("nav [data-nav=settings]").click();
     await page

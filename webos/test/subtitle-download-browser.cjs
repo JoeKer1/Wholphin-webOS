@@ -262,7 +262,6 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.getByRole("combobox",{name:"Subtitles before playback"}).click();
     await page.locator("button:visible").filter({hasText:/^Find subtitles…$/}).click();
     await page.locator("#subtitle-search").waitFor({state:"visible"});
-    await page.keyboard.press("ArrowDown");
     assert.equal(await page.locator("#subtitle-search-language").evaluate(n=>n===document.activeElement),true);
     await page.keyboard.press("ArrowDown");
     assert.equal(await page.locator("#subtitle-search").getByRole("button",{name:"Search",exact:true}).evaluate(n=>n===document.activeElement),true);
