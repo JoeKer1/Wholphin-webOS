@@ -50,7 +50,7 @@
     loadImage: loadImage,
     nativeSubtitle: function (source, index) { return root.EmberFirePlayback.nativeSubtitle(source, index); },
     playbackPolicy: function (source, options, index) { return root.EmberFirePlayback.policy(source, options, index, capabilities()); },
-    playbackProfile: function (fallback) { return root.EmberFirePlayback.profile(capabilities(), fallback); },
+    playbackProfile: function (fallback, source) { return root.EmberFirePlayback.profile(capabilities(), fallback, source); },
     playbackTracks: function () { return root.EmberFirePlayback.tracks.apply(null, arguments); },
     id: "firetv",
     deviceName: "Fire TV",

@@ -138,7 +138,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.73"' +
+      '", Version="0.2.74"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -916,7 +916,7 @@
       vision.hidden = true;
     }
     row(device, "Screensaver", "", "Artwork, idle delay and clock for this profile.", function () { return go(screensaverSettings); });
-    var about = section("About", "Ember for Jellyfin · v0.2.73");
+    var about = section("About", "Ember for Jellyfin · v0.2.74");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -7199,7 +7199,7 @@
         native: nativeMode,
         dolbyVision: decoder.dolbyVision,
       });
-      if (nativeMode && P.playbackProfile) deviceProfile = P.playbackProfile(C.profile());
+      if (nativeMode && P.playbackProfile) deviceProfile = P.playbackProfile(C.profile(), sourceMetadata);
       var forceTranscode =
         !!live || !!options.compatibility ||
         (!(nativeMode && P.playbackPolicy) && (!!options.trackChange || !!subtitleCues || !!options.applyPreferences));
@@ -7218,7 +7218,7 @@
           : nativeMode ? 6 : 2,
         AudioStreamIndex: options.audioIndex,
         SubtitleStreamIndex: subtitleCues ? -1 : options.subtitleIndex,
-        MediaSourceId: options.mediaSourceId,
+        MediaSourceId: options.mediaSourceId || (nativeMode && P.playbackProfile && sourceMetadata ? sourceMetadata.Id : undefined),
       };
       var info = await playbackApi(
         "/Items/" + encodeURIComponent(item.Id) + "/PlaybackInfo",

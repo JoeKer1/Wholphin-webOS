@@ -14,6 +14,16 @@
       return s.Type === "Subtitle" && s.Index === index;
     });
   }
+  // Media3 can decode profile 8's HDR10-compatible HEVC base layer.
+  // Never treat profile 5, HLG-base DV, or missing compatibility metadata as HDR10.
+  function hdr10Fallback(video, caps) {
+    if (!video || String(video.Codec).toLowerCase() !== "hevc" ||
+        (caps.videoRanges || []).indexOf("HDR10") < 0 ||
+        !(caps.videos || []).some(function (v) { return v.codec === "hevc" && v.bitDepth >= 10; })) return false;
+    if (video.VideoRangeType === "HDR10Plus") return true;
+    return ["DOVIWithHDR10", "DOVIWithHDR10Plus"].indexOf(video.VideoRangeType) >= 0 &&
+      Number(video.DvProfile) === 8 && Number(video.DvBlSignalCompatibilityId) === 1;
+  }
   function policy(source, options, index, caps) {
     if (!options.native) return { native: false, reason: "Compatibility mode selected" };
     var video = ((source && source.MediaStreams) || []).find(function (s) { return s.Type === "Video"; }),
@@ -21,13 +31,13 @@
       text = subtitle(source, index);
     if (!support || !(caps.audio || []).length) return { native: false, reason: "No matching device decoder capability" };
     var range = video.VideoRangeType || (video.VideoRange === "HDR" || video.BitDepth > 8 ? "UnknownHDR" : "SDR");
-    if ((caps.videoRanges || ["SDR"]).indexOf(range) < 0)
+    if ((caps.videoRanges || ["SDR"]).indexOf(range) < 0 && !hdr10Fallback(video, caps))
       return { native: false, reason: "Video range is not supported by the connected display" };
     if (!nativeSubtitle(source, index == null ? -1 : index))
       return { native: false, reason: "Selected subtitles require server conversion" };
-    return { native: true, reason: "Fire TV device decoder and audio-route negotiation" };
+    return { native: true, reason: hdr10Fallback(video, caps) ? "HDR10-compatible HEVC base layer (Media3)" : "Fire TV device decoder and audio-route negotiation" };
   }
-  function profile(caps, fallback) {
+  function profile(caps, fallback, source) {
     var videos = (caps.videos || []).filter(function (v) { return ["h264", "hevc", "vp9", "av1"].indexOf(v.codec) >= 0; }),
       audio = (caps.audio || []).filter(function (a) { return ["aac", "mp3", "flac", "opus", "vorbis", "ac3", "eac3"].indexOf(a) >= 0; }),
       channels = Math.max(2, Math.min(6, Number(caps.maxAudioChannels) || 2));
@@ -36,9 +46,14 @@
     fallback.DirectPlayProfiles = [{ Container: "mkv,mp4,m4v,mov,webm,ts,mpegts", Type: "Video",
       VideoCodec: videos.map(function (v) { return v.codec; }).join(","), AudioCodec: audio.join(",") }];
     fallback.CodecProfiles = videos.map(function (v) {
+      var ranges = v.bitDepth > 8 ? (caps.videoRanges || ["SDR"]).slice() : ["SDR"],
+        metadata = source && (source.MediaStreams || []).find(function (s) { return s.Type === "Video"; });
+      // Advertise an extended range only for the source whose base layer was checked.
+      if (v.codec === "hevc" && v.bitDepth >= 10 && hdr10Fallback(metadata, caps) && ranges.indexOf(metadata.VideoRangeType) < 0)
+        ranges.push(metadata.VideoRangeType);
       var conditions = [condition("Width", v.width), condition("Height", v.height),
         condition("VideoBitDepth", v.bitDepth), condition("VideoFramerate", v.frameRate),
-        condition("VideoBitrate", v.bitrate), condition("VideoRangeType", (v.bitDepth > 8 ? caps.videoRanges || ["SDR"] : ["SDR"]).join("|"), "EqualsAny", false)];
+        condition("VideoBitrate", v.bitrate), condition("VideoRangeType", ranges.join("|"), "EqualsAny", false)];
       if (v.codec === "h264") {
         conditions.push(condition("VideoLevel", v.level || 41));
         conditions.push(condition("VideoProfile", "baseline|constrained baseline|main|high", "EqualsAny", false));

@@ -58,3 +58,23 @@ test('External captions keep direct play and use server-relative authenticated s
  assert.equal(F.policy(bad,{native:true},22,caps).native,false);
  const p=F.profile(caps,C.profile());assert.ok(p.SubtitleProfiles.some(s=>s.Format==='ass'&&s.Method==='External'));
 });
+test('DV profile 8 HDR10 base layer stays direct-playable without advertising generic Dolby Vision support',()=>{
+ const hardware={...caps,videoRanges:['SDR','HDR10','HLG']};
+ const movie=structuredClone(source),video=movie.MediaStreams[0];
+ Object.assign(video,{VideoRangeType:'DOVIWithHDR10Plus',DvProfile:8,DvBlSignalCompatibilityId:1,Width:3840,Height:2024,Profile:'Main 10'});
+ assert.equal(F.policy(movie,{native:true},-1,hardware).native,true);
+ const ranges=(m,h=hardware)=>F.profile(h,C.profile(),m).CodecProfiles.find(c=>c.Codec==='hevc').Conditions.find(c=>c.Property==='VideoRangeType').Value.split('|');
+ assert.ok(ranges(movie).includes('DOVIWithHDR10Plus'));
+ assert.ok(!ranges().includes('DOVIWithHDR10Plus'),'Generic capability profile stays conservative');
+ for(const bad of [{DvProfile:5},{DvProfile:7},{DvBlSignalCompatibilityId:4},{DvBlSignalCompatibilityId:undefined},{VideoRangeType:'DOVI'}]) {
+  const invalid=structuredClone(movie);Object.assign(invalid.MediaStreams[0],bad);
+  assert.equal(F.policy(invalid,{native:true},-1,hardware).native,false);
+  assert.ok(!ranges(invalid).includes(invalid.MediaStreams[0].VideoRangeType));
+ }
+ assert.equal(F.policy(movie,{native:true},-1,caps).native,false,'SDR display must not receive HDR');
+ const eightBit={...hardware,videos:[{...caps.videos[1],bitDepth:8}]};
+ assert.equal(F.policy(movie,{native:true},-1,eightBit).native,false);
+ assert.ok(!ranges(movie,eightBit).includes('DOVIWithHDR10Plus'));
+ const hdr10plus=structuredClone(movie);hdr10plus.MediaStreams[0].VideoRangeType='HDR10Plus';
+ assert.equal(F.policy(hdr10plus,{native:true},-1,hardware).native,true);
+});
