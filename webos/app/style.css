@@ -2238,3 +2238,19 @@ main.home-editor-page { display: flex; flex-direction: column; overflow: hidden;
 .screensaver-settings > button:focus { background: #f5e9de; color: #21170f; outline: 3px solid #ffb477; outline-offset: -3px; }
 @keyframes saver-zoom { from { transform: scale(1); } to { transform: scale(1.08); } }
 @media (prefers-reduced-motion: reduce) { #screensaver .saver-art { animation: none; transition: none; } }
+
+/* Seerr uses the existing cards, focus treatment and menu controls. */
+.seerr-page { padding-bottom: 100px; }
+.seerr-login { display: flex; flex-direction: column; max-width: 800px; gap: 14px; margin: 24px 0; }
+.seerr-login input, .seerr-login select { width: 100%; box-sizing: border-box; }
+.seerr-search { display: flex; gap: 16px; margin: 24px 0; }
+.seerr-search input { flex: 1; }
+.seerr-overview { max-width: 1100px; line-height: 1.5; }
+.seerr-seasons { display: flex; flex-wrap: wrap; gap: 16px; margin: 20px 0; }
+.seerr-seasons button[aria-pressed="true"] { box-shadow: inset 0 0 0 3px #ffb477; }
+
+.seerr-page > button { margin-top: 18px; }
+.seerr-page button:disabled { opacity: .5; }
+.seerr-page button:focus { background: #f5e9de; color: #21170f; border-color: #f5e9de; outline: 3px solid #ffb477; outline-offset: -3px; }
+.seerr-seasons button[aria-pressed] { position: relative; padding-right: 64px; }
+.seerr-seasons button[aria-pressed="true"]::after { content: "✓"; position: absolute; right: 22px; }

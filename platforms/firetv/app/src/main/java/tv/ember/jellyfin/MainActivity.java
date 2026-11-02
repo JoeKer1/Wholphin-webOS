@@ -53,6 +53,7 @@ public final class MainActivity extends Activity {
     private static final String HOME = "https://appassets.androidplatform.net/assets/index.html";
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WebView web;
+    private SeerrClient seerr;
     private PlayerView video;
     private ExoPlayer player;
     private AssHandler assHandler;
@@ -115,6 +116,7 @@ public final class MainActivity extends Activity {
                 return true;
             }
         });
+        seerr = new SeerrClient(this);
         web.addJavascriptInterface(new Bridge(), "EmberAndroid");
         web.loadUrl(HOME);
         web.requestFocus();
@@ -129,6 +131,15 @@ public final class MainActivity extends Activity {
         }
     };
     private final class Bridge {
+        @JavascriptInterface public void seerrRequest(String raw) {
+            if (raw == null || raw.length() > 32768) return;
+            handler.post(() -> {
+                if (destroyed || !HOME.equals(web.getUrl())) return;
+                try { seerr.request(new JSONObject(raw), result -> handler.post(() -> {
+                    if (!destroyed && HOME.equals(web.getUrl())) web.evaluateJavascript("window.EmberFireTV.seerrResult(" + result.toString() + ")", null);
+                })); } catch (Exception ignored) {}
+            });
+        }
         @JavascriptInterface public String capabilities() {
             return PlaybackCapabilities.read(MainActivity.this).toString();
         }
@@ -361,6 +372,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onDestroy() {
         destroyed = true;
+        if (seerr != null) seerr.close();
         handler.removeCallbacksAndMessages(null);
         release();
         web.removeJavascriptInterface("EmberAndroid");

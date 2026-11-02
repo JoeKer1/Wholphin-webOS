@@ -66,7 +66,7 @@ The initial device profile advertises MP4 H.264/AAC/MP3 direct playback, with co
 
 Resume reloads the latest server bookmark, then seeks the native player to that absolute time for both direct playback and HLS. Initial seeks are retried as the TV becomes ready; session reporting begins only after the seek is confirmed. Progress and stop reports are ordered, with no extra offset added to HLS timestamps. A failed initial seek preserves the bookmark. Seeking still depends on the TV's native HLS seekable window. Native mode has a single Compatibility retry on decoder failure.
 
-Not implemented: multiple accounts, DVR recording management, music, Seerr, subtitle search/download, trickplay, refresh-rate switching, and Android/MPV-specific playback features.
+Not implemented: multiple accounts, DVR recording management, music, Seerr on LG/Tizen, subtitle search/download, trickplay, refresh-rate switching, and Android/MPV-specific playback features.
 
 
 ## Home and loading
@@ -341,3 +341,11 @@ Hardware check: the LG C1 playing WDTN HD through Jellyfin exposed a seekable li
 ### v0.2.51 — Home customization
 
 Settings → Customize Home now includes per-row Up/Down ordering, hide/show, poster/thumbnail artwork and removable pinned collection, playlist, genre and studio rows. Pinning shows a row of that source's titles, with account-scoped Jellyfin requests. Choices load in batches with search, retry and duplicate prevention. Existing row/library toggles and title labels remain available. Save/Cancel stay visible while scrolling; edits are a draft until saved, and cancel leaves saved preferences intact. Reset row order and artwork clears individual visibility/order/layout overrides without deleting pinned sources. Seasonal row settings use stable holiday keys across years. Empty rows remain hidden and Home retains lazy, bounded-concurrency loading. All preferences stay local to the selected profile on this TV.
+
+### Seerr on Fire TV
+
+The Fire TV build supports direct Seerr sign-in with Jellyfin or Seerr-local credentials from the **Seerr** sidebar entry or **Settings → Playback → Seerr**. No extra server container or API key is needed. Enter the Seerr base URL and sign in separately for each Ember profile.
+
+Discover provides trending titles, movies, TV, upcoming movies, search and My requests, with additional results loaded as you browse. Movie and season requests require confirmation and respect Seerr permissions/quotas; 4K is offered when allowed. Available titles can open their Jellyfin detail page when Seerr supplies a Jellyfin item ID.
+
+Native HTTP handles cookies and CSRF. Cookies are stored in Android app-private storage, scoped to the Ember profile, Jellyfin server and Seerr URL; passwords are not saved. Cookie expiry is respected and disconnect clears the current profile’s saved session. LG and Samsung do not show this Fire TV-only integration.

@@ -138,7 +138,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.77"' +
+      '", Version="0.2.78"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -598,6 +598,7 @@
     );
     entry("Favorites", "favorites", function () { return go(favorites); }, "favorites");
     libraries.filter(function (item) { return libraryRank(item) >= 4; }).forEach(libraryEntry);
+    if (P.seerrRequest) entry("Seerr", "search", function () { return go(seerrDiscover); }, "seerr");
     entry(
       "Settings",
       "settings",
@@ -838,6 +839,7 @@
       return "Anime audio language: " + ({jpn: "Japanese", eng: "English", spa: "Spanish", fra: "French", deu: "German", kor: "Korean", zho: "Chinese"}[code] || "Use normal audio preference");
     });
     el("p", languageSyncText(), playback).className = "language-sync-status";
+    if (P.seerrRequest) row(playback, "Seerr", "", "Connect your profile to discover and request movies and TV shows.", function () { return go(seerrSettings); });
     var subtitles = section("Subtitles", "Keep dialogue comfortable to read.");
     row(subtitles, "Subtitle defaults", "", "Preferred language and English subtitles for non-English audio, saved per profile.", function () { return go(subtitleDefaultsSettings); });
     row(
@@ -933,7 +935,7 @@
       vision.hidden = true;
     }
     row(device, "Screensaver", "", "Artwork, idle delay and clock for this profile.", function () { return go(screensaverSettings); });
-    var about = section("About", "Ember for Jellyfin · v0.2.77");
+    var about = section("About", "Ember for Jellyfin · v0.2.78");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -1673,6 +1675,231 @@
     }
     return libraryRequest;
   }
+  function seerrSettingsValue() { return readPreference("seerr", {}); }
+  function seerrServer(value) {
+    var url;
+    try { url = new URL(/^https?:\/\//i.test(value.trim()) ? value.trim() : "http://" + value.trim()); }
+    catch (_) { throw new Error("Enter a valid Seerr address, including its port if needed."); }
+    if (["http:", "https:"].indexOf(url.protocol) < 0 || url.username || url.password || url.search || url.hash || !url.hostname) throw new Error("Enter a Seerr address, including its port if needed.");
+    return url.href.replace(/\/api\/v1\/?$/, "").replace(/\/$/, "");
+  }
+  function seerrApi(path, body, server) {
+    return P.seerrRequest({server: server || seerrSettingsValue().server, profile: accountKey("seerr"), path: path, method: body ? "POST" : "GET", body: body});
+  }
+  async function seerrSettings() {
+    var r = reset("Seerr"), account = session, saved = seerrSettingsValue();
+    main.className = "seerr-page";
+    el("p", "Discover and request movies and shows. Sign in separately for each Ember profile; your password is not saved.", main);
+    var form = el("form", null, main); form.className = "seerr-login";
+    function field(label, type, value) {
+      var id = "seerr-" + type, caption = el("label", label, form), input = el("input", null, form);
+      caption.htmlFor = id; input.id = id; input.type = type; input.value = value || ""; input.autocomplete = "off";
+      return input;
+    }
+    var server = field("Seerr server address", "url", saved.server || localStorage.getItem("wholphin-seerr-server:" + session.server));
+    server.placeholder = "http://your-server:5055"; server.type = "text";
+    var label = el("label", "Sign-in method", form), method = el("select", null, form);
+    method.id = "seerr-method"; label.htmlFor = method.id;
+    [["jellyfin", "Jellyfin account"], ["local", "Seerr local account"]].forEach(function (v) { var option = el("option", v[1], method); option.value = v[0]; });
+    var username = field("Username (email for a Seerr local account)", "text", ""), password = field("Password", "password", "");
+    var submit = el("button", "Sign in to Seerr", form); submit.type = "submit";
+    var feedback = el("p", "", main); feedback.setAttribute("role", "status");
+    form.onsubmit = async function (event) {
+      event.preventDefault(); if (submit.disabled) return;
+      var url, loginMethod = method.value, credentials = {password: password.value};
+      password.value = "";
+      try {
+        url = seerrServer(server.value);
+        if (!username.value.trim()) throw new Error("Enter your username or email.");
+        credentials[loginMethod === "local" ? "email" : "username"] = username.value.trim();
+        submit.disabled = true; feedback.textContent = "Signing in…";
+        await seerrApi("/auth/" + loginMethod, credentials, url);
+        if (r !== revision || session !== account) return;
+        var me = await seerrApi("/auth/me", null, url);
+        if (r !== revision || session !== account) return;
+        seerrBrowseStates.delete(accountKey("seerr-browse"));
+        localStorage.setItem(accountKey("seerr"), JSON.stringify({server: url}));
+        localStorage.setItem("wholphin-seerr-server:" + session.server, url);
+        return go(seerrDiscover);
+      } catch (error) { if (r === revision) feedback.textContent = error.message; }
+      finally { credentials.password = ""; if (r === revision) submit.disabled = false; }
+    };
+    if (saved.server) {
+      button("Open Discover", function () { return go(seerrDiscover); }, main);
+      button("Disconnect this profile from Seerr", async function () {
+        await seerrApi("/auth/logout", {});
+        if (session !== account || r !== revision) return;
+        seerrBrowseStates.delete(accountKey("seerr-browse"));
+        localStorage.removeItem(accountKey("seerr"));
+        return seerrSettings();
+      }, main);
+    }
+    focusFirst();
+  }
+  function seerrStatus(info) {
+    return {1: "Not requested", 2: "Requested · awaiting approval", 3: "Approved · processing", 4: "Partially available", 5: "Available", 6: "Unavailable"}[(info || {}).status] || "Not requested";
+  }
+  function seerrCard(item, type) {
+    type = item.mediaType || type;
+    if (["movie", "tv"].indexOf(type) < 0 || !Number.isSafeInteger(item.id) || item.id < 1) return null;
+    var art = typeof item.posterPath === "string" && /^\/[a-zA-Z0-9._-]+$/.test(item.posterPath) ? "https://image.tmdb.org/t/p/w342" + item.posterPath : null;
+    return {Id: "seerr:" + type + ":" + item.id, Name: item.title || item.name || "Untitled", Type: type === "tv" ? "Series" : "Movie", ProductionYear: seerrStatus(item.mediaInfo), SeerrPoster: art, seerrType: type, seerrId: item.id};
+  }
+  var seerrBrowseStates = new Map();
+  async function seerrDiscover() {
+    if (!seerrSettingsValue().server) return seerrSettings();
+    var r = reset("Discover"), account = session, me;
+    main.className = "seerr-page"; selectNav("seerr");
+    var feedback = el("p", "Connecting to Seerr…", main); feedback.setAttribute("role", "status");
+    try { me = await seerrApi("/auth/me"); }
+    catch (error) {
+      if (r !== revision) return;
+      feedback.textContent = error.message;
+      button("Seerr sign-in settings", function () { return go(seerrSettings); }, main); focusFirst(); return;
+    }
+    if (r !== revision || session !== account) return;
+    feedback.textContent = "Signed in as " + (me.displayName || me.username || me.jellyfinUsername || "Seerr user") + ".";
+    var tabs = el("div", null, main); tabs.className = "tv-library-tabs";
+    var form = el("form", null, main); form.className = "seerr-search";
+    var input = el("input", null, form); input.setAttribute("aria-label", "Search Seerr"); input.placeholder = "Search movies and shows";
+    var searchButton = el("button", "Search", form); searchButton.type = "submit";
+    var results = el("section", null, main), state = 0, path = "/discover/trending", kind = null, page = 0, more = true, loading = false, grid;
+    function valid() { return r === revision && session === account; }
+    async function load() {
+      if (!valid() || loading || !more) return;
+      var current = state, next = page + 1; loading = true;
+      feedback.textContent = "Loading…";
+      try {
+        var requestPath = path.indexOf("/request?") === 0
+          ? path + "&skip=" + ((next - 1) * 20)
+          : path + (path.indexOf("?") < 0 ? "?" : "&") + "page=" + next;
+        var data = await seerrApi(requestPath);
+        if (!valid() || current !== state) return;
+        var items = data.results || [];
+        if (path === "/request?requestedBy=" + me.id + "&take=20") {
+          var detailed = [], cursor = 0;
+          async function requestTitles() {
+            while (cursor < items.length && valid() && current === state) {
+              var index = cursor++, media = items[index].media || {}, type = media.mediaType, id = media.tmdbId;
+              if (["movie", "tv"].indexOf(type) < 0 || !Number.isSafeInteger(id)) continue;
+              try { var item = await seerrApi("/" + type + "/" + id); item.mediaType = type; detailed[index] = item; } catch (_) {}
+            }
+          }
+          await Promise.all([requestTitles(), requestTitles(), requestTitles()]);
+          items = detailed.filter(Boolean);
+          more = next < ((data.pageInfo || {}).pages || 1);
+        } else more = next < (data.totalPages || 1);
+        if (!valid() || current !== state) return;
+        var batch = items.map(function (item) { return seerrCard(item, kind); }).filter(Boolean);
+        cards(batch, results, null, grid, function (item) { return go(function () { return seerrDetail(item.seerrType, item.seerrId, me); }); });
+        page = next;
+        feedback.textContent = grid.children.length ? "" : "No titles found.";
+        if (page === 1 && document.activeElement === searchButton && grid.firstChild) focusContent(grid.firstChild);
+      } catch (error) {
+        if (!valid() || current !== state) return;
+        feedback.textContent = error.message;
+        button("Retry loading titles", function () { return load(); }, results);
+      } finally { if (current === state) loading = false; }
+    }
+    function browse(label, route, type) {
+      state++; path = route; kind = type; page = 0; more = true; loading = false;
+      seerrBrowseStates.set(accountKey("seerr-browse"), {label: label, route: route, type: type, query: input.value});
+      if (seerrBrowseStates.size > 50) seerrBrowseStates.delete(seerrBrowseStates.keys().next().value);
+      results.textContent = ""; el("h2", label, results); grid = el("div", null, results); grid.className = "grid";
+      Array.prototype.forEach.call(tabs.children, function (b) { b.setAttribute("aria-pressed", String(b.textContent === label)); });
+      return load();
+    }
+    [["Trending", "/discover/trending"], ["Movies", "/discover/movies", "movie"], ["TV", "/discover/tv", "tv"], ["Upcoming", "/discover/movies/upcoming", "movie"], ["My requests", "/request?requestedBy=" + me.id + "&take=20"]].forEach(function (tab) { button(tab[0], function () { browse.apply(null, tab); }, tabs); });
+    button("Seerr settings", function () { return go(seerrSettings); }, tabs);
+    form.onsubmit = function (event) { event.preventDefault(); if (input.value.trim()) browse("Search results", "/search?query=" + encodeURIComponent(input.value.trim().slice(0, 150))); };
+    var onScroll = function () { if (!valid()) return; if (main.scrollHeight - main.scrollTop - main.clientHeight < 700) load(); };
+    main.addEventListener("scroll", onScroll);
+    results.addEventListener("focusin", function (event) { var list = grid.querySelectorAll("button"), at = Array.prototype.indexOf.call(list, event.target); if (at >= Math.max(0, list.length - 6)) load(); });
+    // The handler is replaced on every Discover visit to avoid retaining detached pages.
+    if (main.seerrScroll) main.removeEventListener("scroll", main.seerrScroll);
+    main.seerrScroll = onScroll;
+    var previous = seerrBrowseStates.get(accountKey("seerr-browse"));
+    if (previous) input.value = previous.query || "";
+    await browse(previous ? previous.label : "Trending", previous ? previous.route : "/discover/trending", previous && previous.type);
+    if (valid()) focusContent(tabs.firstChild);
+  }
+  async function seerrDetail(type, id, me) {
+    var r = reset("Loading title…"), account = session, data;
+    main.className = "seerr-page";
+    try { data = await seerrApi("/" + type + "/" + id); }
+    catch (error) { if (r === revision) { message(error.message); button("Retry", function () { return seerrDetail(type, id, me); }, main); focusFirst(); } return; }
+    if (r !== revision || session !== account) return;
+    main.querySelector("h1").textContent = data.title || data.name || "Title";
+    var info = data.mediaInfo || {}, permissions = Number(me.permissions) || 0;
+    el("p", [type === "movie" ? "Movie" : "TV series", data.releaseDate || data.firstAirDate, seerrStatus(info)].filter(Boolean).join(" · "), main);
+    el("p", data.overview || "No description available.", main).className = "seerr-overview";
+    var actions = el("div", null, main); actions.className = "actions";
+    var libraryId = info.jellyfinMediaId || info.jellyfinMediaId4k;
+    if (typeof libraryId === "string" && /^[a-f0-9-]{32,36}$/i.test(libraryId)) button("Open in Jellyfin library", function () { return go(function () { return detail(libraryId); }); }, actions);
+    var feedback = el("p", "", main); feedback.setAttribute("role", "status");
+    var standardAllowed = !!(permissions & (2 | 32 | (type === "movie" ? 262144 : 524288))),
+      fourKAllowed = !!(permissions & (2 | 1024 | (type === "movie" ? 2048 : 4096))),
+      allowed = standardAllowed || fourKAllowed;
+    var pending = [2, 3, 5, 6].indexOf(info.status) >= 0;
+    if (!allowed) el("p", "This Seerr account cannot request " + (type === "movie" ? "movies." : "TV shows."), main);
+    else {
+      var form = el("section", null, main), selected = [], is4k = !standardAllowed && fourKAllowed;
+      el("h2", "Request " + (type === "movie" ? "movie" : "seasons"), form);
+      var standardPending = pending;
+      var quality = button("Quality: " + (is4k ? "4K" : "Standard"), function () {
+        is4k = !is4k; quality.textContent = "Quality: " + (is4k ? "4K" : "Standard");
+        selected = []; renderSeasons(); submit.textContent = "Review request"; refresh();
+      }, form);
+      quality.hidden = !fourKAllowed;
+      quality.disabled = !(standardAllowed && fourKAllowed);
+      var seasons = el("div", null, form); seasons.className = "seerr-seasons";
+      var submit = button("Review request", function () {
+        if (type === "tv" && !selected.length) { feedback.textContent = "Choose at least one season."; return; }
+        var summary = "Request " + (data.title || data.name) + (type === "tv" ? " · seasons " + selected.join(", ") : "") + (is4k ? " in 4K?" : "?");
+        settingChoices(summary, [[false, "Cancel"], [true, "Confirm request"]], false, async function (confirmed) {
+          if (!confirmed) return;
+          var requestedQuality = is4k, requestedSeasons = selected.slice();
+          Array.prototype.forEach.call(form.querySelectorAll("button"), function (b) { b.disabled = true; });
+          feedback.textContent = "Submitting request…";
+          try {
+            await seerrApi("/request", Object.assign({mediaType: type, mediaId: id, is4k: requestedQuality}, type === "tv" ? {seasons: requestedSeasons} : {}));
+            if (r !== revision || session !== account) return;
+            feedback.textContent = "Request submitted. Track its progress in My requests.";
+            if (type === "movie") info[requestedQuality ? "status4k" : "status"] = 2;
+            else {
+              info.seasons = info.seasons || [];
+              requestedSeasons.forEach(function (number) {
+                var season = info.seasons.filter(function (v) { return v.seasonNumber === number; })[0];
+                if (!season) { season = {seasonNumber: number}; info.seasons.push(season); }
+                season[requestedQuality ? "status4k" : "status"] = 2;
+              });
+              selected = []; renderSeasons();
+            }
+            quality.disabled = !(standardAllowed && fourKAllowed);
+            submit.textContent = "Requested";
+            focusContent(returnButton);
+          } catch (error) { if (r === revision) { feedback.textContent = error.message; quality.disabled = !(standardAllowed && fourKAllowed); renderSeasons(); refresh(); focusContent(submit); } }
+        }, submit);
+      }, form);
+      function refresh() { submit.disabled = type === "movie" ? [2, 3, 5, 6].indexOf(is4k ? info.status4k : info.status) >= 0 : !selected.length; }
+      function renderSeasons() {
+        seasons.textContent = "";
+        if (type !== "tv") return;
+        (data.seasons || []).filter(function (season) { return season.episodeCount > 0; }).forEach(function (season) {
+          var existing = (info.seasons || []).filter(function (v) { return v.seasonNumber === season.seasonNumber; })[0] || {};
+          var unavailable = [2, 3, 5].indexOf(is4k ? existing.status4k : existing.status) >= 0;
+          var b = button((season.name || "Season " + season.seasonNumber) + (unavailable ? " · already requested or available" : ""), function () {
+            var at = selected.indexOf(season.seasonNumber); if (at < 0) selected.push(season.seasonNumber); else selected.splice(at, 1);
+            b.setAttribute("aria-pressed", String(at < 0)); submit.textContent = "Review request"; refresh();
+          }, seasons);
+          b.setAttribute("aria-pressed", String(selected.indexOf(season.seasonNumber) >= 0)); b.disabled = unavailable;
+        });
+      }
+      renderSeasons(); refresh();
+      if (type === "movie" && standardPending) feedback.textContent = seerrStatus(info) + ".";
+    }
+    var returnButton = button("Back to Discover", back, main); focusFirst();
+  }
   async function favorites() {
     var r = reset("Favorites");
     selectNav("favorites");
@@ -2349,6 +2576,7 @@
     }, 150);
   }
   function image(item, landscape) {
+    if (item.SeerrPoster && /^https:\/\/image\.tmdb\.org\/t\/p\/w342\/[a-zA-Z0-9._-]+$/.test(item.SeerrPoster)) return item.SeerrPoster;
     var tags = item.ImageTags || {},
       id = item.Id,
       kind = "Primary";

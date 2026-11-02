@@ -4,7 +4,15 @@
   function command(action, values) {
     root.EmberAndroid.command(JSON.stringify(Object.assign({ action: action }, values || {})));
   }
+  var seerrJobs = {}, seerrId = 0;
   root.EmberFireTV = {
+    seerrResult: function (result) {
+      var job = seerrJobs[result.id];
+      if (!job) return;
+      delete seerrJobs[result.id]; clearTimeout(job.timer);
+      if (result.status >= 200 && result.status < 300) job.resolve(result.data);
+      else { var error = new Error(result.error || "Could not connect to Seerr."); error.status = result.status; job.reject(error); }
+    },
     receive: function (data) { receive(data); },
     key: function (code) {
       if (code === 457 && !document.getElementById("player").hidden && !document.body.classList.contains("live-preview")) {
@@ -47,6 +55,14 @@
       });
   }
   root.EmberPlatform = {
+    seerrRequest: function (values) {
+      return new Promise(function (resolve, reject) {
+        var id = ++seerrId;
+        seerrJobs[id] = {resolve: resolve, reject: reject, timer: setTimeout(function () { delete seerrJobs[id]; reject(new Error("Seerr request timed out. Try again.")); }, 45000)};
+        try { root.EmberAndroid.seerrRequest(JSON.stringify(Object.assign({id: id}, values))); }
+        catch (_) { clearTimeout(seerrJobs[id].timer); delete seerrJobs[id]; reject(new Error("Update the Fire TV app to connect to Seerr.")); }
+      });
+    },
     loadImage: loadImage,
     nativeSubtitle: function (source, index) { return root.EmberFirePlayback.nativeSubtitle(source, index); },
     playbackPolicy: function (source, options, index) { return root.EmberFirePlayback.policy(source, options, index, capabilities()); },

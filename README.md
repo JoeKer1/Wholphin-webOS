@@ -129,3 +129,11 @@ enable English captions. Run `npm run test:anime-audio` for platform checks.
 Ember syncs subtitle defaults (mode, preferred language and English for non-English audio) and the anime audio language through Jellyfin’s per-user display preferences. Bonfire profiles use their own Jellyfin user IDs, so their choices remain separate. LG, Samsung and Fire TV use the same Ember settings namespace; no Bonfire update is required.
 
 Settings refresh when a profile opens or Settings opens. Explicit changes save to the server immediately. A local cache keeps preferences usable offline, and pending changes retry the next time the profile or Settings opens. On first sync, existing device preferences migrate only when no server preference exists; otherwise the server choice wins. Individual-title track choices, subtitle timing and appearance remain local. Devices need Ember 0.2.77 or newer to participate.
+
+### Direct Seerr integration (Fire TV, v0.2.78+)
+
+Open **Seerr** in the sidebar or **Settings → Playback → Seerr**, enter your Seerr URL, and sign in with Jellyfin credentials or a Seerr-local account. Each Ember profile has its own native cookie session; passwords and API keys are not saved. No additional server container is required.
+
+Includes trending movies/shows, movie and TV discovery, upcoming movies, search, My requests, automatic loading of additional results, title availability and links back to available Jellyfin items. Request movies or individual TV seasons, with optional 4K when your Seerr account permits it. Requests require confirmation; Seerr controls permissions, quotas and approval.
+
+This first integration is Fire TV only. Bonfire profile selection does not automatically log in to Seerr; connect the desired Seerr account separately for each profile. Native HTTP/CSRF/cookie regression instructions are in [test/native/README.md](test/native/README.md).
