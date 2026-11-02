@@ -138,7 +138,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.72"' +
+      '", Version="0.2.73"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -915,7 +915,8 @@
       modeControl.disabled = !P.playbackPolicy;
       vision.hidden = true;
     }
-    var about = section("About", "Ember for Jellyfin · v0.2.72");
+    row(device, "Screensaver", "", "Artwork, idle delay and clock for this profile.", function () { return go(screensaverSettings); });
+    var about = section("About", "Ember for Jellyfin · v0.2.73");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -955,6 +956,131 @@
     categories.querySelector("button").setAttribute("aria-current", "true");
     focusContent(categories.querySelector("button"));
   }
+  function screensaverOptions() {
+    var saved = readPreference("screensaver", {});
+    return {
+      enabled: saved.enabled !== false,
+      idle: [2, 5, 10, 20].indexOf(saved.idle) >= 0 ? saved.idle : 5,
+      duration: [15, 30, 60].indexOf(saved.duration) >= 0 ? saved.duration : 30,
+      animate: saved.animate !== false,
+      clock: saved.clock === true,
+    };
+  }
+  function screensaverSettings() {
+    reset("Screensaver");
+    el("p", "Show artwork from your library while Ember is idle. Never starts during playback.", main);
+    var options = screensaverOptions(), list = el("div", null, main);
+    list.className = "screensaver-settings";
+    function save() { localStorage.setItem(accountKey("screensaver"), JSON.stringify(options)); }
+    function choice(key, label, choices) {
+      var control = button("", function () {
+        settingChoices(label, choices, options[key], function (value) {
+          options[key] = value; save(); refresh();
+        }, control);
+      }, list);
+      function refresh() { control.textContent = label + ": " + choices.find(function (v) { return v[0] === options[key]; })[1]; }
+      refresh();
+    }
+    choice("enabled", "Screensaver", [[true, "On"], [false, "Off"]]);
+    choice("idle", "Start after", [[2, "2 minutes"], [5, "5 minutes"], [10, "10 minutes"], [20, "20 minutes"]]);
+    choice("duration", "Change artwork every", [[15, "15 seconds"], [30, "30 seconds"], [60, "60 seconds"]]);
+    choice("animate", "Slow zoom", [[true, "On"], [false, "Off"]]);
+    choice("clock", "Moving clock", [[true, "On"], [false, "Off"]]);
+    button("Preview screensaver", function () { return startScreensaver(true); }, list);
+    focusContent(list.querySelector("button"));
+  }
+  var saver = null, saverRequest = 0, saverLastActivity = Date.now(), saverWakeUntil = 0;
+  function canScreensave() {
+    return session && session.token && !playing && !busy && !document.hidden &&
+      !document.body.classList.contains("choosing-profile") && !cancelQuickConnect;
+  }
+  function stopScreensaver() {
+    saverRequest++;
+    saverLastActivity = Date.now();
+    if (!saver) return false;
+    var previous = saver;
+    saver = null;
+    clearTimeout(previous.timer);
+    previous.controller.abort();
+    previous.overlay.remove();
+    main.removeAttribute("aria-hidden");
+    document.querySelector("header").removeAttribute("aria-hidden");
+    if (previous.focus && previous.focus.isConnected) previous.focus.focus();
+    return true;
+  }
+  async function startScreensaver(preview) {
+    if (saver || !canScreensave() || (!preview && !screensaverOptions().enabled)) return;
+    var request = ++saverRequest, options = screensaverOptions(), context = session;
+    var overlay = el("section", null, document.body);
+    overlay.id = "screensaver";
+    overlay.tabIndex = -1;
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-label", "Screensaver. Press any button to return.");
+    overlay.className = options.animate ? "saver-animate" : "";
+    overlay.style.setProperty("--saver-duration", options.duration + "s");
+    var title = el("div", "Ember", overlay), clock = el("time", null, overlay);
+    title.className = "saver-title";
+    clock.className = "saver-clock";
+    clock.hidden = !options.clock;
+    var active = {overlay: overlay, focus: document.activeElement, controller: new AbortController(), timer: null};
+    saver = active;
+    overlay.focus();
+    main.setAttribute("aria-hidden", "true");
+    document.querySelector("header").setAttribute("aria-hidden", "true");
+    function valid() { return saver === active && request === saverRequest && context === session && canScreensave(); }
+    var items = [], at = 0, slide = null, turn = 0;
+    function next() {
+      if (!valid()) { if (saver === active) stopScreensaver(); return; }
+      turn++;
+      overlay.classList.toggle("saver-right", turn % 2 === 0);
+      clock.textContent = new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+      if (items.length) {
+        var item = items[at++ % items.length], img = document.createElement("img"), frame = turn;
+        img.alt = "";
+        img.className = "saver-art";
+        img.onload = function () {
+          if (!valid() || turn !== frame) return;
+          var previous = slide;
+          slide = img;
+          overlay.insertBefore(img, title);
+          // Start the fade after the initial frame without moving menu focus.
+          requestAnimationFrame(function () { if (valid()) img.classList.add("saver-visible"); });
+          if (previous) setTimeout(function () { previous.remove(); }, 1600);
+          title.textContent = item.Name || "Ember";
+        };
+        setImageSource(img, context.server + "/Items/" + encodeURIComponent(item.Id) + "/Images/Backdrop/0?maxWidth=1920&quality=85");
+      }
+      active.timer = setTimeout(next, options.duration * 1000);
+    }
+    try {
+      var result = await api("/Users/" + encodeURIComponent(context.user) + "/Items", {
+        Recursive: true, IncludeItemTypes: "Movie,Series", ImageTypes: "Backdrop",
+        SortBy: "Random", Limit: 60, EnableImageTypes: "Backdrop", EnableUserData: false,
+      }, null, "GET", {signal: active.controller.signal});
+      if (!valid()) { if (saver === active) stopScreensaver(); return; }
+      items = (result.Items || []).filter(function (item) { return item.Id && item.BackdropImageTags && item.BackdropImageTags.length; });
+    } catch (_) { if (!valid()) { if (saver === active) stopScreensaver(); return; } }
+    next();
+  }
+  ["keydown", "keyup", "keypress", "pointerdown", "click", "wheel", "mousemove", "touchstart"].forEach(function (type) {
+    document.addEventListener(type, function (event) {
+      saverLastActivity = Date.now();
+      if (saver) {
+        stopScreensaver();
+        saverWakeUntil = Date.now() + 400;
+        event.preventDefault(); event.stopImmediatePropagation();
+      } else if (Date.now() < saverWakeUntil && type !== "mousemove") {
+        event.preventDefault(); event.stopImmediatePropagation();
+      }
+    }, true);
+  });
+  setInterval(function () {
+    if (saver && !canScreensave()) stopScreensaver();
+    else if (!saver && canScreensave() && screensaverOptions().enabled && Date.now() - saverLastActivity >= screensaverOptions().idle * 60000)
+      startScreensaver(false);
+  }, 1000);
+  document.addEventListener("visibilitychange", function () { stopScreensaver(); });
+  document.addEventListener("ember-suspend", function () { stopScreensaver(); });
   function accountKey(suffix) {
     return "wholphin-" + suffix + ":" + session.server + ":" + session.user;
   }

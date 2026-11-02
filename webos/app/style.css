@@ -2222,3 +2222,19 @@ main.home-editor-page { display: flex; flex-direction: column; overflow: hidden;
 .subtitle-editor-choices button[aria-checked="true"]:focus::after {
   filter: none;
 }
+
+/* Fullscreen artwork while the signed-in app is idle. */
+#screensaver { position: fixed; inset: 0; top: 0; right: 0; bottom: 0; left: 0; z-index: 100; background: #000; overflow: hidden; outline: none; }
+.saver-art { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 1.5s ease; }
+.saver-art.saver-visible { opacity: 1; }
+.saver-animate .saver-visible { animation: saver-zoom var(--saver-duration, 30s) linear forwards; }
+.saver-title, .saver-clock { position: absolute; z-index: 1; color: #fff; padding: 16px 22px; background: rgba(0,0,0,.65); }
+.saver-title { bottom: 56px; left: 64px; max-width: 60%; font-size: 40px; }
+.saver-clock { top: 56px; right: 64px; font-size: 32px; }
+.saver-right .saver-title { left: auto; right: 64px; }
+.saver-right .saver-clock { right: auto; left: 64px; }
+.screensaver-settings { max-width: 960px; }
+.screensaver-settings > button { display: block; width: 100%; text-align: left; margin: 12px 0; }
+.screensaver-settings > button:focus { background: #f5e9de; color: #21170f; outline: 3px solid #ffb477; outline-offset: -3px; }
+@keyframes saver-zoom { from { transform: scale(1); } to { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { #screensaver .saver-art { animation: none; transition: none; } }

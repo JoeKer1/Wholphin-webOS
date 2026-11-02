@@ -82,3 +82,16 @@ layout fallback and missing APIs supplied by their compatibility bundle.
 Set `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` if Playwright/Chromium are outside the
 normal module and browser locations. These fixture checks complement device
 validation; they do not verify native playback or actual TV firmware rendering.
+
+### In-app screensaver
+
+Settings → Device → Screensaver controls the profile's artwork slideshow.
+It starts after five minutes of idle browsing by default, changes artwork every
+30 seconds, and offers slow zoom, an optional moving clock, configurable timing,
+and a preview. It uses movie/show backdrops accessible to the signed-in user.
+Any remote press dismisses it and restores focus without activating the control
+underneath. Playback (including paused video), profile selection, hidden apps and
+suspension prevent or dismiss it. Empty/error artwork responses retain a moving
+Ember title on black. This operates inside Ember; it does not replace or disable
+the TV's system screensaver. Run `npm run test:screensaver` for the three-platform
+fixture checks.
