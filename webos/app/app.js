@@ -138,7 +138,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.75"' +
+      '", Version="0.2.76"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -822,6 +822,19 @@
         return go(queuePage);
       },
     );
+    row(playback, "Anime audio language", function () {
+      var code = readPreference("audio-defaults", {}).animeLanguage;
+      return {jpn: "Japanese", eng: "English", spa: "Spanish", fra: "French", deu: "German", kor: "Korean", zho: "Chinese"}[code] || "Use normal audio preference";
+    }, "For Anime libraries and titles tagged with the Anime genre. Saved only for this profile on this TV.", function (control) {
+      var choices = [["", "Use normal audio preference"], ["jpn", "Japanese"], ["eng", "English"], ["spa", "Spanish"], ["fra", "French"], ["deu", "German"], ["kor", "Korean"], ["zho", "Chinese"]];
+      settingChoices("Anime audio language", choices, readPreference("audio-defaults", {}).animeLanguage || "", function (value) {
+        localStorage.setItem(accountKey("audio-defaults"), JSON.stringify({animeLanguage: value}));
+        control.refreshSetting();
+      }, control);
+    }, function () {
+      var code = readPreference("audio-defaults", {}).animeLanguage;
+      return "Anime audio language: " + ({jpn: "Japanese", eng: "English", spa: "Spanish", fra: "French", deu: "German", kor: "Korean", zho: "Chinese"}[code] || "Use normal audio preference");
+    });
     var subtitles = section("Subtitles", "Keep dialogue comfortable to read.");
     row(subtitles, "Subtitle defaults", "", "Preferred language and English subtitles for non-English audio, saved per profile.", function () { return go(subtitleDefaultsSettings); });
     row(
@@ -917,7 +930,7 @@
       vision.hidden = true;
     }
     row(device, "Screensaver", "", "Artwork, idle delay and clock for this profile.", function () { return go(screensaverSettings); });
-    var about = section("About", "Ember for Jellyfin · v0.2.75");
+    var about = section("About", "Ember for Jellyfin · v0.2.76");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -5222,8 +5235,9 @@
             saved && saved.source === source.Id
               ? saved.index
               : C.defaultSubtitle(source,
-                  C.preferredTrack(source, "Audio", readPreference("track-preferences", {}).Audio),
+                  await defaultAudio(item, source),
                   subtitleDefaults(), readPreference("track-preferences", {}).Subtitle);
+        if (!subtitlePicker.isConnected) return;
         if (chosen == null) chosen = source.DefaultSubtitleStreamIndex;
         if (
           !tracks.some(function (track) {
@@ -5946,6 +5960,30 @@
         host.scrollIntoView({ block: "nearest" });
       }
     };
+  }
+  var animeAncestry = new Map();
+  async function defaultAudio(item, source, signal) {
+    var remembered = readPreference("track-preferences", {}).Audio,
+      language = readPreference("audio-defaults", {}).animeLanguage;
+    if (!language) return C.preferredTrack(source || {}, "Audio", remembered);
+    var anime = C.animeItem(item, libraryItems, []),
+      key = accountKey("anime-ancestry:") + (item.SeriesId || item.Id);
+    if (!anime) {
+      var ancestors = animeAncestry.get(key);
+      if (!ancestors) {
+        try {
+          ancestors = await api("/Items/" + encodeURIComponent(item.SeriesId || item.Id) + "/Ancestors", {UserId: session.user}, null, "GET", {signal: signal, timeoutMs: 4000});
+          if (!Array.isArray(ancestors)) ancestors = [];
+          animeAncestry.set(key, ancestors);
+          if (animeAncestry.size > 200) animeAncestry.delete(animeAncestry.keys().next().value);
+        } catch (error) {
+          if (signal && signal.aborted) throw error;
+          return C.preferredTrack(source || {}, "Audio", remembered);
+        }
+      }
+      anime = C.animeItem(item, libraryItems, ancestors);
+    }
+    return anime ? C.animeAudio(source || {}, language, remembered) : C.preferredTrack(source || {}, "Audio", remembered);
   }
   function subtitleDefaults() {
     return Object.assign({mode: "remember", language: "eng", foreignEnglish: true}, readPreference("subtitle-defaults", {}));
@@ -7116,7 +7154,7 @@
           subtitleOptions().enabled ||
           preferences.Audio ||
           preferences.Subtitle ||
-          subtitleDefaults().mode !== "remember" || subtitleDefaults().foreignEnglish ||
+          subtitleDefaults().mode !== "remember" || subtitleDefaults().foreignEnglish || readPreference("audio-defaults", {}).animeLanguage ||
           ((options.audioIndex != null || options.subtitleIndex != null) &&
             !options.mediaSourceId))
       ) {
@@ -7146,12 +7184,8 @@
             );
           });
         if (sourceMetadata) options.mediaSourceId = sourceMetadata.Id;
-        if (preferences.Audio && options.audioIndex == null)
-          options.audioIndex = C.preferredTrack(
-            sourceMetadata || {},
-            "Audio",
-            preferences.Audio,
-          );
+        if (!options.trackChange && options.audioIndex == null)
+          options.audioIndex = await defaultAudio(item, sourceMetadata || {}, controller.signal);
         if (!options.trackChange && options.subtitleIndex == null) {
           var savedSubtitle = readPreference("subtitle-choices", {})[item.Id];
           options.subtitleIndex = savedSubtitle && sourceMetadata && savedSubtitle.source === sourceMetadata.Id &&

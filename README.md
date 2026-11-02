@@ -111,3 +111,15 @@ LG/Tizen can extract ASS/SSA as plain WebVTT instead of burning it into video.
 This loses ASS styling/positioning; bitmap captions and failed text extraction
 retain the conversion fallback. Fire TV retains its native ASS renderer by
 default. Run `npm run test:subtitle-defaults` for cross-platform coverage.
+
+### Anime audio language
+
+Settings → Playback → Anime audio language chooses Japanese, English or another
+supported language for this profile on this TV. It defaults to the normal audio
+preference. Anime is identified through a library with Anime in its name, item
+ancestry, or an explicit Anime genre (Animation alone is not treated as anime).
+The rule also runs when starting an episode through Continue watching or
+autoplay; manual in-player audio selection takes priority for that playback.
+Missing preferred audio falls back to the normal profile/server choice. Subtitle
+defaults use the selected audio language, so Japanese audio can automatically
+enable English captions. Run `npm run test:anime-audio` for platform checks.

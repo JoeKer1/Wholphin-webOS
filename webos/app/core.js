@@ -589,6 +589,18 @@
         ? -1
         : undefined;
   }
+  function animeItem(item, libraries, ancestors) {
+    var anime = (libraries || []).filter(function (l) { return /\banime\b/i.test(l.Name || ""); }),
+      ids = anime.map(function (l) { return l.Id; });
+    return (item.Genres || []).some(function (g) { return /^anime$/i.test(g); }) ||
+      ids.indexOf(item.ParentId) >= 0 ||
+      (ancestors || []).some(function (a) { return ids.indexOf(a.Id) >= 0 || (a.Type === "CollectionFolder" && /\banime\b/i.test(a.Name || "")); });
+  }
+  function animeAudio(source, language, remembered) {
+    var normal = preferredTrack(source, "Audio", remembered),
+      match = language && preferredTrack(source, "Audio", {language: language});
+    return Number.isInteger(match) && match >= 0 ? match : normal;
+  }
   function defaultSubtitle(source, audioIndex, options, remembered) {
     options = options || {};
     var streams = source.MediaStreams || [],
@@ -1228,6 +1240,8 @@
     trackPreference: trackPreference,
     preferredTrack: preferredTrack,
     defaultSubtitle: defaultSubtitle,
+    animeItem: animeItem,
+    animeAudio: animeAudio,
     chapters: chapters,
     libraryQuery: libraryQuery,
     libraryWindow: libraryWindow,

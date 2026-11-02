@@ -886,3 +886,17 @@ test("subtitle defaults are language-specific and automatically cover non-Englis
  assert.equal(C.defaultSubtitle(source,2,{mode:"off",foreignEnglish:false}),-1);
  assert.equal(C.defaultSubtitle(source,1,{mode:"remember"},{off:true}),-1);
 });
+
+test("anime audio matches library ancestry and falls back without affecting ordinary TV", () => {
+ const libraries=[{Id:"anime",Name:"Anime"},{Id:"tv",Name:"TV"}];
+ assert.equal(C.animeItem({ParentId:"anime"},libraries,[]),true);
+ assert.equal(C.animeItem({SeriesId:"show"},libraries,[{Id:"anime",Type:"CollectionFolder"}]),true);
+ assert.equal(C.animeItem({Genres:["Anime"]},[],[]),true);
+ assert.equal(C.animeItem({Genres:["Animation"]},libraries,[{Id:"tv",Name:"TV"}]),false);
+ const source={MediaStreams:[{Type:"Audio",Index:1,Language:"eng"},{Type:"Audio",Index:4,Language:"ja"}]};
+ assert.equal(C.animeAudio(source,"jpn",{language:"eng"}),4);
+ assert.equal(C.animeAudio(source,"eng",{language:"ja"}),1);
+ assert.equal(C.animeAudio(source,"fra",{language:"eng"}),1);
+ assert.equal(C.animeAudio(source,"fra"),undefined);
+ assert.equal(C.animeAudio(source,"",{language:"eng"}),1);
+});
