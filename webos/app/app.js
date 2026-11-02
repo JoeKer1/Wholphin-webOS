@@ -2667,8 +2667,15 @@
     if (!art) return;
     Array.prototype.forEach.call(art.querySelectorAll(".card-progress, .watched-badge"), function (node) { node.remove(); });
     var data = item.UserData || {};
-    card.dataset.watched = String(!!data.Played);
-    if (data.Played) {
+    if (item.Type === "Season") {
+      Array.prototype.forEach.call(art.querySelectorAll(".episode-badge"), function (node) { node.remove(); });
+      if (data.UnplayedItemCount > 0)
+        el("span", String(data.UnplayedItemCount), art).className = "episode-badge";
+    }
+    var watched = !!data.Played || (item.Type === "Season" &&
+      data.UnplayedItemCount === 0 && (item.RecursiveItemCount > 0 || item.ChildCount > 0));
+    card.dataset.watched = String(watched);
+    if (watched) {
       var badge = el("span", "✓", art);
       badge.className = "watched-badge";
       badge.setAttribute("aria-label", "Watched");
@@ -2687,6 +2694,20 @@
       updateCardUserData(card, item);
     });
     if (main.refreshPlaybackUserData) main.refreshPlaybackUserData(item, data);
+    if (item.Type === "Episode" && item.ParentId) {
+      var parentCards = Array.prototype.filter.call(main.querySelectorAll(".card[data-item]"), function (card) {
+        return card.dataset.item === item.ParentId && card.item && card.item.Type === "Season";
+      });
+      if (parentCards.length) api("/Users/" + encodeURIComponent(account.user) + "/Items/" + encodeURIComponent(item.ParentId), null, null, null,
+        { session: account, timeoutMs: 5000 }).then(function (season) {
+          if (session !== account || !season.UserData) return;
+          parentCards.forEach(function (card) {
+            if (!main.contains(card)) return;
+            card.item = season;
+            updateCardUserData(card, season);
+          });
+        }).catch(function () {});
+    }
   }
   function cards(items, parent, layout, existing, onSelect) {
     var grid = existing || el("div", null, parent);
@@ -2737,13 +2758,6 @@
         if (item.IndexNumber != null)
           el("span", "E" + item.IndexNumber, art).className = "episode-badge";
       }
-      if (
-        item.Type === "Season" &&
-        item.UserData &&
-        item.UserData.UnplayedItemCount > 0
-      )
-        el("span", String(item.UserData.UnplayedItemCount), art).className =
-          "episode-badge";
       updateCardUserData(b, item);
       el("span", item.SeriesName || item.Name, b).className = "card-title";
       var subtitle = item.SeriesName

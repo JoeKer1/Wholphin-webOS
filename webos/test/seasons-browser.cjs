@@ -50,6 +50,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         season("f2", "Season 2", 2),
       ],
     };
+    seasons.multi[0].UserData = { Played: false, UnplayedItemCount: 0 };
+    seasons.multi[0].RecursiveItemCount = 7;
+    seasons.multi[1].UserData = { Played: false, UnplayedItemCount: 0 };
+    seasons.multi[1].RecursiveItemCount = 0;
+    seasons.multi[2].UserData = { Played: false, UnplayedItemCount: 2 };
+    seasons.multi[2].RecursiveItemCount = 5;
     const ep = (Id, SeriesId, Name, n, ticks = 0) => ({
       Id,
       SeriesId,
@@ -236,7 +242,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       );
     });
     await page.goto(
-      pathToFileURL(path.resolve(__dirname, "../app/index.html")).href,
+      pathToFileURL(process.env.TEST_PLATFORM ? path.resolve("dist", process.env.TEST_PLATFORM, "index.html") : path.resolve(__dirname, "../app/index.html")).href,
     );
     async function open(id) {
       await page.locator("nav [data-nav=home]").click();
@@ -247,6 +253,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     }
     await page.locator("#main .card[data-item=multi]").first().click();
     await page.locator(".season-grid .card").first().waitFor();
+    assert.equal(await page.locator('[data-item=m2] .watched-badge').count(), 1, "Completed season has a watched check");
+    assert.equal(await page.locator('[data-item=m1] .watched-badge').count(), 0, "Partly watched season has no check");
+    assert.equal(await page.locator('[data-item=m1] .episode-badge').textContent(), "2");
+    assert.equal(await page.locator('[data-item=ms] .watched-badge').count(), 0, "Empty season is not completed");
     assert.deepEqual(
       await page
         .locator(".season-grid .card")
