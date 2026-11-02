@@ -220,6 +220,22 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page.locator('.profile-avatar img[src^="javascript:"]').count(),
       0,
     );
+    const originalTheme = await page.locator(".profiles-page").getAttribute("data-profile-theme");
+    for (const theme of ["harvest", "snowfall", "bloom"]) {
+      await page.locator(".profiles-page").evaluate((node, theme) => node.dataset.profileTheme = theme, theme);
+      const artwork = await page.locator(".profiles-page").evaluate(async (node) => {
+        const background = getComputedStyle(node).backgroundImage;
+        const url = background.match(/url\("?([^"\)]+)"?\)/)[1];
+        const image = new Image();
+        const loaded = new Promise(resolve => { image.onload = () => resolve(image.naturalWidth); image.onerror = () => resolve(0); });
+        image.src = url;
+        return { background, width: await loaded };
+      });
+      assert.ok(artwork.background.includes(theme + ".svg") && artwork.background.includes("linear-gradient"));
+      assert.ok(artwork.width >= 240, "Seasonal decoration decodes locally");
+      await page.screenshot({ path: "/tmp/ember-bonfire-" + theme + ".png" });
+    }
+    await page.locator(".profiles-page").evaluate((node, theme) => node.dataset.profileTheme = theme, originalTheme);
     await page.screenshot({ path: "/tmp/wholphin-bonfire-profiles.png" });
     await page
       .getByRole("button", { name: "Kids, PIN required", exact: true })

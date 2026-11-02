@@ -143,7 +143,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.61"' +
+      '", Version="0.2.62"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }

@@ -2056,3 +2056,25 @@ header.drawer-open ~ main.movie-detail { margin-left: 360px; }
 .movie-detail .cast-section { margin-top: 0; }
 .movie-detail .cast-section h2 { margin-top: 24px; }
 @media (prefers-reduced-motion: reduce) { .movie-detail { transition: none; } }
+
+/* Bonfire seasonal artwork, bundled locally for every TV platform. */
+.profiles-page[data-profile-theme="harvest"] {
+  --profile-pattern: url("themes/bonfire/harvest.svg");
+  --profile-pattern-size: 260px;
+  --profile-gradient: linear-gradient(165deg, #1f0f08 0%, #2e160b 45%, #42200e 100%);
+}
+.profiles-page[data-profile-theme="snowfall"] {
+  --profile-pattern: url("themes/bonfire/snowfall.svg");
+  --profile-pattern-size: 240px;
+  --profile-gradient: linear-gradient(180deg, #0a1a2f 0%, #0f2742 55%, #15385a 100%);
+}
+.profiles-page[data-profile-theme="bloom"] {
+  --profile-pattern: url("themes/bonfire/bloom.svg");
+  --profile-pattern-size: 260px;
+  --profile-gradient: linear-gradient(160deg, #0d241a 0%, #123222 55%, #1a4430 100%);
+}
+body.choosing-profile main.profiles-page[data-profile-theme]:not([data-profile-theme=""]) {
+  background-image: var(--profile-pattern), var(--profile-gradient);
+  background-size: var(--profile-pattern-size) var(--profile-pattern-size), cover;
+  background-repeat: repeat, no-repeat;
+}
