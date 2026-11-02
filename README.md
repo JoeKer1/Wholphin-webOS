@@ -141,3 +141,9 @@ This first integration is Fire TV only. Bonfire profile selection does not autom
 ### Text subtitle recovery (v0.2.79+)
 
 SRT/WebVTT/ASS/SSA extraction retries once after temporary server/network failures or empty extraction results before using server rendering. The retry is cancelled when playback is stopped; authentication errors, missing tracks and oversized files are not retried. If a text track has already fallen back to burn-in, selecting that same track again retries extraction while retaining position and paused state. Bitmap tracks keep their existing fallback. The shared path is tested in LG, Samsung and Fire TV bundles.
+
+### Watched state and episode transitions (v0.2.80+)
+
+Completed playback uses a stable final position even if a TV resets its clock at EOF. Watch state is refreshed from Jellyfin after reporting stop; natural completion is explicitly marked watched if the server has not done so. Mounted poster/episode checkmarks and selected season actions update immediately, and Home/library caches refresh without restarting Ember. Partial manual skips are not marked complete.
+
+Following-episode lookups retry after a transient failure, and a failed stop/encoding-cleanup request no longer prevents the next video starting. Reports remain ordered, bounded, tied to the account that started playback, and duplicate end events do not send duplicate completion reports. A cross-platform fixture regression is available with `npm run test:completion`.

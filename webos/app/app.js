@@ -138,7 +138,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.79"' +
+      '", Version="0.2.80"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -274,6 +274,7 @@
     logoRequest++;
     if (homeRowObserver) homeRowObserver.disconnect();
     if (posterObserver) posterObserver.disconnect();
+    main.refreshPlaybackUserData = null;
     main.textContent = "";
     main.className = "";
     main.scrollTop = 0;
@@ -935,7 +936,7 @@
       vision.hidden = true;
     }
     row(device, "Screensaver", "", "Artwork, idle delay and clock for this profile.", function () { return go(screensaverSettings); });
-    var about = section("About", "Ember for Jellyfin · v0.2.79");
+    var about = section("About", "Ember for Jellyfin · v0.2.80");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -2661,6 +2662,32 @@
       if (node) loadPoster(node.querySelector("img[data-src]"));
     });
   }
+  function updateCardUserData(card, item) {
+    var art = card.querySelector(".art");
+    if (!art) return;
+    Array.prototype.forEach.call(art.querySelectorAll(".card-progress, .watched-badge"), function (node) { node.remove(); });
+    var data = item.UserData || {};
+    card.dataset.watched = String(!!data.Played);
+    if (data.Played) {
+      var badge = el("span", "✓", art);
+      badge.className = "watched-badge";
+      badge.setAttribute("aria-label", "Watched");
+    } else if (data.PlayedPercentage > 0 && data.PlayedPercentage < 100) {
+      var progress = el("div", null, art); progress.className = "card-progress";
+      el("div", null, progress).style.width = Math.min(100, data.PlayedPercentage) + "%";
+    }
+  }
+  function refreshUserData(item, data, account) {
+    item.UserData = Object.assign({}, item.UserData, data);
+    if (session !== account) return;
+    homeCache.clear(); listingStates.clear(); previewCache.clear();
+    Array.prototype.forEach.call(main.querySelectorAll(".card[data-item]"), function (card) {
+      if (card.dataset.item !== item.Id) return;
+      if (card.item) card.item.UserData = Object.assign({}, card.item.UserData, data);
+      updateCardUserData(card, item);
+    });
+    if (main.refreshPlaybackUserData) main.refreshPlaybackUserData(item, data);
+  }
   function cards(items, parent, layout, existing, onSelect) {
     var grid = existing || el("div", null, parent);
     if (!existing) grid.className = layout ? "rail " + layout : "grid";
@@ -2676,6 +2703,7 @@
         grid,
       );
       b.className = "card";
+      b.item = item;
       b.dataset.item = item.Id;
       b.setAttribute("aria-label", item.Name);
       if (item.Type === "Episode") b.episodeItem = item;
@@ -2716,12 +2744,7 @@
       )
         el("span", String(item.UserData.UnplayedItemCount), art).className =
           "episode-badge";
-      var percent = item.UserData && item.UserData.PlayedPercentage;
-      if (percent > 0 && percent < 100) {
-        var progress = el("div", null, art);
-        progress.className = "card-progress";
-        el("div", null, progress).style.width = Math.min(100, percent) + "%";
-      }
+      updateCardUserData(b, item);
       el("span", item.SeriesName || item.Name, b).className = "card-title";
       var subtitle = item.SeriesName
         ? "S" +
@@ -2866,21 +2889,17 @@
       return row;
     });
   }
-  async function setWatched(item, watched, signal) {
-    var context = session;
+  async function setWatched(item, watched, signal, options) {
+    var context = options && options.session || session;
     var data = await api(
       "/Users/" + encodeURIComponent(context.user) + "/PlayedItems/" + encodeURIComponent(item.Id),
-      null, null, watched ? "POST" : "DELETE", { session: context, signal: signal },
+      null, null, watched ? "POST" : "DELETE", Object.assign({}, options, { session: context, signal: signal }),
     );
     // Jellyfin resets the resume point for both watched-state mutations.
     item.UserData = Object.assign({}, item.UserData, {
       Played: watched, PlaybackPositionTicks: 0, PlayedPercentage: watched ? 100 : 0,
     }, watched ? {} : { PlayCount: 0, LastPlayedDate: null }, data || {});
-    if (session !== context) return;
-    // Home recommendations and filtered/season listings also depend on watched state.
-    homeCache.clear();
-    listingStates.clear();
-    previewCache.clear();
+    refreshUserData(item, item.UserData, context);
   }
   async function home(tvLibraryItem) {
     var r = reset(tvLibraryItem ? tvLibraryItem.Name : "Home"),
@@ -3551,6 +3570,13 @@
       formatPills(item, specs);
       setBackdrop(item);
     }
+    main.refreshPlaybackUserData = function (item, data) {
+      if (valid() && selected && selected.Id === item.Id) {
+        selectedRequest++; clearTimeout(timer);
+        selected.UserData = Object.assign({}, selected.UserData, data);
+        paint(selected);
+      }
+    };
     function select(item) {
       if (selected && selected.Id === item.Id) return;
       paint(item);
@@ -6760,7 +6786,7 @@
     document.getElementById("previous-video").disabled = !active || active.live || !playbackHistory.length;
     document.getElementById("next-video").hidden = !!(active && active.live);
     document.getElementById("next-video").disabled =
-      !active || active.live || (!queueItems.length && !active.episodes.length);
+      !active || active.live || (!queueItems.length && !active.episodes.length && !active.nextError);
   }
   function loadFollowing(active) {
     active.nextError = null;
@@ -6779,16 +6805,19 @@
     )
       .then(function (data) {
         if (playing !== active) return;
+        if ((data.Items || []).length && !(data.Items || []).some(function (item) { return item.Id === active.item.Id; }))
+          throw new Error("The server did not include the current episode.");
         active.episodes = C.followingEpisodes(active.item, data.Items || []);
         updatePlaybackButtons();
       })
       .catch(function (error) {
-        if (playing === active) active.nextError = error.message;
+        if (playing === active) { active.nextError = error.message; updatePlaybackButtons(); }
       });
+    return active.following;
   }
   function loadPlaybackExtras(active) {
     if (active.live) return;
-    if (!Array.isArray(active.item.Chapters) || !active.source.MediaStreams) {
+    if (!Array.isArray(active.item.Chapters) || !active.source.MediaStreams || (active.item.Type === "Episode" && !active.item.SeriesId)) {
       active.metadata = api(
         "/Users/" +
           session.user +
@@ -6804,6 +6833,7 @@
         .then(function (item) {
           if (playing !== active) return;
           active.item = Object.assign({}, active.item, item);
+          if (active.item.Type === "Episode" && active.item.SeriesId && !active.following) loadFollowing(active);
           if (!active.source.MediaStreams) {
             var source = (item.MediaSources || []).find(function (entry) {
               return entry.Id === active.source.Id;
@@ -7129,7 +7159,7 @@
       } catch (error) {
         if (playing !== active) return;
         message("Could not change subtitles in place. " + error.message);
-      } finally { busy = false; }
+      } finally { busy = false; drainPendingAdvance(); }
     }
     var nextSubtitle = active.subtitleIndex;
     if (!subtitle && nextSubtitle < 0) {
@@ -7258,7 +7288,10 @@
   }
   async function advancePlayback(manual) {
     var active = playing;
-    if (!active || active.live || active.advancing || busy) return;
+    if (!active || active.live) return;
+    if (active.advancing) { if (!manual && active.completed) active.pendingAdvance = true; return; }
+    if (busy) { if (!manual && active.completed) active.pendingAdvance = true; return; }
+    active.pendingAdvance = false;
     if (!manual && document.hidden) {
       await stop();
       return;
@@ -7269,7 +7302,14 @@
     }
     active.advancing = true;
     try {
-      if (!queueItems.length) await active.following;
+      if (!queueItems.length && (manual || playbackOptions().autoplay)) {
+        await active.following;
+        if (playing === active && active.nextError && active.item.SeriesId) await loadFollowing(active);
+        if (playing === active && active.nextError) {
+          message("Could not load the next episode. Press Next video to retry.");
+          showControls(); return;
+        }
+      }
       if (playing !== active) return;
       var next =
         queueItems[0] ||
@@ -7287,6 +7327,7 @@
         return;
       }
       await play(next, 0, false, false, { episodeCount: active.episodeCount, preserveHistory: true });
+      if (!playing || playing === active) return;
       playbackHistory.push(active.item);
       if (playbackHistory.length > 100) playbackHistory.shift();
       updatePlaybackButtons();
@@ -7295,6 +7336,7 @@
       showControls();
     } finally {
       active.advancing = false;
+      drainPendingAdvance();
     }
   }
   async function compatibilityPlayback(active, automatic) {
@@ -7360,6 +7402,7 @@
 
   function position() {
     if (!playing) return 0;
+    if (playing.completedPositionTicks != null) return playing.completedPositionTicks;
     if (playing.failurePositionTicks != null)
       return playing.failurePositionTicks;
     if (!playing.started) return playing.resumeTicks;
@@ -7367,7 +7410,8 @@
   }
   function report(path, extra) {
     var active = playing;
-    if (!active || !active.started) return Promise.resolve();
+    if (!active || !active.started || active.completed || active.finishReporting) return Promise.resolve();
+    if (path === "/Progress" && active.progressPending) return active.reporting;
     var payload = Object.assign(
       {
         ItemId: active.item.Id,
@@ -7387,9 +7431,42 @@
     active.reporting = active.reporting
       .catch(function () {})
       .then(function () {
-        return api("/Sessions/Playing" + path, null, payload);
+        return api("/Sessions/Playing" + path, null, payload, "POST", {session: active.account, timeoutMs: 5000});
       });
+    if (path === "/Progress") {
+      active.progressPending = true;
+      active.reporting = active.reporting.finally(function () { active.progressPending = false; });
+    }
     return active.reporting;
+  }
+  async function finishPlaybackReporting(active, ticks) {
+    if (active.finishReporting) return active.finishReporting;
+    active.finishReporting = (async function () {
+      await active.reporting.catch(function () {});
+      if (!active.started) return;
+      try {
+        await api("/Sessions/Playing/Stopped", null, {
+          ItemId: active.item.Id, MediaSourceId: active.source.Id,
+          PlaySessionId: active.sessionId, PositionTicks: ticks,
+        }, "POST", {session: active.account, timeoutMs: 5000});
+      } catch (_) { /* A report failure must not block the next episode. */ }
+      if (active.live) return;
+      try {
+        var fresh = await api("/Users/" + encodeURIComponent(active.account.user) + "/Items/" + encodeURIComponent(active.item.Id), null, null, "GET", {session: active.account, timeoutMs: 5000});
+        if (active.completed && !(fresh.UserData && fresh.UserData.Played))
+          await setWatched(active.item, true, null, {session: active.account, timeoutMs: 5000});
+        else if (fresh.UserData) refreshUserData(active.item, fresh.UserData, active.account);
+      } catch (_) {
+        if (active.completed) {
+          try { await setWatched(active.item, true, null, {session: active.account, timeoutMs: 5000}); }
+          catch (_) { active.watchSaveFailed = true; }
+        }
+      }
+    })();
+    return active.finishReporting;
+  }
+  function drainPendingAdvance() {
+    if (playing && playing.pendingAdvance && !busy) run(function () { return advancePlayback(false); });
   }
   function finishResume() {
     var active = playing;
@@ -7638,6 +7715,7 @@
       if (request !== playRequest || document.hidden) return;
       playing = Object.assign(selected, {
         item: item,
+        account: session,
         episodeCount:
           options.trackChange && previous
             ? previous.episodeCount
@@ -7740,6 +7818,7 @@
     } finally {
       if (playController === controller) playController = null;
       busy = false;
+      drainPendingAdvance();
       if (openedLive)
         await api(
           "/LiveStreams/Close",
@@ -7877,8 +7956,16 @@
     run(stop);
   };
   video.onended = function () {
-    run(function () {
-      return advancePlayback(false);
+    var active = playing;
+    if (!active || active.live || !active.started || active.completed) return;
+    active.completed = true;
+    active.completedPositionTicks = Math.max(position(), active.lastPositionTicks || 0,
+      Number.isFinite(video.duration) ? Math.round(video.duration * 10000000) : 0,
+      active.item.RunTimeTicks || 0);
+    clearInterval(timer);
+    run(async function () {
+      await finishPlaybackReporting(active, active.completedPositionTicks);
+      if (playing === active) return advancePlayback(false);
     });
   };
   video.onpause = function () {
@@ -7912,7 +7999,7 @@
     var stopped = playing,
       stoppedRevision = revision,
       ticks =
-        options.positionTicks != null ? options.positionTicks : position();
+        options.positionTicks != null ? options.positionTicks : stopped.completedPositionTicks != null ? stopped.completedPositionTicks : position();
     hideUpNext();
     playing = null;
     livePreview = false;
@@ -7933,39 +8020,18 @@
       stopped.returnFocus.isConnected
     )
       stopped.returnFocus.focus();
-    try {
-      await stopped.reporting.catch(function () {});
-      if (stopped.started)
-        await api("/Sessions/Playing/Stopped", null, {
-          ItemId: stopped.item.Id,
-          MediaSourceId: stopped.source.Id,
-          PlaySessionId: stopped.sessionId,
-          PositionTicks: ticks,
-        });
-    } finally {
-      try {
-        if (stopped.method === "Transcode")
-          await api(
-            "/Videos/ActiveEncodings",
-            { DeviceId: device, PlaySessionId: stopped.sessionId },
-            null,
-            "DELETE",
-          );
-      } finally {
-        if (stopped.source.LiveStreamId)
-          await api(
-            "/LiveStreams/Close",
-            { LiveStreamId: stopped.source.LiveStreamId },
-            { LiveStreamId: stopped.source.LiveStreamId },
-          );
-      }
+    await finishPlaybackReporting(stopped, ticks);
+    if (stopped.method === "Transcode") {
+      try { await api("/Videos/ActiveEncodings", {DeviceId: device, PlaySessionId: stopped.sessionId}, null, "DELETE", {session: stopped.account, timeoutMs: 3000}); } catch (_) {}
     }
-    homeCache.delete(accountKey("row:") + "continue");
-    homeCache.delete(accountKey("row:") + "next");
-    previewCache.delete(stopped.item.Id);
+    if (stopped.source.LiveStreamId) {
+      try { await api("/LiveStreams/Close", {LiveStreamId: stopped.source.LiveStreamId}, {LiveStreamId: stopped.source.LiveStreamId}, "POST", {session: stopped.account, timeoutMs: 3000}); } catch (_) {}
+    }
+    if (session === stopped.account) { homeCache.clear(); listingStates.clear(); previewCache.clear(); }
     if (
       !options.transition &&
       stopped.started &&
+      session === stopped.account &&
       !stopped.returnItem.IsLiveChannel &&
       revision === stoppedRevision &&
       !playing &&

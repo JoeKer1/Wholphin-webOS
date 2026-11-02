@@ -2254,3 +2254,5 @@ main.home-editor-page { display: flex; flex-direction: column; overflow: hidden;
 .seerr-page button:focus { background: #f5e9de; color: #21170f; border-color: #f5e9de; outline: 3px solid #ffb477; outline-offset: -3px; }
 .seerr-seasons button[aria-pressed] { position: relative; padding-right: 64px; }
 .seerr-seasons button[aria-pressed="true"]::after { content: "✓"; position: absolute; right: 22px; }
+
+.watched-badge { position: absolute; top: 10px; left: 10px; min-width: 30px; height: 30px; padding: 0 5px; border-radius: 5px; background: #276447; color: #fff; font-size: 24px; line-height: 30px; text-align: center; }
