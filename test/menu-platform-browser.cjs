@@ -31,6 +31,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
           else document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {keyCode:platform === 'tizen' ? 10009 : 461, bubbles:true,cancelable:true}));
         }, platform);
       }
+      await page.locator('nav [data-nav=settings]').focus();
+      const navFocus = await page.locator('nav [data-nav=settings]').evaluate(n => {
+        const style = getComputedStyle(n), button = n.getBoundingClientRect(), clip = n.closest('nav').getBoundingClientRect();
+        return {outline:style.outlineStyle, shadow:style.boxShadow, button:{left:button.left,right:button.right}, clip:{left:clip.left,right:clip.right}};
+      });
+      await page.screenshot({path:`/private/tmp/ember-sidebar-${platform}.png`});
+      assert.equal(navFocus.outline,'none');
+      assert.ok(navFocus.shadow.includes('inset'), 'Sidebar focus ring stays inside the clipped scroll container');
+      assert.ok(navFocus.button.left >= navFocus.clip.left && navFocus.button.right <= navFocus.clip.right);
       await page.locator('nav [data-nav=settings]').click();
       await page.getByRole('button',{name:'Playback',exact:true}).click();
       const countdown = page.getByRole('button',{name:'Up Next countdown: 30 seconds',exact:true});

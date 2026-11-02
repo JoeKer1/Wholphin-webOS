@@ -111,6 +111,11 @@ nav button {
   text-align: left;
   color: #9993a5;
 }
+/* Keep the complete rounded focus ring inside the sidebar's scroll clip. */
+nav button:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 4px #a779ff;
+}
 nav button svg {
   display: block;
   width: 30px;

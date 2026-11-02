@@ -138,7 +138,7 @@
       P.deviceName +
       '", DeviceId="' +
       device +
-      '", Version="0.2.71"' +
+      '", Version="0.2.72"' +
       (context && context.token ? ', Token="' + context.token + '"' : "")
     );
   }
@@ -915,7 +915,7 @@
       modeControl.disabled = !P.playbackPolicy;
       vision.hidden = true;
     }
-    var about = section("About", "Ember for Jellyfin · v0.2.71");
+    var about = section("About", "Ember for Jellyfin · v0.2.72");
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
