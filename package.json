@@ -1,6 +1,6 @@
 {
   "name": "ember-tv",
-  "version": "0.2.91",
+  "version": "0.2.92",
   "private": true,
   "scripts": {
     "build:webos": "node tools/build.mjs webos",
