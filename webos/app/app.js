@@ -3431,7 +3431,7 @@
             return seasonBrowser(
               season.Id,
               context.title + " · " + season.Name,
-              context,
+              Object.assign({}, context, { episodeId: null }),
             );
           };
           var frame = stack[stack.length - 1];
@@ -3538,22 +3538,44 @@
     );
     favorite.className = "favorite-heart";
     favorite.appendChild(navIcon("favorites"));
-    button(
+    var moreButton = button(
       "More options",
       function () {
-        if (selected) {
-          var episode = selected,
-            parentFrame = stack[stack.length - 1];
-          var result = go(function () {
-            return detail(episode.Id);
-          });
-          if (parentFrame) parentFrame.focus = episode.Id;
-          return result;
-        }
+        extraActions.hidden = !extraActions.hidden;
+        moreButton.setAttribute("aria-expanded", String(!extraActions.hidden));
+        if (!extraActions.hidden) focusContent(extraActions.querySelector("button"));
       },
       actions,
     );
-    if (context.seasons.length > 1) button("All seasons", back, actions);
+    moreButton.id = "detail-more-button";
+    moreButton.setAttribute("aria-expanded", "false");
+    var extraActions = el("div", null, main);
+    extraActions.id = "detail-more-options";
+    extraActions.className = "detail-more-options";
+    extraActions.setAttribute("role", "dialog");
+    extraActions.setAttribute("aria-label", "More options");
+    extraActions.hidden = true;
+    button("Play from beginning", function () {
+      if (selected) return play(selected, 0, false, false, episodeSubtitles ? episodeSubtitles.options() : {});
+    }, extraActions);
+    button("Add to queue", function () {
+      if (!selected) return;
+      if ((playing && playing.item.Id === selected.Id) || queueItems.some(function (entry) { return entry.Id === selected.Id; }))
+        return message("Already playing or in the queue.");
+      if (queueItems.length >= 100) return message("The queue holds up to 100 videos.");
+      queueItems.push(selected);
+      message("Added to queue: " + selected.Name);
+      updatePlaybackButtons();
+    }, extraActions);
+    button("View playback queue", function () { return go(queuePage); }, extraActions);
+    button("Close", function () {
+      extraActions.hidden = true;
+      moreButton.setAttribute("aria-expanded", "false");
+      moreButton.focus();
+    }, extraActions);
+    if (context.seasons.length > 1) button("All seasons", function () {
+      return go(function () { return detail(context.seriesId); });
+    }, actions);
     function paint(item) {
       selected = item;
       name.textContent = item.Name;
@@ -3664,21 +3686,23 @@
           (Number.isFinite(data.TotalRecordCount)
             ? offset >= data.TotalRecordCount
             : batch.length < 48);
-        cards(fresh, grid, "landscape", grid);
+        cards(fresh, grid, "landscape", grid, activateEpisode);
         status.textContent = done
           ? items.length
             ? ""
             : "No episodes available."
           : "Scroll for more episodes.";
         var frame = stack[stack.length - 1],
-          saved = frame && frame.focus;
+          saved = context.episodeId || (frame && frame.focus);
         if (!selected && items.length) {
           var first =
             Array.prototype.find.call(grid.children, function (card) {
               return card.dataset.item === saved;
             }) || grid.firstElementChild;
-          first.focus();
-          main.scrollTop = 0;
+          if (!context.episodeId || first.dataset.item === context.episodeId || done) {
+            first.focus();
+            main.scrollTop = 0;
+          }
         }
       } catch (error) {
         if (!valid()) return;
@@ -3746,7 +3770,9 @@
             at = controls.indexOf(active);
           if (key === 37 || key === 39)
             focusContent(controls[at + (key === 37 ? -1 : 1)]);
-          else if (key === 40) focusContent(grid.querySelector(".card"));
+          else if (key === 40) focusContent(Array.prototype.find.call(grid.children, function (card) {
+            return selected && card.dataset.item === selected.Id;
+          }) || grid.querySelector(".card"));
           return true;
         }
         if (grid.contains(active) && key === 38) {
@@ -3768,16 +3794,27 @@
         return false;
       },
     };
+    function activateEpisode(item) {
+      select(item);
+      var frame = stack[stack.length - 1];
+      if (frame) frame.focus = item.Id;
+      focusContent(playButton);
+    }
     if (items.length) {
       status.textContent = done ? "" : "Scroll for more episodes.";
-      cards(items, grid, "landscape", grid);
+      cards(items, grid, "landscape", grid, activateEpisode);
       var parentFrame = stack[stack.length - 1];
       var restore = Array.prototype.find.call(grid.children, function (card) {
-        return parentFrame && card.dataset.item === parentFrame.focus;
+        return card.dataset.item === (context.episodeId || (parentFrame && parentFrame.focus));
       });
-      (restore || grid.firstElementChild).focus();
+      if (restore || !context.episodeId || done) (restore || grid.firstElementChild).focus();
       main.scrollTop = 0;
     } else await load();
+    while (valid() && !selected && !done && !loading) {
+      var before = offset;
+      await load();
+      if (offset === before) break;
+    }
   }
   async function listing(id, title, focusControl, seasonContext, tvContext) {
     if (seasonContext) return seasonBrowser(id, title, seasonContext);
@@ -5669,6 +5706,23 @@
     );
     if (liveProgram) item.IsLiveProgram = true;
     if (r !== revision) return;
+    if (item.Type === "Episode") {
+      if (!item.SeriesId) throw new Error("This episode is missing its series information in Jellyfin.");
+      var episodeSeasons = await seasonChoices(item.SeriesId);
+      if (r !== revision) return;
+      var episodeSeason = episodeSeasons.find(function (season) {
+        return season.Id === item.SeasonId || season.Id === item.ParentId;
+      }) || episodeSeasons.find(function (season) {
+        return season.IndexNumber === item.ParentIndexNumber;
+      });
+      if (!episodeSeason) throw new Error("This episode's season could not be found in Jellyfin.");
+      return seasonBrowser(episodeSeason.Id, item.SeriesName || "Series", {
+        seriesId: item.SeriesId,
+        title: item.SeriesName || "Series",
+        seasons: episodeSeasons,
+        episodeId: item.Id,
+      });
+    }
     var showSeasons = [],
       seasonsError = null,
       seriesReady = null;

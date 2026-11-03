@@ -131,6 +131,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       special = ep("special", "fresh", "Special episode", 1),
       single = ep("singlefirst", "single", "Only season first episode", 1);
     let resumeEnabled = true;
+    next.ParentId = "m2";
+    next.ParentIndexNumber = 2;
     await page.route("https://jellyfin.test/**", async (route) => {
       const u = new URL(route.request().url());
       requests.push({
@@ -155,7 +157,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
           Items:
             u.searchParams.get("ParentId") === "multi" && resumeEnabled
               ? [resume]
-              : [],
+              : u.searchParams.get("ParentId") ? [] : [next],
         };
       else if (u.pathname === "/Shows/NextUp")
         data = {
@@ -251,7 +253,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         .first()
         .click();
     }
-    await page.locator("#main .card[data-item=multi]").first().click();
+    await page.locator('#home-rows [data-row="continue"] [data-item=next]').click();
+    await page.locator('.season-browser-tabs [aria-selected="true"]').waitFor();
+    assert.equal(await page.locator('.season-browser-tabs [aria-selected="true"]').textContent(), "Season 2");
+    assert.equal(await page.locator(':focus').getAttribute('data-item'), 'next');
+    await page.locator('.episode-browser-rail [data-item=next]').click();
+    assert.equal(await page.locator('.episode-browser-actions button').first().evaluate(n => n === document.activeElement), true, "Activating an episode stays in the season and focuses Play");
+    assert.equal(await page.locator('.season-browser').count(), 1);
+    await open("multi");
     await page.locator(".season-grid .card").first().waitFor();
     assert.equal(await page.locator('[data-item=m2] .watched-badge').count(), 1, "Completed season has a watched check");
     assert.equal(await page.locator('[data-item=m1] .watched-badge').count(), 0, "Partly watched season has no check");
@@ -362,14 +371,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page
       .getByRole("button", { name: "More options", exact: true })
       .click();
-    await page
-      .getByRole("heading", { name: "Next episode", exact: true })
-      .waitFor();
+    await page.locator('#detail-more-options:not([hidden])').waitFor();
+    assert.equal(await page.locator('.season-browser').count(), 1, "More options keeps the season view");
     await page.keyboard.press("Escape");
     await page.locator(".episode-browser-rail [data-item=next]").waitFor();
     assert.equal(
-      await page.locator(":focus").getAttribute("data-item"),
-      "next",
+      await page.locator(":focus").getAttribute("id"),
+      "detail-more-button",
     );
     await page
       .getByRole("heading", { name: "Guest stars", exact: true })
