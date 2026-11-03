@@ -1,11 +1,12 @@
 (function (root) {
   "use strict";
-  var receive = function () {};
+  var receive = function () {}, updateListener = function () {};
   function command(action, values) {
     root.EmberAndroid.command(JSON.stringify(Object.assign({ action: action }, values || {})));
   }
   var seerrJobs = {}, seerrId = 0;
   root.EmberFireTV = {
+    updateResult: function (data) { updateListener(data); },
     seerrResult: function (result) {
       var job = seerrJobs[result.id];
       if (!job) return;
@@ -55,6 +56,11 @@
       });
   }
   root.EmberPlatform = {
+    appVersion: function () { try { return root.EmberAndroid.appVersion(); } catch (_) { return ""; } },
+    updateApp: function (action, callback) {
+      if (callback) updateListener = callback;
+      root.EmberAndroid.updateCommand(action);
+    },
     seerrRequest: function (values) {
       return new Promise(function (resolve, reject) {
         var id = ++seerrId;

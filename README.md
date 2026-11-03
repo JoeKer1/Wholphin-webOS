@@ -2,7 +2,7 @@
 
 Ember is an unofficial, experimental Jellyfin client for LG webOS, Samsung Tizen and Android-based Fire TV devices, inspired by [Wholphin for Android TV](https://github.com/damontecres/Wholphin). This repository contains the standalone TV implementation; it does not require an Android build or a Jellyfin Web deployment.
 
-Current version: **0.2.89**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
+Current version: **0.2.91**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
 
 The app was previously named Wholphin for webOS. Existing installations update in place and keep their sign-in and settings.
 
@@ -162,3 +162,13 @@ Checks: `npm run test:segments`, `npm run test:completion`, and the pure native 
 javac -d /tmp/ember-display-tests platforms/firetv/app/src/main/java/tv/ember/jellyfin/DisplayModeSelector.java test/native/DisplayModeSelectorTest.java
 java -cp /tmp/ember-display-tests tv.ember.jellyfin.DisplayModeSelectorTest
 ```
+
+### GitHub updates on Fire TV (v0.2.90+)
+
+Open **Settings → About → App updates**. Check for a newer stable GitHub Release, choose **Download**, then **Install update**. Ember opens Fire TV's system installer for your confirmation; it never silently installs or starts installation during playback. On supported Fire OS versions you may first need to allow Ember under **Developer Options → Install unknown apps**, then return to Ember and select Install update again. Older Fire OS versions use the system's global unknown-source setting. Sign-in and settings are preserved by an in-place update.
+
+Release checks and downloads run in native code without Jellyfin/Seerr credentials. The source repository is fixed to this repository. Prereleases and downgrades are excluded. Only an exact `ember-firetv-VERSION-debug.apk` release asset is accepted; its declared size and GitHub SHA-256 digest, package ID, version, minimum Android API and signer matching the installed app are verified. Downloads are bounded, use HTTPS and allow only GitHub release delivery hosts. Partial/unverified files are never offered for installation. The initial updater-capable APK must be installed once through ADB; subsequent Fire TV releases can use this screen. There are no scheduled checks or forced restarts.
+
+Maintainers: publish a stable release tagged `vVERSION` with the matching versioned APK attached, built with the **same signing key** as existing installs. Keep the current local Android signing key backed up privately; do not upload keystores to this public repository. GitHub must provide the release asset's `sha256:` digest. Uploading source changes alone does not publish an update. The current build retains the existing debug application ID/signing channel so installations can update in place; a future production signing/app-ID migration needs a separate plan. LG and Tizen do not expose this update screen and still use their existing installation workflow.
+
+Run `npm run test:updater` for navigation/permission-flow fixtures. `UpdateReleaseTest.java` exercises stable-version, exact asset, origin, digest and size validation using `org.json:json:20240303` as a test runtime. Real Fire TV installer acceptance remains device-dependent.

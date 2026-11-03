@@ -969,7 +969,8 @@
       vision.hidden = true;
     }
     row(device, "Screensaver", "", "Artwork, idle delay and clock for this profile.", function () { return go(screensaverSettings); });
-    var about = section("About", "Ember for Jellyfin · v0.2.80");
+    var about = section("About", "Ember for Jellyfin" + (P.appVersion && P.appVersion() ? " · v" + P.appVersion() : ""));
+    if (P.updateApp) row(about, "App updates", "", "Check GitHub Releases for Fire TV updates.", function () { return go(appUpdates); });
     var server = el("p", "Connected to " + session.server, about);
     server.className = "settings-description";
     row(
@@ -1008,6 +1009,37 @@
     });
     categories.querySelector("button").setAttribute("aria-current", "true");
     focusContent(categories.querySelector("button"));
+  }
+  function appUpdates() {
+    reset("App updates");
+    var current = revision, active = true;
+    el("p", "Installed version: " + (P.appVersion() || "Unknown"), main);
+    var state = el("p", "Checking GitHub Releases…", main);
+    state.setAttribute("role", "status");
+    var help = el("p", "Updates come from JoeKer1/Wholphin-webOS on GitHub. Fire TV will ask you to confirm installation. Your sign-in and settings are kept.", main);
+    help.className = "settings-description";
+    var list = el("div", null, main); list.className = "screensaver-settings";
+    var check = button("Check for updates", function () { P.updateApp("check"); }, list);
+    var download = button("Download update", function () { P.updateApp("download"); }, list);
+    var install = button("Install update", function () {
+      P.updateApp(install.needsPermission ? "permission" : "install");
+    }, list);
+    download.hidden = install.hidden = true;
+    button("Back to settings", function () { active = false; return go(settings); }, list);
+    P.updateApp("check", function (data) {
+      if (!active || revision !== current) return;
+      var focused = document.activeElement;
+      state.textContent = data.message || "Choose Check for updates.";
+      check.disabled = data.state === "checking" || data.state === "downloading";
+      download.hidden = data.state !== "available";
+      download.textContent = "Download Ember " + (data.version || "update");
+      install.hidden = data.state !== "ready";
+      install.needsPermission = !data.canInstall;
+      install.textContent = data.canInstall ? "Install update" : "Allow app installs";
+      if (focused && (focused.disabled || focused.hidden) && list.contains(focused))
+        focusContent(!download.hidden ? download : !install.hidden ? install : list.querySelector("button:not(:disabled):not([hidden])"));
+    });
+    focusContent(list.querySelector("button:not(:disabled):not([hidden])"));
   }
   function screensaverOptions() {
     var saved = readPreference("screensaver", {});

@@ -56,6 +56,7 @@ public final class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WebView web;
     private SeerrClient seerr;
+    private AppUpdater updater;
     private PlayerView video;
     private ExoPlayer player;
     private AssHandler assHandler;
@@ -161,6 +162,9 @@ public final class MainActivity extends Activity {
                 return true;
             }
         });
+        updater = new AppUpdater(this, data -> handler.post(() -> {
+            if (!destroyed && HOME.equals(web.getUrl())) web.evaluateJavascript("window.EmberFireTV.updateResult(" + data.toString() + ")", null);
+        }));
         seerr = new SeerrClient(this);
         web.addJavascriptInterface(new Bridge(), "EmberAndroid");
         web.loadUrl(HOME);
@@ -176,6 +180,15 @@ public final class MainActivity extends Activity {
         }
     };
     private final class Bridge {
+        @JavascriptInterface public void updateCommand(String action) {
+            handler.post(() -> {
+                if (destroyed || !foreground || !HOME.equals(web.getUrl())) return;
+                if (player != null && !action.equals("status") && !action.equals("check")) return;
+                updater.command(action);
+            });
+        }
+        @JavascriptInterface public String appVersion() { return BuildConfig.VERSION_NAME; }
+
         @JavascriptInterface public void seerrRequest(String raw) {
             if (raw == null || raw.length() > 32768) return;
             handler.post(() -> {
@@ -421,6 +434,7 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         foreground = true;
+        if (updater != null) updater.status();
     }
     @Override protected void onPause() {
         foreground = false;
@@ -432,6 +446,7 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy() {
         destroyed = true;
         if (seerr != null) seerr.close();
+        if (updater != null) updater.close();
         handler.removeCallbacksAndMessages(null);
         release();
         web.removeJavascriptInterface("EmberAndroid");
