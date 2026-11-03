@@ -130,13 +130,13 @@ Ember syncs subtitle defaults (mode, preferred language and English for non-Engl
 
 Settings refresh when a profile opens or Settings opens. Explicit changes save to the server immediately. A local cache keeps preferences usable offline, and pending changes retry the next time the profile or Settings opens. On first sync, existing device preferences migrate only when no server preference exists; otherwise the server choice wins. Individual-title track choices, subtitle timing and appearance remain local. Devices need Ember 0.2.77 or newer to participate.
 
-### Direct Seerr integration (Fire TV, v0.2.78+)
+### Seerr integration (Fire TV, v0.2.88+)
 
-Open **Seerr** in the sidebar or **Settings → Playback → Seerr**, enter your Seerr URL, and sign in with Jellyfin credentials or a Seerr-local account. Each Ember profile has its own native cookie session; passwords and API keys are not saved. No additional server container is required.
+Open **Seerr** in the sidebar or **Settings → Playback → Seerr**. Ember connects with the selected Jellyfin profile using Quick Connect, without another password. Jellyfin Quick Connect must be enabled and Seerr must use the same Jellyfin server. An optional different Seerr account can be configured manually. Each profile has its own native cookie session; passwords and API keys are not saved. No additional server container is required.
 
 Includes trending movies/shows, movie and TV discovery, upcoming movies, search, My requests, automatic loading of additional results, title availability and links back to available Jellyfin items. Request movies or individual TV seasons, with optional 4K when your Seerr account permits it. Requests require confirmation; Seerr controls permissions, quotas and approval.
 
-This first integration is Fire TV only. Bonfire profile selection does not automatically log in to Seerr; connect the desired Seerr account separately for each profile. Native HTTP/CSRF/cookie regression instructions are in [test/native/README.md](test/native/README.md).
+Seerr browsing and requests are currently Fire TV only. Its address now follows the profile through Jellyfin display preferences in the shared `ember` namespace (`ember-seerr-connection`). Existing configured TVs migrate their address automatically when no server value exists; clean devices adopt the server value. Explicit address edits queue for retry if Jellyfin is unavailable. Only the address syncs: cookies, credentials, and device disconnect choices stay local. Other profiles on a configured TV can inherit the address while authenticating independently, then save their own copy to Jellyfin. Use a public HTTPS address if TVs will connect away from home. No parent-profile token or new plugin is required. Native HTTP/CSRF/cookie regression instructions are in [test/native/README.md](test/native/README.md).
 
 ### Text subtitle recovery (v0.2.79+)
 

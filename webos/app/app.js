@@ -1148,9 +1148,13 @@
         if (!document || !document.CustomPrefs || typeof document.CustomPrefs !== "object" || Array.isArray(document.CustomPrefs))
           throw new Error("Invalid display preferences");
         var dirty = storedLanguage(account, "language-sync-pending", {}), uploaded = {}, write = false;
-        ["subtitle-defaults", "audio-defaults"].forEach(function (suffix) {
+        ["subtitle-defaults", "audio-defaults", "seerr-connection"].forEach(function (suffix) {
           var local = storedLanguage(account, suffix, null), remote = null;
           try { remote = JSON.parse(document.CustomPrefs["ember-" + suffix]); } catch (_) {}
+          if (suffix === "seerr-connection") {
+            var legacy = storedLanguage(account, "seerr", {});
+            local = normalizedSeerrConnection(local) || normalizedSeerrConnection({server: legacy.server || localStorage.getItem("wholphin-seerr-server:" + account.server)});
+          }
           // Only accept known fields and values from other devices.
           if (remote && suffix === "subtitle-defaults" &&
               ["remember", "language", "off"].indexOf(remote.mode) >= 0 &&
@@ -1159,12 +1163,18 @@
           else if (remote && suffix === "audio-defaults" &&
               ["", "jpn", "eng", "spa", "fra", "deu", "kor", "zho"].indexOf(remote.animeLanguage) >= 0)
             remote = {animeLanguage: remote.animeLanguage};
+          else if (suffix === "seerr-connection") remote = normalizedSeerrConnection(remote);
           else remote = null;
           if (local && (dirty[suffix] || !remote)) {
             uploaded[suffix] = JSON.stringify(local);
             document.CustomPrefs["ember-" + suffix] = uploaded[suffix];
             write = true;
           } else if (remote) localStorage.setItem(languageKey(account, suffix), JSON.stringify(remote));
+          if (suffix === "seerr-connection" && (local || remote)) {
+            var connection = local && (dirty[suffix] || !remote) ? local : remote;
+            localStorage.setItem(languageKey(account, suffix), JSON.stringify(connection));
+            localStorage.setItem("wholphin-seerr-server:" + account.server, connection.server);
+          }
         });
         if (write) {
           await api("/DisplayPreferences/usersettings", query, document, "POST", options);
@@ -1685,14 +1695,19 @@
   }
   function seerrSettingsValue() {
     var saved = readPreference("seerr", {});
-    return Object.assign({}, saved, {server: saved.server || localStorage.getItem("wholphin-seerr-server:" + session.server)});
+    var connection = normalizedSeerrConnection(readPreference("seerr-connection", null));
+    return Object.assign({}, saved, {server: (connection && connection.server) || saved.server || localStorage.getItem("wholphin-seerr-server:" + session.server)});
+  }
+  function normalizedSeerrConnection(value) {
+    if (!value || typeof value.server !== "string" || value.server.length > 2048 || !/^https?:\/\//i.test(value.server)) return null;
+    try { return {server: seerrServer(value.server)}; } catch (_) { return null; }
   }
   function seerrServer(value) {
     var url;
     try { url = new URL(/^https?:\/\//i.test(value.trim()) ? value.trim() : "http://" + value.trim()); }
     catch (_) { throw new Error("Enter a valid Seerr address, including its port if needed."); }
     if (["http:", "https:"].indexOf(url.protocol) < 0 || url.username || url.password || url.search || url.hash || !url.hostname) throw new Error("Enter a Seerr address, including its port if needed.");
-    return url.href.replace(/\/api\/v1\/?$/, "").replace(/\/$/, "");
+    return url.href.replace(/\/(?:api\/v1|login)\/?$/, "").replace(/\/$/, "");
   }
   function seerrApi(path, body, server, account) {
     account = account || session;
@@ -1745,8 +1760,11 @@
       return connected;
     } finally { pending.secret = ""; }
   }
-  async function seerrSettings() {
-    var r = reset("Seerr"), account = session, saved = seerrSettingsValue();
+  async function seerrSettings(synced) {
+    var r = reset("Seerr"), account = session;
+    if (!synced) await syncLanguagePreferences();
+    if (r !== revision || session !== account) return;
+    var saved = seerrSettingsValue();
     main.className = "seerr-page";
     el("p", "Discover and request movies and shows using your selected Jellyfin profile. No separate Seerr password is needed.", main);
     var form = el("form", null, main); form.className = "seerr-login";
@@ -1774,6 +1792,8 @@
     var submit = el("button", "Connect with this profile", form); submit.type = "submit";
     form.appendChild(alternate);
     var feedback = el("p", "", main); feedback.setAttribute("role", "status");
+    var syncFeedback = el("p", "The server address is shared through Jellyfin for this profile. Seerr sign-in sessions stay separate on each TV.", main);
+    syncFeedback.className = "metadata";
     form.onsubmit = async function (event) {
       event.preventDefault(); if (submit.disabled) return;
       var url, loginMethod = method.value, credentials = {password: password.value};
@@ -1791,6 +1811,8 @@
         seerrBrowseStates.delete(accountKey("seerr-browse"));
         localStorage.setItem(accountKey("seerr"), JSON.stringify({server: url, auth: manual.hidden ? "automatic" : loginMethod}));
         localStorage.setItem("wholphin-seerr-server:" + session.server, url);
+        await saveLanguagePreference("seerr-connection", {server: url});
+        if (r !== revision || session !== account) return;
         return go(seerrDiscover);
       } catch (error) { if (r === revision) feedback.textContent = error.message; }
       finally { credentials.password = ""; if (r === revision) submit.disabled = false; }
@@ -1818,10 +1840,13 @@
   }
   var seerrBrowseStates = new Map();
   async function seerrDiscover() {
-    if (!seerrSettingsValue().server || seerrSettingsValue().disabled) return seerrSettings();
     var r = reset("Seerr"), account = session, me;
     main.className = "seerr-page"; selectNav("seerr");
-    var feedback = el("p", "Connecting to Seerr…", main); feedback.setAttribute("role", "status");
+    var feedback = el("p", "Loading Seerr connection from Jellyfin…", main); feedback.setAttribute("role", "status");
+    await syncLanguagePreferences();
+    if (r !== revision || session !== account) return;
+    if (!seerrSettingsValue().server || seerrSettingsValue().disabled) return seerrSettings(true);
+    feedback.textContent = "Connecting to Seerr…";
     try { me = await connectSeerrProfile(seerrSettingsValue().server, account, function () { return r === revision; }); }
     catch (error) {
       if (r !== revision) return;
