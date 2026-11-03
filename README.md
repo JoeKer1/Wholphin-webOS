@@ -2,7 +2,7 @@
 
 Ember is an unofficial, experimental Jellyfin client for LG webOS, Samsung Tizen and Android-based Fire TV devices, inspired by [Wholphin for Android TV](https://github.com/damontecres/Wholphin). This repository contains the standalone TV implementation; it does not require an Android build or a Jellyfin Web deployment.
 
-Current version: **0.2.92**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
+Current version: **0.2.93**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
 
 The app was previously named Wholphin for webOS. Existing installations update in place and keep their sign-in and settings.
 
@@ -176,3 +176,9 @@ Run `npm run test:updater` for navigation/permission-flow fixtures. `UpdateRelea
 ### Fire TV launcher artwork (v0.2.92)
 
 The launcher uses an explicit `EmberLauncher` activity alias with the current tile artwork, while keeping the existing app ID, data and updater channel. On the Insignia, updating/rebooting/clearing temporary cache and changing the launcher entry did not replace Amazon's persisted old artwork. A full uninstall followed by a fresh v0.2.92 installation did: the launcher now shows the current flame and Ember wordmark. A full uninstall clears Ember's local sign-in/settings and its per-app install permission; use this only when the stale-artwork issue warrants signing in again. Normal in-place updates remain the default.
+
+### Full-size Fire TV artwork (v0.2.93)
+
+The Fire TV tile is now an opaque **1280×720** PNG on a black background, with a **512×512** square fallback. The application icon, banner and logo all reference the wide artwork; `roundIcon` references the square fallback. This changes the primary application icon too, since supplying only an Android TV banner left the square application icon available to Fire OS's sideloaded-app treatment. LG and Samsung artwork are unchanged. The APK's embedded dimensions and primary resource mapping have been checked. Actual Fire TV launcher padding/caching behavior remains to be validated on hardware; this release does not claim that the gray padding is eliminated.
+
+Source artwork: `platforms/branding/ember-firetv-tile.svg` and `ember-firetv-square.svg`. Regenerate the packaged PNGs with `node tools/render-firetv-branding.cjs` (requires Playwright; `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` can select an existing installation).
