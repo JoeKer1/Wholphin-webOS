@@ -32,6 +32,10 @@
     <section id="player" hidden aria-label="Video player">
       <video id="video"></video>
       <div id="live-preview-caption"></div>
+      <div id="seek-feedback" hidden role="status" aria-live="polite">
+        <div id="seek-indicator"><img src="icons/seek-arrow.svg" alt="" /><span id="seek-seconds" aria-hidden="true"></span></div>
+        <div id="seek-progress"><div></div></div>
+      </div>
       <div id="controls">
         <div id="player-heading"><img id="player-logo" alt="" hidden /><time id="player-wall-clock"></time></div>
         <h2 id="playing-title"></h2>

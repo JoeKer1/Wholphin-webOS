@@ -131,7 +131,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
           ],
         };
       if (
-        url.pathname === "/Users/user/Items" &&
+        /^\/Users\/(user|other)\/Items$/.test(url.pathname) &&
         url.searchParams.has("ParentId")
       ) {
         const season = url.searchParams.get("ParentId");
@@ -274,8 +274,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.goto(
       pathToFileURL(path.resolve(__dirname, "../app/index.html")).href,
     );
-    const click = async (name) =>
-      page.getByRole("button", { name, exact: true }).click();
+    const click = async (name) => {
+      if (name === "View seasons") name = "All seasons";
+      const control = page.getByRole("button", { name, exact: true });
+      if (name === "Play from beginning" && !(await control.isVisible()))
+        await page.getByRole("button", { name: "More options", exact: true }).click();
+      await control.click();
+    };
     async function waitFor(fn) {
       for (let n = 0; n < 150; n++) {
         if (fn()) return;
@@ -284,6 +289,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       throw new Error("Condition not met");
     }
     async function control(id) {
+      if (await page.locator("#controls").evaluate(n => n.style.opacity === "0"))
+        await page.keyboard.press("Enter");
       if (await page.locator("#player-tools").isHidden())
         await page.locator("#player-options").click();
       await page.locator("#" + id).click();
@@ -384,7 +391,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       "true",
     );
     await page.keyboard.press("ArrowRight");
-    assert.equal(await page.locator(":focus").getAttribute("id"), "timeline");
+    assert.equal(await page.locator("#controls").getAttribute("aria-hidden"), "true");
     assert.equal(
       await page.locator("#video").evaluate((v) => v.currentTime),
       130,
@@ -847,7 +854,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       0,
     );
     await page.locator('[data-item="e3"]').click();
-    await page.keyboard.press("Escape");
+    assert.equal(await page.locator('.season-browser').count(), 1);
     await page.locator('[data-item="e3"]').waitFor();
     await page
       .getByRole("heading", { name: "Test show", exact: true })

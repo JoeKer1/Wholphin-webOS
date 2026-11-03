@@ -15,6 +15,9 @@
     timer = null,
     busy = false,
     controlsTimer = null,
+    seekState = null,
+    seekCommitTimer = null,
+    seekFeedbackTimer = null,
     resumeTimer = null,
     subtitleTimer = null,
     libraryItems = [],
@@ -338,6 +341,10 @@
     if (activeGuide) activeGuide.focusChannel(playing.item.Id);
   }
   async function back() {
+    if (playing && !livePreview && !document.getElementById("seek-feedback").hidden) {
+      hideSeekFeedback();
+      return;
+    }
     var settingsMenu = document.getElementById("setting-options");
     if (settingsMenu) { settingsMenu.closeMenu(); return; }
     if (subtitleSearch && !subtitleSearch.hidden) { closeSubtitleSearch(); return; }
@@ -3561,6 +3568,8 @@
     extraActions.setAttribute("aria-label", "More options");
     extraActions.hidden = true;
     button("Play from beginning", function () {
+      extraActions.hidden = true;
+      moreButton.setAttribute("aria-expanded", "false");
       if (selected) return play(selected, 0, false, false, episodeSubtitles ? episodeSubtitles.options() : {});
     }, extraActions);
     button("Add to queue", function () {
@@ -7101,6 +7110,7 @@
               message("Wait for playback to start before seeking.");
               return;
             }
+            clearSeekState();
             video.currentTime = chapter.StartPositionTicks / 10000000;
             closePlaybackPanel();
             return report("/Progress");
@@ -8063,6 +8073,7 @@
       if (status.textContent === "Preparing playback…") message("");
     }
     if (!playing) return;
+    clearSeekState();
     clearInterval(timer);
     clearTimeout(controlsTimer);
     clearInterval(resumeTimer);
@@ -8173,6 +8184,7 @@
   }
   function showControls() {
     if (livePreview) return;
+    hideSeekFeedback();
     var controls = document.getElementById("controls");
     controls.style.opacity = "1";
     controls.style.pointerEvents = "auto";
@@ -8210,24 +8222,61 @@
       ? { start: start, end: end }
       : null;
   }
-  function seek(seconds) {
+  function hideSeekFeedback() {
+    clearTimeout(seekFeedbackTimer);
+    document.getElementById("seek-feedback").hidden = true;
+    if (seekState) seekState.delta = 0;
+  }
+  function clearSeekState() {
+    clearTimeout(seekCommitTimer);
+    hideSeekFeedback();
+    seekState = null;
+  }
+  function seek(seconds, minimal) {
     if (!playing || !playing.started || playing.awaitingWatching) return;
     var range = liveSeekWindow();
-    if (playing.live) {
-      if (range)
-        video.currentTime = Math.max(
-          range.start + 0.1,
-          Math.min(range.end, video.currentTime + seconds),
-        );
-      return;
+    if (playing.live && !range) return;
+    var now = Date.now(),
+      previous = seekState && seekState.active === playing ? seekState : null,
+      base = previous && (previous.pending || video.seeking || now - previous.updated < 800)
+        ? previous.target : video.currentTime,
+      start = range ? range.start + 0.1 : 0,
+      end = range ? range.end : Number.isFinite(video.duration) ? video.duration : playing.item.RunTimeTicks / 10000000;
+    if (!Number.isFinite(base) || !Number.isFinite(end) || end <= start) return;
+    var target = Math.max(start, Math.min(end, base + seconds)), delta = target - base;
+    if (!delta) return;
+    var state = previous || { active: playing, sent: 0 };
+    if (!previous || now - state.updated >= 800 || Math.sign(state.delta) !== Math.sign(delta)) state.delta = 0;
+    state.delta += delta;
+    state.target = target;
+    state.updated = now;
+    state.pending = true;
+    seekState = state;
+    clearTimeout(seekCommitTimer);
+    function commit() {
+      if (playing !== state.active || seekState !== state) return;
+      state.pending = false;
+      state.sent = Date.now();
+      video.currentTime = state.target;
     }
-    var target = Math.max(0, video.currentTime + seconds);
-    if (Number.isFinite(video.duration))
-      target = Math.min(target, video.duration);
-    video.currentTime = target;
+    // Keep one logical target while native engines acknowledge seeks asynchronously.
+    // Coalesce rapid repeats instead of making the decoder restart for every key event.
+    if (!minimal || now - state.sent >= 120) commit();
+    else seekCommitTimer = setTimeout(commit, 120);
+    if (minimal) {
+      var feedback = document.getElementById("seek-feedback");
+      feedback.classList.toggle("is-backward", state.delta < 0);
+      document.getElementById("seek-seconds").textContent = String(Math.round(Math.abs(state.delta)));
+      feedback.setAttribute("aria-label", (state.delta < 0 ? "Back " : "Forward ") + Math.round(Math.abs(state.delta)) + " seconds");
+      document.querySelector("#seek-progress div").style.width = Math.max(0, Math.min(100, (target - start) / (end - start) * 100)) + "%";
+      feedback.hidden = false;
+      clearTimeout(seekFeedbackTimer);
+      seekFeedbackTimer = setTimeout(hideSeekFeedback, 800);
+    }
   }
   document.getElementById("timeline").oninput = function () {
     if (!playing || !playing.started || playing.awaitingWatching) return;
+    clearSeekState();
     if (playing.live) {
       var range = liveSeekWindow();
       if (!range) return;
@@ -8413,6 +8462,11 @@
       var panelOpen = !document.getElementById("playback-panel").hidden;
       var controlsHidden =
         document.getElementById("controls").style.opacity === "0";
+      if (!panelOpen && controlsHidden && [37, 39, 412, 417].indexOf(key) >= 0) {
+        e.preventDefault();
+        seek(key === 37 ? -10 : key === 39 ? 10 : key === 412 ? -30 : 30, true);
+        return;
+      }
       showControls();
       if (
         !panelOpen &&
@@ -8421,12 +8475,6 @@
       ) {
         e.preventDefault();
         seek(key === 37 ? -10 : 10);
-        return;
-      }
-      if (controlsHidden && (key === 37 || key === 39)) {
-        e.preventDefault();
-        seek(key === 37 ? -10 : 10);
-        document.getElementById("timeline").focus();
         return;
       }
       if (controlsHidden && key === 13) {
