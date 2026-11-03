@@ -8,6 +8,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.KeyEvent;
+import android.view.Display;
+import androidx.media3.common.Format;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
@@ -64,6 +66,49 @@ public final class MainActivity extends Activity {
     private boolean foreground;
     private int audioTrack = -1, subtitleTrack = -1;
     private boolean tracksApplied;
+    private String displayPreference = "off";
+    private boolean displayRequested;
+    private int savedDisplayMode;
+    private float savedDisplayRate;
+
+    private void restoreDisplay() {
+        if (!displayRequested) return;
+        WindowManager.LayoutParams params = getWindow().getAttributes();
+        params.preferredDisplayModeId = savedDisplayMode;
+        params.preferredRefreshRate = savedDisplayRate;
+        getWindow().setAttributes(params);
+        displayRequested = false;
+    }
+    private void matchDisplay() {
+        if (!foreground || player == null || displayPreference.equals("off")) return;
+        Format format = player.getVideoFormat();
+        if (format == null) return;
+        try {
+            Display display = getWindowManager().getDefaultDisplay();
+            Display.Mode current = display.getMode();
+            Display.Mode[] supported = display.getSupportedModes();
+            DisplayModeSelector.Mode[] modes = new DisplayModeSelector.Mode[supported.length];
+            for (int i = 0; i < supported.length; i++) {
+                Display.Mode m = supported[i];
+                modes[i] = new DisplayModeSelector.Mode(m.getModeId(), m.getPhysicalWidth(), m.getPhysicalHeight(), m.getRefreshRate());
+            }
+            int mode = DisplayModeSelector.select(modes,
+                new DisplayModeSelector.Mode(current.getModeId(), current.getPhysicalWidth(), current.getPhysicalHeight(), current.getRefreshRate()),
+                format.width, format.height, format.frameRate, !displayPreference.equals("resolution"), !displayPreference.equals("rate"));
+            if (mode == current.getModeId()) return;
+            WindowManager.LayoutParams params = getWindow().getAttributes();
+            if (displayRequested && params.preferredDisplayModeId == mode) return;
+            if (!displayRequested) {
+                savedDisplayMode = params.preferredDisplayModeId;
+                savedDisplayRate = params.preferredRefreshRate;
+                displayRequested = true;
+            }
+            params.preferredDisplayModeId = mode;
+            params.preferredRefreshRate = 0;
+            getWindow().setAttributes(params);
+        } catch (RuntimeException ignored) { restoreDisplay(); }
+    }
+
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -155,6 +200,12 @@ public final class MainActivity extends Activity {
     private void execute(JSONObject command) throws Exception {
         String name = command.getString("action");
         int id = command.optInt("id", -1);
+        if (name.equals("displayPreferences")) {
+            String mode = command.optString("mode", "off");
+            displayPreference = mode.equals("rate") || mode.equals("both") || mode.equals("resolution") ? mode : "off";
+            if (displayPreference.equals("off")) restoreDisplay();
+            return;
+        }
         if (name.equals("exit")) { finish(); return; }
         if (name.equals("load")) {
             if (!foreground) return;
@@ -177,6 +228,8 @@ public final class MainActivity extends Activity {
                 .setSubtitleParserFactory(parser);
             player = new ExoPlayer.Builder(this, new AssRenderersFactory(assHandler, renderers))
                 .setMediaSourceFactory(sources).build();
+            // Explicit mode matching owns cadence; do not race Media3's surface hints.
+            player.setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF);
             assHandler.init(player);
             assView = new AssSubtitleView(this, assHandler);
             video.getSubtitleView().addView(assView, new FrameLayout.LayoutParams(-1, -1));
@@ -191,12 +244,16 @@ public final class MainActivity extends Activity {
                 @Override public void onPlaybackStateChanged(int state) {
                     if (!current()) return;
                     if (state == Player.STATE_READY) {
+                        matchDisplay();
                         if (!applyTracks(player.getCurrentTracks())) { send("error"); return; }
                         if (!metadataSent) { metadataSent = true; send("loadedmetadata"); }
                         if (seeking) { seeking = false; send("seeked"); }
                         if (player.getPlayWhenReady()) send("playing");
                     } else if (state == Player.STATE_ENDED) send("ended");
                     else if (state == Player.STATE_BUFFERING) send("waiting");
+                }
+                @Override public void onVideoSizeChanged(VideoSize size) {
+                    if (current()) matchDisplay();
                 }
                 @Override public void onTracksChanged(Tracks tracks) {
                     if (current()) applyTracks(tracks);
@@ -326,6 +383,7 @@ public final class MainActivity extends Activity {
         } catch (Exception ignored) { /* Activity is closing. */ }
     }
     private void release() {
+        restoreDisplay();
         if (assView != null) {
             video.getSubtitleView().removeView(assView);
             assView = null;
@@ -366,6 +424,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onPause() {
         foreground = false;
+        restoreDisplay();
         web.evaluateJavascript("document.dispatchEvent(new Event('ember-suspend'))", null);
         if (player != null) player.pause();
         super.onPause();

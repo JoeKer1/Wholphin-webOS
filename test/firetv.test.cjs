@@ -63,3 +63,15 @@ test('Native subtitle changes are acknowledged without replacing the video and c
  const rejected=f.p.selectTracks({audio:0,subtitle:2});f.receive('tracksfailed');await assert.rejects(rejected,/unavailable/);
  const cancelled=f.p.selectTracks({audio:0,subtitle:-1});f.p.removeAttribute('src');f.p.load();await assert.rejects(cancelled,/cancelled/);
 });
+test('Display matching is optional and passes only a device-local preference to the native bridge',()=>{
+ const f=fixture();
+ assert.equal(f.context.EmberPlatform.displayMatching(),null);
+ f.context.EmberAndroid.capabilities=()=>JSON.stringify({displayMatching:{rate:false,resolution:true}});
+ assert.equal(f.context.EmberPlatform.displayMatching().resolution,true);
+ assert.equal(f.context.EmberPlatform.displayMatching().rate,false);
+ f.context.EmberPlatform.configureDisplay('resolution');
+ assert.equal(f.commands.at(-1).action,'displayPreferences');
+ assert.equal(f.commands.at(-1).mode,'resolution');
+ delete f.context.EmberAndroid;
+ assert.doesNotThrow(()=>f.context.EmberPlatform.configureDisplay('off'));
+});

@@ -2,7 +2,7 @@
 
 Ember is an unofficial, experimental Jellyfin client for LG webOS, Samsung Tizen and Android-based Fire TV devices, inspired by [Wholphin for Android TV](https://github.com/damontecres/Wholphin). This repository contains the standalone TV implementation; it does not require an Android build or a Jellyfin Web deployment.
 
-Current version: **0.2.70**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
+Current version: **0.2.89**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
 
 The app was previously named Wholphin for webOS. Existing installations update in place and keep their sign-in and settings.
 
@@ -147,3 +147,18 @@ SRT/WebVTT/ASS/SSA extraction retries once after temporary server/network failur
 Completed playback uses a stable final position even if a TV resets its clock at EOF. Watch state is refreshed from Jellyfin after reporting stop; natural completion is explicitly marked watched if the server has not done so. Mounted poster/episode checkmarks and selected season actions update immediately, and Home/library caches refresh without restarting Ember. Partial manual skips are not marked complete.
 
 Following-episode lookups retry after a transient failure, and a failed stop/encoding-cleanup request no longer prevents the next video starting. Reports remain ordered, bounded, tied to the account that started playback, and duplicate end events do not send duplicate completion reports. A cross-platform fixture regression is available with `npm run test:completion`.
+
+### Intro/outro skipping and display matching (v0.2.89+)
+
+All three clients use Jellyfin's `/MediaSegments/{itemId}` timestamps for intro/outro skipping. Jellyfin 10.10+ and a segment provider such as Intro Skipper must supply these timestamps; Ember does not guess from chapter names. Under **Settings → Playback**, each profile can choose **Show skip button** (default), **Automatically**, or **Off**, separately for intros and outros. With transport controls hidden, OK activates the visible skip button. Titles without segments and older servers continue normally; Live TV is excluded. Skipping an outro seeks to its end and keeps normal completion/autoplay behavior, including post-credit scenes when the segment ends before the media does. Skip choices are local to the profile on that device.
+
+**Match video display** is device-local and off by default. On native Fire TV playback it can request advertised refresh-rate modes, resolutions, or both. Only options supported by the connected display are shown. Cadence matching distinguishes 23.976 from 24 fps and can use integer multiples; resolution matching selects the smallest advertised resolution that fits the video, with the current resolution as fallback. Missing frame-rate metadata preserves the current refresh rate. The original window display preference is restored on stop, source replacement, suspend and exit. The OS/TV decides whether to honor a mode request, and HDMI switching may briefly blank the screen. Compatibility playback and Live TV do not request mode changes. LG webOS and Samsung Tizen keep their platform's normal display handling; this feature does not change their physical panel timing or app canvas resolution.
+
+The Insignia's current advertised modes are 1080p/4K at 60 Hz, so it offers resolution matching. The other Fire TV advertises additional film/TV refresh rates and supports both settings. These capability reads are not confirmation of a successful live mode switch.
+
+Checks: `npm run test:segments`, `npm run test:completion`, and the pure native selector regression:
+
+```sh
+javac -d /tmp/ember-display-tests platforms/firetv/app/src/main/java/tv/ember/jellyfin/DisplayModeSelector.java test/native/DisplayModeSelectorTest.java
+java -cp /tmp/ember-display-tests tv.ember.jellyfin.DisplayModeSelectorTest
+```

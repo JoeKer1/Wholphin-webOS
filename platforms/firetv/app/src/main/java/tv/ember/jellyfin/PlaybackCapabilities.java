@@ -84,6 +84,13 @@ final class PlaybackCapabilities {
             boolean surround = output.supportsEncoding(AudioFormat.ENCODING_AC3) || output.supportsEncoding(AudioFormat.ENCODING_E_AC3);
             JSONArray ranges = new JSONArray().put("SDR");
             WindowManager manager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+            Display.Mode currentMode = manager.getDefaultDisplay().getMode();
+            boolean matchRate = false, matchResolution = false;
+            for (Display.Mode mode : manager.getDefaultDisplay().getSupportedModes()) {
+                matchRate |= Math.abs(mode.getRefreshRate() - currentMode.getRefreshRate()) > 0.02;
+                matchResolution |= mode.getPhysicalWidth() != currentMode.getPhysicalWidth() || mode.getPhysicalHeight() != currentMode.getPhysicalHeight();
+            }
+            result.put("displayMatching", new JSONObject().put("rate", matchRate).put("resolution", matchResolution));
             for (int type : manager.getDefaultDisplay().getHdrCapabilities().getSupportedHdrTypes()) {
                 if (type == Display.HdrCapabilities.HDR_TYPE_HDR10) ranges.put("HDR10");
                 if (type == Display.HdrCapabilities.HDR_TYPE_HLG) ranges.put("HLG");

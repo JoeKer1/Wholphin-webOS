@@ -1,5 +1,17 @@
 (function (root) {
   "use strict";
+  // Jellyfin ticks are absolute media times, independent of transcode start offsets.
+  function mediaSegments(data, duration) {
+    return (data && Array.isArray(data.Items) ? data.Items : []).filter(function (s) {
+      return s && (s.Type === "Intro" || s.Type === "Outro") &&
+        Number.isFinite(s.StartTicks) && Number.isFinite(s.EndTicks) &&
+        s.StartTicks >= 0 && s.EndTicks > s.StartTicks &&
+        (!duration || s.StartTicks / 10000000 < duration);
+    }).map(function (s) {
+      return {type: s.Type, start: s.StartTicks / 10000000,
+        end: duration ? Math.min(duration, s.EndTicks / 10000000) : s.EndTicks / 10000000};
+    }).sort(function (a, b) { return a.start - b.start; });
+  }
   function serverUrl(value) {
     var address = value.trim();
     if (!address) throw new Error("Enter your Jellyfin server address.");
@@ -1227,6 +1239,7 @@
     textSubtitle: textSubtitle,
     parseSubtitles: parseSubtitles,
     subtitleText: subtitleText,
+    mediaSegments: mediaSegments,
     serverUrl: serverUrl,
     query: query,
     profile: profile,

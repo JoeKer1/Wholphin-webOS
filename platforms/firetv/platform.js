@@ -63,6 +63,11 @@
         catch (_) { clearTimeout(seerrJobs[id].timer); delete seerrJobs[id]; reject(new Error("Update the Fire TV app to connect to Seerr.")); }
       });
     },
+    displayMatching: function () { var modes = capabilities().displayMatching; return modes && (modes.rate || modes.resolution) ? modes : null; },
+    configureDisplay: function (mode) {
+      // Optional bridge capability must never prevent playback in older wrappers.
+      try { command("displayPreferences", {mode: mode}); } catch (_) {}
+    },
     loadImage: loadImage,
     nativeSubtitle: function (source, index) { return root.EmberFirePlayback.nativeSubtitle(source, index); },
     playbackPolicy: function (source, options, index) { return root.EmberFirePlayback.policy(source, options, index, capabilities()); },

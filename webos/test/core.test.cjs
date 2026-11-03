@@ -900,3 +900,15 @@ test("anime audio matches library ancestry and falls back without affecting ordi
  assert.equal(C.animeAudio(source,"fra"),undefined);
  assert.equal(C.animeAudio(source,"",{language:"eng"}),1);
 });
+test("media segments accept valid intro/outro ticks and clamp to runtime", () => {
+  assert.deepEqual(C.mediaSegments({Items: [
+    {Type: 'Outro', StartTicks: 900000000, EndTicks: 1200000000},
+    {Type: 'Intro', StartTicks: 100000000, EndTicks: 200000000},
+    {Type: 'Commercial', StartTicks: 0, EndTicks: 100000000},
+    {Type: 'Intro', StartTicks: -1, EndTicks: 10},
+    {Type: 'Outro', StartTicks: 20, EndTicks: 10},
+    {Type: 'Intro', StartTicks: '0', EndTicks: 10},
+    {Type: 'Outro', StartTicks: 1100000000, EndTicks: 1200000000}
+  ]}, 100), [{type: 'Intro', start: 10, end: 20}, {type: 'Outro', start: 90, end: 100}]);
+  assert.deepEqual(C.mediaSegments(null), []);
+});

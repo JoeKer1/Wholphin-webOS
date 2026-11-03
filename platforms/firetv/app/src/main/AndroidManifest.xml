@@ -10,7 +10,7 @@
             android:label="Ember" android:icon="@drawable/ember_launcher_tile"
             android:banner="@drawable/ember_launcher_tile"
             android:screenOrientation="landscape" android:enableOnBackInvokedCallback="false"
-            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|uiMode">
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|density|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

@@ -784,6 +784,32 @@
       },
       autoplayLabel,
     );
+    ["intro", "outro"].forEach(function (kind) {
+      var title = kind === "intro" ? "Skip intro" : "Skip outro",
+        choices = [["ask", "Show skip button"], ["auto", "Automatically"], ["off", "Off"]];
+      row(playback, title, function () {
+        return (choices.find(function (c) { return c[0] === playbackOptions()[kind]; }) || choices[0])[1];
+      }, "Uses segment timestamps supplied by your Jellyfin server.", function (control) {
+        settingChoices(title, choices, playbackOptions()[kind], function (value) {
+          var options = playbackOptions(); options[kind] = value;
+          localStorage.setItem(accountKey("playback-options"), JSON.stringify(options));
+          control.refreshSetting();
+        }, control);
+      });
+    });
+    if (P.displayMatching && P.displayMatching()) {
+      var displaySupport = P.displayMatching(), displayChoices = [["off", "Off"]];
+      if (displaySupport.rate) displayChoices.push(["rate", "Refresh rate"]);
+      if (displaySupport.resolution) displayChoices.push(["resolution", "Resolution"]);
+      if (displaySupport.rate && displaySupport.resolution) displayChoices.push(["both", "Refresh rate and resolution"]);
+      row(playback, "Match video display", function () {
+        return (displayChoices.find(function (c) { return c[0] === localStorage.getItem("ember-display-matching"); }) || displayChoices[0])[1];
+      }, "This device only. Supported display modes are requested during native playback and restored afterward. HDMI changes may briefly blank the screen.", function (control) {
+        settingChoices("Match video display", displayChoices, localStorage.getItem("ember-display-matching") || "off", function (value) {
+          localStorage.setItem("ember-display-matching", value); control.refreshSetting();
+        }, control);
+      });
+    }
     [
       [
         "countdown",
@@ -6869,7 +6895,7 @@
   }
   function playbackOptions() {
     return Object.assign(
-      { autoplay: true, countdown: 30, stillWatching: 3 },
+      { autoplay: true, countdown: 30, stillWatching: 3, intro: "ask", outro: "ask" },
       readPreference("playback-options", {}),
     );
   }
@@ -7054,8 +7080,52 @@
       });
     return active.following;
   }
+  var skipSegment = document.getElementById("skip-segment");
+  function hideSegment() {
+    skipSegment.hidden = true;
+    if (document.activeElement === skipSegment) {
+      if (document.getElementById("controls").style.opacity !== "0") document.getElementById("toggle").focus();
+      else skipSegment.blur();
+    }
+  }
+  function updateSegment() {
+    var active = playing;
+    if (!active || active.live || !active.started || video.seeking || livePreview || active.awaitingWatching ||
+        !document.getElementById("playback-panel").hidden ||
+        !document.getElementById("player-tools").hidden) { hideSegment(); return; }
+    var time = position() / 10000000, segment = (active.segments || []).find(function (s) {
+      return time >= s.start && time < s.end && s.end - time > 0.25;
+    });
+    if (!segment) { active.skippedSegments.clear(); hideSegment(); return; }
+    if (playbackOptions()[segment.type.toLowerCase()] === "off") { hideSegment(); return; }
+    // Mark before seeking: native players report the old clock until seek completion.
+    if (playbackOptions()[segment.type.toLowerCase()] === "auto" && !video.paused && !active.skippedSegments.has(segment)) {
+      skipCurrentSegment(segment); return;
+    }
+    if (!upNext.hidden || active.skippedSegments.has(segment)) { hideSegment(); return; }
+    skipSegment.segment = segment;
+    skipSegment.textContent = "Skip " + segment.type.toLowerCase() +
+      (document.getElementById("controls").style.opacity === "0" ? " · OK" : "");
+    skipSegment.style.bottom = (document.getElementById("controls").style.opacity === "0" ? 90 : document.getElementById("controls").offsetHeight + 24) + "px";
+    skipSegment.hidden = false;
+  }
+  function skipCurrentSegment(segment) {
+    var active = playing;
+    if (!active || !segment) return;
+    active.skippedSegments.add(segment);
+    clearSeekState(); hideSegment();
+    seek(segment.end - position() / 10000000, true);
+  }
+  skipSegment.onclick = function () { skipCurrentSegment(skipSegment.segment); };
   function loadPlaybackExtras(active) {
     if (active.live) return;
+    active.skippedSegments = new Set();
+    api("/MediaSegments/" + encodeURIComponent(active.item.Id), {IncludeSegmentTypes: "Intro,Outro"}, null, "GET",
+      {session: active.account, signal: active.extrasController.signal, timeoutMs: 5000}).then(function (data) {
+        if (playing !== active) return;
+        active.segments = C.mediaSegments(data, Number(active.item.RunTimeTicks) / 10000000);
+        updateSegment();
+      }).catch(function () { /* Older servers and titles without segments play normally. */ });
     if (!Array.isArray(active.item.Chapters) || !active.source.MediaStreams || (active.item.Type === "Episode" && !active.item.SeriesId)) {
       active.metadata = api(
         "/Users/" +
@@ -7130,6 +7200,7 @@
     showControls();
   }
   async function openPlaybackPanel(kind) {
+    hideSegment();
     hideUpNext();
     closePlayerTools();
     var active = playing;
@@ -8039,6 +8110,7 @@
       document.getElementById("end-time").textContent = "";
       if (P.playbackTracks && video.configure)
         video.configure(P.playbackTracks(selected, sourceMetadata, playing.audioIndex, playing.subtitleIndex, subtitleCues, nativeMode, { server: session.server, itemId: item.Id, token: session.token }));
+      if (P.configureDisplay) P.configureDisplay(nativeMode && !live ? localStorage.getItem("ember-display-matching") || "off" : "off");
       video.src = selected.url + (ticks ? "#t=" + ticks / 10000000 : "");
       resumeTimer = setInterval(finishResume, 250);
       video.load();
@@ -8113,6 +8185,7 @@
     if (!playing) return;
     playing.lastPositionTicks = position();
     updateUpNext();
+    updateSegment();
     renderSubtitleOverlay();
     if (playing.live) {
       var range = liveSeekWindow(),
@@ -8242,6 +8315,7 @@
       ticks =
         options.positionTicks != null ? options.positionTicks : stopped.completedPositionTicks != null ? stopped.completedPositionTicks : position();
     hideUpNext();
+    hideSegment();
     playing = null;
     livePreview = false;
     document.body.classList.remove("live-preview");
@@ -8322,6 +8396,7 @@
       document.getElementById("player-options").focus();
   }
   document.getElementById("player-options").onclick = function () {
+    hideSegment();
     var tools = document.getElementById("player-tools");
     if (!tools.hidden) closePlayerTools();
     else {
@@ -8624,6 +8699,12 @@
         seek(key === 37 ? -10 : key === 39 ? 10 : key === 412 ? -30 : 30, true);
         return;
       }
+      if (!panelOpen && controlsHidden && key === 13 && !skipSegment.hidden) {
+        e.preventDefault(); skipCurrentSegment(skipSegment.segment); return;
+      }
+      if (document.activeElement === skipSegment && key >= 37 && key <= 40) {
+        e.preventDefault(); showControls(); document.getElementById("toggle").focus(); return;
+      }
       showControls();
       if (
         !panelOpen &&
@@ -8707,6 +8788,7 @@
             )
           ].focus();
         else if (key === 38) document.getElementById("timeline").focus();
+        else if (!skipSegment.hidden) skipSegment.focus();
         else if (!tools.hidden)
           tools.querySelector("button:not(:disabled)").focus();
         else document.getElementById("player-options").focus();
