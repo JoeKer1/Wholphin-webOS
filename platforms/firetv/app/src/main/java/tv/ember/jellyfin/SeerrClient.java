@@ -38,7 +38,8 @@ final class SeerrClient {
                 URI base = new URI(server);
                 if (!("http".equals(base.getScheme()) || "https".equals(base.getScheme())) || base.getHost() == null || base.getUserInfo() != null || base.getRawQuery() != null || base.getFragment() != null || server.endsWith("/") || profile.length() < 1 || profile.length() > 1024) throw new Exception();
                 String method = command.optString("method", "GET");
-                boolean login = path.equals("/auth/jellyfin") || path.equals("/auth/local"), logout = path.equals("/auth/logout");
+                boolean quickStart = path.equals("/auth/jellyfin/quickconnect/initiate");
+                boolean login = path.equals("/auth/jellyfin") || path.equals("/auth/local") || quickStart || path.equals("/auth/jellyfin/quickconnect/authenticate"), logout = path.equals("/auth/logout");
                 if (method.equals("POST") ? !(login || logout || path.equals("/request")) : !method.equals("GET") || !path.matches("/(auth/me|search|request|discover/(trending|movies|tv)(/upcoming)?|(movie|tv)/[1-9][0-9]{0,9})(\\?[^#\\r\\n]*)?")) throw new Exception();
                 String key = hex(MessageDigest.getInstance("SHA-256").digest((profile + "\n" + server).getBytes(StandardCharsets.UTF_8)));
                 URI target = new URI(server + "/api/v1" + path);
@@ -126,7 +127,10 @@ final class SeerrClient {
                         while ((count = input.read(buffer)) != -1) { if (bytes.size() + count > 2097152) throw new Exception(); bytes.write(buffer, 0, count); }
                         String text = bytes.toString("UTF-8");
                         JSONObject data = text.isEmpty() ? new JSONObject() : new JSONObject(text);
+                        String quickSecret = quickStart ? data.optString("secret", "") : "";
                         removeSecrets(data);
+                        // This one-time secret is needed only to complete Quick Connect, never persisted.
+                        if (quickStart && quickSecret.matches("[A-Fa-f0-9]{8,128}")) data.put("secret", quickSecret);
                         result.put("data", data);
                     }
                 } else if (status >= 300 && status < 400) result.put("error", "Seerr redirected the request. Enter its final address, including HTTPS or any path prefix.");
@@ -149,7 +153,7 @@ final class SeerrClient {
             java.util.ArrayList<String> keys = new java.util.ArrayList<>(); object.keys().forEachRemaining(keys::add);
             for (String key : keys) {
                 String lower = key.toLowerCase(java.util.Locale.ROOT);
-                if (lower.contains("password") || lower.contains("token") || lower.contains("cookie") || lower.contains("apikey")) object.remove(key);
+                if (lower.contains("password") || lower.contains("token") || lower.contains("secret") || lower.contains("cookie") || lower.contains("apikey")) object.remove(key);
                 else removeSecrets(object.get(key));
             }
         }

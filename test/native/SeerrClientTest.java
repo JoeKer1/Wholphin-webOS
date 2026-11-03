@@ -47,6 +47,13 @@ public final class SeerrClientTest {
             String cookie = exchange.getRequestHeaders().getFirst("Cookie");
             if (route.equals("/api/v1/status")) {
                 exchange.getResponseHeaders().add("Set-Cookie", "XSRF-TOKEN=fixture-csrf; Path=/; Max-Age=3600");
+            } else if (route.equals("/api/v1/auth/jellyfin/quickconnect/initiate")) {
+                body = "{\"code\":\"123456\",\"secret\":\"abcdef0123456789\",\"accessToken\":\"must-not-leak\"}";
+            } else if (route.equals("/api/v1/auth/jellyfin/quickconnect/authenticate")) {
+                check("fixture-csrf".equals(exchange.getRequestHeaders().getFirst("X-XSRF-TOKEN")), "Quick Connect CSRF header");
+                JSONObject payload = new JSONObject(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                if (!payload.optString("secret").equals("abcdef0123456789")) status = 403;
+                else exchange.getResponseHeaders().add("Set-Cookie", "seerr.sid=alice; HttpOnly; Path=/; Max-Age=3600");
             } else if (route.equals("/api/v1/auth/local")) {
                 check("fixture-csrf".equals(exchange.getRequestHeaders().getFirst("X-XSRF-TOKEN")), "CSRF header is supplied");
                 String raw = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
@@ -88,6 +95,12 @@ public final class SeerrClientTest {
             check(call(client, url, "profile-b", "/auth/me", null).getInt("status") == 200, "Other profile is unaffected");
             call(client, url, "profile-b", "/auth/logout", new JSONObject());
             check(call(client, url, "profile-b", "/auth/me", null).getInt("status") == 403, "Disconnect clears only this profile's cookie");
+            JSONObject quick = call(client, url, "profile-c", "/auth/jellyfin/quickconnect/initiate", new JSONObject());
+            check(quick.getInt("status") == 200 && quick.getJSONObject("data").getString("secret").equals("abcdef0123456789"), "Quick Connect exposes only its one-time secret");
+            check(!quick.toString().contains("must-not-leak"), "Quick Connect strips access tokens");
+            check(call(client, url, "profile-c", "/auth/jellyfin/quickconnect/authenticate", new JSONObject().put("secret", "abcdef0123456789")).getInt("status") == 200, "Quick Connect authentication succeeds");
+            check(call(client, url, "profile-c", "/auth/me", null).getInt("status") == 200, "Quick Connect retains cookie session");
+            check(call(client, url, "profile-b", "/auth/me", null).getInt("status") == 403, "Quick Connect does not sign in a different Ember profile");
             System.out.println("PASS real native Seerr HTTP: CSRF, login, cookie persistence and profile isolation, requests, secret stripping, redirect and endpoint restrictions, failed-login cleanup and disconnect");
         } finally { client.close(); if (restored != null) restored.close(); server.stop(0); }
     }

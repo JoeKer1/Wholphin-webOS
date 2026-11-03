@@ -1683,7 +1683,10 @@
     }
     return libraryRequest;
   }
-  function seerrSettingsValue() { return readPreference("seerr", {}); }
+  function seerrSettingsValue() {
+    var saved = readPreference("seerr", {});
+    return Object.assign({}, saved, {server: saved.server || localStorage.getItem("wholphin-seerr-server:" + session.server)});
+  }
   function seerrServer(value) {
     var url;
     try { url = new URL(/^https?:\/\//i.test(value.trim()) ? value.trim() : "http://" + value.trim()); }
@@ -1691,13 +1694,61 @@
     if (["http:", "https:"].indexOf(url.protocol) < 0 || url.username || url.password || url.search || url.hash || !url.hostname) throw new Error("Enter a Seerr address, including its port if needed.");
     return url.href.replace(/\/api\/v1\/?$/, "").replace(/\/$/, "");
   }
-  function seerrApi(path, body, server) {
-    return P.seerrRequest({server: server || seerrSettingsValue().server, profile: accountKey("seerr"), path: path, method: body ? "POST" : "GET", body: body});
+  function seerrApi(path, body, server, account) {
+    account = account || session;
+    return P.seerrRequest({server: server || seerrSettingsValue().server, profile: "wholphin-seerr:" + account.server + ":" + account.user, path: path, method: body ? "POST" : "GET", body: body});
+  }
+  async function connectSeerrProfile(server, account, valid, force) {
+    function current() {
+      if (session !== account || !valid()) throw new Error("Profile changed. Open Seerr again for the selected profile.");
+    }
+    function matches(me) {
+      return me && me.jellyfinUserId && String(me.jellyfinUserId).replace(/-/g, "").toLowerCase() === String(account.user).replace(/-/g, "").toLowerCase();
+    }
+    current();
+    if (!force) {
+      try {
+        var me = await seerrApi("/auth/me", null, server, account);
+        current();
+        if (seerrSettingsValue().auth === "local" || seerrSettingsValue().auth === "jellyfin" || matches(me)) return me;
+      } catch (error) {
+        current();
+        if (error.status !== 401 && error.status !== 403) throw error;
+      }
+    }
+    var enabled = await api("/QuickConnect/Enabled", null, null, "GET", {session: account, timeoutMs: 10000});
+    current();
+    if (enabled !== true) throw new Error("Enable Quick Connect on your Jellyfin server to connect this profile without a password.");
+    var pending = await seerrApi("/auth/jellyfin/quickconnect/initiate", {}, server, account);
+    try {
+      current();
+      if (!/^[0-9]{4,12}$/.test(pending.code) || !/^[a-f0-9]{8,128}$/i.test(pending.secret)) throw new Error("Seerr did not return a valid Quick Connect request.");
+      var connection;
+      try { connection = await api("/QuickConnect/Connect", {Secret: pending.secret}, null, "GET", {session: account, timeoutMs: 10000}); }
+      catch (error) {
+        if (error.status === 404) throw new Error("Seerr must use the same Jellyfin server as this Ember profile.");
+        throw error;
+      }
+      current();
+      if (!connection || String(connection.Code) !== String(pending.code) || connection.Authenticated) throw new Error("Seerr must use the same Jellyfin server as this Ember profile.");
+      var authorized = await api("/QuickConnect/Authorize", {Code: pending.code, UserId: account.user}, {}, "POST", {session: account, timeoutMs: 10000});
+      current();
+      if (authorized !== true) throw new Error("Jellyfin could not authorize this profile for Seerr.");
+      await seerrApi("/auth/jellyfin/quickconnect/authenticate", {secret: pending.secret}, server, account);
+      current();
+      var connected = await seerrApi("/auth/me", null, server, account);
+      current();
+      if (!matches(connected)) {
+        await seerrApi("/auth/logout", {}, server, account);
+        throw new Error("Seerr returned a different Jellyfin profile. The connection was cleared.");
+      }
+      return connected;
+    } finally { pending.secret = ""; }
   }
   async function seerrSettings() {
     var r = reset("Seerr"), account = session, saved = seerrSettingsValue();
     main.className = "seerr-page";
-    el("p", "Discover and request movies and shows. Sign in separately for each Ember profile; your password is not saved.", main);
+    el("p", "Discover and request movies and shows using your selected Jellyfin profile. No separate Seerr password is needed.", main);
     var form = el("form", null, main); form.className = "seerr-login";
     function field(label, type, value) {
       var id = "seerr-" + type, caption = el("label", label, form), input = el("input", null, form);
@@ -1706,11 +1757,22 @@
     }
     var server = field("Seerr server address", "url", saved.server || localStorage.getItem("wholphin-seerr-server:" + session.server));
     server.placeholder = "http://your-server:5055"; server.type = "text";
-    var label = el("label", "Sign-in method", form), method = el("select", null, form);
+    var alternate = button("Use a different Seerr account", function () {
+      manual.hidden = !manual.hidden;
+      submit.textContent = manual.hidden ? "Connect with this profile" : "Sign in to Seerr";
+      alternate.setAttribute("aria-expanded", String(!manual.hidden));
+      if (!manual.hidden) focusContent(method);
+      else password.value = "";
+    }, form);
+    alternate.type = "button"; alternate.setAttribute("aria-expanded", "false");
+    var manual = el("div", null, form); manual.hidden = true;
+    var label = el("label", "Sign-in method", manual), method = el("select", null, manual);
     method.id = "seerr-method"; label.htmlFor = method.id;
     [["jellyfin", "Jellyfin account"], ["local", "Seerr local account"]].forEach(function (v) { var option = el("option", v[1], method); option.value = v[0]; });
     var username = field("Username (email for a Seerr local account)", "text", ""), password = field("Password", "password", "");
-    var submit = el("button", "Sign in to Seerr", form); submit.type = "submit";
+    [username.previousElementSibling, username, password.previousElementSibling, password].forEach(function (node) { manual.appendChild(node); });
+    var submit = el("button", "Connect with this profile", form); submit.type = "submit";
+    form.appendChild(alternate);
     var feedback = el("p", "", main); feedback.setAttribute("role", "status");
     form.onsubmit = async function (event) {
       event.preventDefault(); if (submit.disabled) return;
@@ -1718,15 +1780,16 @@
       password.value = "";
       try {
         url = seerrServer(server.value);
-        if (!username.value.trim()) throw new Error("Enter your username or email.");
+        if (!manual.hidden && !username.value.trim()) throw new Error("Enter your username or email.");
         credentials[loginMethod === "local" ? "email" : "username"] = username.value.trim();
-        submit.disabled = true; feedback.textContent = "Signing in…";
-        await seerrApi("/auth/" + loginMethod, credentials, url);
+        submit.disabled = true; feedback.textContent = "Connecting…";
+        if (manual.hidden) await connectSeerrProfile(url, account, function () { return r === revision; }, true);
+        else await seerrApi("/auth/" + loginMethod, credentials, url, account);
         if (r !== revision || session !== account) return;
         var me = await seerrApi("/auth/me", null, url);
         if (r !== revision || session !== account) return;
         seerrBrowseStates.delete(accountKey("seerr-browse"));
-        localStorage.setItem(accountKey("seerr"), JSON.stringify({server: url}));
+        localStorage.setItem(accountKey("seerr"), JSON.stringify({server: url, auth: manual.hidden ? "automatic" : loginMethod}));
         localStorage.setItem("wholphin-seerr-server:" + session.server, url);
         return go(seerrDiscover);
       } catch (error) { if (r === revision) feedback.textContent = error.message; }
@@ -1738,7 +1801,7 @@
         await seerrApi("/auth/logout", {});
         if (session !== account || r !== revision) return;
         seerrBrowseStates.delete(accountKey("seerr-browse"));
-        localStorage.removeItem(accountKey("seerr"));
+        localStorage.setItem(accountKey("seerr"), JSON.stringify({server: saved.server, disabled: true}));
         return seerrSettings();
       }, main);
     }
@@ -1755,14 +1818,15 @@
   }
   var seerrBrowseStates = new Map();
   async function seerrDiscover() {
-    if (!seerrSettingsValue().server) return seerrSettings();
+    if (!seerrSettingsValue().server || seerrSettingsValue().disabled) return seerrSettings();
     var r = reset("Discover"), account = session, me;
     main.className = "seerr-page"; selectNav("seerr");
     var feedback = el("p", "Connecting to Seerr…", main); feedback.setAttribute("role", "status");
-    try { me = await seerrApi("/auth/me"); }
+    try { me = await connectSeerrProfile(seerrSettingsValue().server, account, function () { return r === revision; }); }
     catch (error) {
       if (r !== revision) return;
       feedback.textContent = error.message;
+      button("Retry connection", function () { return seerrDiscover(); }, main);
       button("Seerr sign-in settings", function () { return go(seerrSettings); }, main); focusFirst(); return;
     }
     if (r !== revision || session !== account) return;

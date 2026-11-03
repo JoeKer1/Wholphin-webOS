@@ -1,6 +1,6 @@
 {
   "name": "ember-tv",
-  "version": "0.2.84",
+  "version": "0.2.85",
   "private": true,
   "scripts": {
     "build:webos": "node tools/build.mjs webos",
@@ -17,7 +17,7 @@
     "test:subtitle-defaults": "npm run build && node test/subtitle-defaults-browser.cjs",
     "test:anime-audio": "npm run build && node test/anime-audio-browser.cjs",
     "test:language-sync": "npm run build && node test/language-sync-browser.cjs",
-    "test:seerr": "npm run build && node test/seerr-browser.cjs",
+    "test:seerr": "npm run build && node test/seerr-profile-browser.cjs && node test/seerr-browser.cjs",
     "test:subtitle-retry": "npm run build && node test/subtitle-retry-browser.cjs",
     "test:completion": "npm run build && node test/completion-browser.cjs",
     "test:episode-entry": "npm run build && node test/episode-entry-browser.cjs",
