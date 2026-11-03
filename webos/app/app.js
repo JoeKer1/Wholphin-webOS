@@ -2679,9 +2679,14 @@
       var badge = el("span", "✓", art);
       badge.className = "watched-badge";
       badge.setAttribute("aria-label", "Watched");
-    } else if (data.PlayedPercentage > 0 && data.PlayedPercentage < 100) {
+    }
+    // Watched history and an in-progress rewatch can both be present.
+    var percentage = data.PlaybackPositionTicks > 0 && item.RunTimeTicks > 0
+      ? data.PlaybackPositionTicks / item.RunTimeTicks * 100
+      : data.PlayedPercentage;
+    if (percentage > 0 && percentage < 100) {
       var progress = el("div", null, art); progress.className = "card-progress";
-      el("div", null, progress).style.width = Math.min(100, data.PlayedPercentage) + "%";
+      el("div", null, progress).style.width = Math.min(100, percentage) + "%";
     }
   }
   function refreshUserData(item, data, account) {
