@@ -1796,7 +1796,7 @@
       finally { credentials.password = ""; if (r === revision) submit.disabled = false; }
     };
     if (saved.server) {
-      button("Open Discover", function () { return go(seerrDiscover); }, main);
+      button("Open Seerr", function () { return go(seerrDiscover); }, main);
       button("Disconnect this profile from Seerr", async function () {
         await seerrApi("/auth/logout", {});
         if (session !== account || r !== revision) return;
@@ -1819,7 +1819,7 @@
   var seerrBrowseStates = new Map();
   async function seerrDiscover() {
     if (!seerrSettingsValue().server || seerrSettingsValue().disabled) return seerrSettings();
-    var r = reset("Discover"), account = session, me;
+    var r = reset("Seerr"), account = session, me;
     main.className = "seerr-page"; selectNav("seerr");
     var feedback = el("p", "Connecting to Seerr…", main); feedback.setAttribute("role", "status");
     try { me = await connectSeerrProfile(seerrSettingsValue().server, account, function () { return r === revision; }); }
@@ -1831,11 +1831,13 @@
     }
     if (r !== revision || session !== account) return;
     feedback.textContent = "Signed in as " + (me.displayName || me.username || me.jellyfinUsername || "Seerr user") + ".";
-    var tabs = el("div", null, main); tabs.className = "tv-library-tabs";
+    var tabs = el("div", null, main); tabs.className = "seerr-tabs";
+    tabs.setAttribute("role", "group"); tabs.setAttribute("aria-label", "Seerr categories");
     var form = el("form", null, main); form.className = "seerr-search";
     var input = el("input", null, form); input.setAttribute("aria-label", "Search Seerr"); input.placeholder = "Search movies and shows";
     var searchButton = el("button", "Search", form); searchButton.type = "submit";
-    var results = el("section", null, main), state = 0, path = "/discover/trending", kind = null, page = 0, more = true, loading = false, grid;
+    var results = el("section", null, main), state = 0, path = "/discover/trending", kind = null, page = 0, more = true, loading = false, grid,
+      pendingGridFocus = null, lastCard = null;
     function valid() { return r === revision && session === account; }
     async function load() {
       if (!valid() || loading || !more) return;
@@ -1865,16 +1867,27 @@
         var batch = items.map(function (item) { return seerrCard(item, kind); }).filter(Boolean);
         cards(batch, results, null, grid, function (item) { return go(function () { return seerrDetail(item.seerrType, item.seerrId, me); }); });
         page = next;
+        var savedBrowse = seerrBrowseStates.get(accountKey("seerr-browse"));
+        if (savedBrowse) savedBrowse.pages = page;
         feedback.textContent = grid.children.length ? "" : "No titles found.";
         if (page === 1 && document.activeElement === searchButton && grid.firstChild) focusContent(grid.firstChild);
       } catch (error) {
         if (!valid() || current !== state) return;
         feedback.textContent = error.message;
         button("Retry loading titles", function () { return load(); }, results);
-      } finally { if (current === state) loading = false; }
+      } finally {
+        if (current === state) {
+          loading = false;
+          if (valid() && pendingGridFocus != null) {
+            focusContent(grid.children[Math.min(pendingGridFocus, grid.children.length - 1)]);
+            pendingGridFocus = null;
+          }
+        }
+      }
     }
     function browse(label, route, type) {
       state++; path = route; kind = type; page = 0; more = true; loading = false;
+      pendingGridFocus = null; lastCard = null;
       seerrBrowseStates.set(accountKey("seerr-browse"), {label: label, route: route, type: type, query: input.value});
       if (seerrBrowseStates.size > 50) seerrBrowseStates.delete(seerrBrowseStates.keys().next().value);
       results.textContent = ""; el("h2", label, results); grid = el("div", null, results); grid.className = "grid";
@@ -1887,13 +1900,66 @@
     var onScroll = function () { if (!valid()) return; if (main.scrollHeight - main.scrollTop - main.clientHeight < 700) load(); };
     main.addEventListener("scroll", onScroll);
     results.addEventListener("focusin", function (event) { var list = grid.querySelectorAll("button"), at = Array.prototype.indexOf.call(list, event.target); if (at >= Math.max(0, list.length - 6)) load(); });
-    // The handler is replaced on every Discover visit to avoid retaining detached pages.
+    // The handler is replaced on every Seerr visit to avoid retaining detached pages.
     if (main.seerrScroll) main.removeEventListener("scroll", main.seerrScroll);
     main.seerrScroll = onScroll;
+    activeListing = {
+      dispose: function () { main.removeEventListener("scroll", onScroll); },
+      closeOptions: function () { return false; },
+      scope: function () { return null; },
+      handleKey: function (key, active) {
+        var selectedTab = tabs.querySelector('[aria-pressed="true"]') || tabs.firstChild;
+        function firstCard() { return lastCard && lastCard.isConnected ? lastCard : grid.firstElementChild; }
+        if (tabs.contains(active)) {
+          var entries = Array.prototype.slice.call(tabs.children), at = entries.indexOf(active);
+          if (key === 37 && at === 0) focusContent(nav.querySelector('[data-nav="seerr"]'));
+          else if (key === 37 || key === 39) focusContent(entries[at + (key === 37 ? -1 : 1)]);
+          else if (key === 40) focusContent(input);
+          return true;
+        }
+        if (form.contains(active)) {
+          if (key === 38) focusContent(selectedTab);
+          else if (key === 40) focusContent(firstCard() || results.querySelector("button"));
+          else if (active === searchButton && key === 37) focusContent(input);
+          else if (active === input && key === 39 && !input.value) focusContent(searchButton);
+          else if (active === input && key === 37 && !input.value) focusContent(nav.querySelector('[data-nav="seerr"]'));
+          return true;
+        }
+        if (grid.contains(active)) {
+          var cards = Array.prototype.slice.call(grid.children), index = cards.indexOf(active);
+          if (index < 0) return false;
+          lastCard = active;
+          var top = cards[0].getBoundingClientRect().top,
+            columns = cards.filter(function (card) { return Math.abs(card.getBoundingClientRect().top - top) < 4; }).length || 1;
+          if (key === 37) {
+            if (index % columns === 0) focusContent(nav.querySelector('[data-nav="seerr"]'));
+            else focusContent(cards[index - 1]);
+          } else if (key === 39) {
+            if ((index + 1) % columns !== 0) focusContent(cards[index + 1]);
+          } else if (key === 38) focusContent(index < columns ? input : cards[index - columns]);
+          else if (key === 40) {
+            if (index + columns < cards.length) focusContent(cards[index + columns]);
+            else if (more) {
+              pendingGridFocus = index + columns;
+              run(load);
+            }
+          }
+          return true;
+        }
+        return false;
+      },
+    };
     var previous = seerrBrowseStates.get(accountKey("seerr-browse"));
     if (previous) input.value = previous.query || "";
     await browse(previous ? previous.label : "Trending", previous ? previous.route : "/discover/trending", previous && previous.type);
-    if (valid()) focusContent(tabs.firstChild);
+    var frame = stack[stack.length - 1], savedFocus = frame && frame.focus;
+    function restoredCard() { return Array.prototype.find.call(grid.children, function (card) { return card.dataset.item === savedFocus; }); }
+    while (valid() && savedFocus && !restoredCard() && more && previous && page < (previous.pages || 1)) {
+      var before = page;
+      await load();
+      if (page === before) break;
+    }
+    if (valid()) focusContent(restoredCard() || tabs.querySelector('[aria-pressed="true"]') || tabs.firstChild);
   }
   async function seerrDetail(type, id, me) {
     var r = reset("Loading title…"), account = session, data;
@@ -1920,12 +1986,13 @@
       var standardPending = pending;
       var quality = button("Quality: " + (is4k ? "4K" : "Standard"), function () {
         is4k = !is4k; quality.textContent = "Quality: " + (is4k ? "4K" : "Standard");
-        selected = []; renderSeasons(); submit.textContent = "Review request"; refresh();
+        selected = []; renderSeasons(); submit.textContent = requestLabel; refresh();
       }, form);
       quality.hidden = !fourKAllowed;
       quality.disabled = !(standardAllowed && fourKAllowed);
       var seasons = el("div", null, form); seasons.className = "seerr-seasons";
-      var submit = button("Review request", function () {
+      var requestLabel = type === "movie" ? "Request movie" : "Request selected seasons";
+      var submit = button(requestLabel, function () {
         if (type === "tv" && !selected.length) { feedback.textContent = "Choose at least one season."; return; }
         var summary = "Request " + (data.title || data.name) + (type === "tv" ? " · seasons " + selected.join(", ") : "") + (is4k ? " in 4K?" : "?");
         settingChoices(summary, [[false, "Cancel"], [true, "Confirm request"]], false, async function (confirmed) {
@@ -1962,7 +2029,7 @@
           var unavailable = [2, 3, 5].indexOf(is4k ? existing.status4k : existing.status) >= 0;
           var b = button((season.name || "Season " + season.seasonNumber) + (unavailable ? " · already requested or available" : ""), function () {
             var at = selected.indexOf(season.seasonNumber); if (at < 0) selected.push(season.seasonNumber); else selected.splice(at, 1);
-            b.setAttribute("aria-pressed", String(at < 0)); submit.textContent = "Review request"; refresh();
+            b.setAttribute("aria-pressed", String(at < 0)); submit.textContent = requestLabel; refresh();
           }, seasons);
           b.setAttribute("aria-pressed", String(selected.indexOf(season.seasonNumber) >= 0)); b.disabled = unavailable;
         });
@@ -1970,7 +2037,8 @@
       renderSeasons(); refresh();
       if (type === "movie" && standardPending) feedback.textContent = seerrStatus(info) + ".";
     }
-    var returnButton = button("Back to Discover", back, main); focusFirst();
+    var returnButton = button("Back to Seerr", back, main);
+    focusContent(submit && !submit.disabled ? submit : (seasons && seasons.querySelector("button:not(:disabled)")) || actions.querySelector("button") || returnButton);
   }
   async function favorites() {
     var r = reset("Favorites");

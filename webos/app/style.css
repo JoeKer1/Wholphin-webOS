@@ -1350,11 +1350,11 @@ body:not(.signed-in) main {
   overflow: hidden;
 }
 
-.tv-library-tabs {
+.tv-library-tabs, .seerr-tabs {
   display: flex;
   margin: 0 8px 24px;
 }
-.tv-library-tabs button {
+.tv-library-tabs button, .seerr-tabs button {
   background: transparent;
   border-radius: 0;
   border: 0;
@@ -1364,11 +1364,11 @@ body:not(.signed-in) main {
   color: #c1b8cd;
   font-size: 27px;
 }
-.tv-library-tabs button[aria-selected="true"] {
+.tv-library-tabs button[aria-selected="true"], .seerr-tabs button[aria-pressed="true"] {
   color: #fff;
   border-bottom-color: #a67aff;
 }
-.tv-library-tabs button:focus {
+.tv-library-tabs button:focus, .seerr-tabs button:focus {
   outline: 3px solid #a67aff;
 }
 .tv-recommended > h1 {
