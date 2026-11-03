@@ -2,7 +2,7 @@
 
 Ember is an unofficial, experimental Jellyfin client for LG webOS, Samsung Tizen and Android-based Fire TV devices, inspired by [Wholphin for Android TV](https://github.com/damontecres/Wholphin). This repository contains the standalone TV implementation; it does not require an Android build or a Jellyfin Web deployment.
 
-Current version: **0.2.93**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
+Current version: **0.2.94**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
 
 The app was previously named Wholphin for webOS. Existing installations update in place and keep their sign-in and settings.
 
@@ -17,7 +17,7 @@ The app was previously named Wholphin for webOS. Existing installations update i
 - Fire TV libass rendering for SSA/ASS, external text sidecars and in-place switching of supported loaded subtitles. LG/Tizen PGS continues to require server burn-in.
 - Next-episode autoplay, Up Next previews/countdown and configurable Still watching confirmation.
 - Live TV now/next guide, channel favorites, later listings, continuous channel browsing and playback without EPG.
-- Conservative Compatibility playback by default; experimental opt-in LG C1 native HEVC/4K support and playback diagnostics.
+- Automatic supported-format playback on LG C1 with decoder-error Compatibility fallback; device-derived native Fire TV playback and playback diagnostics.
 - Remote navigation, standard media controls with a seek bar and Options menu, Magic Remote pointer controls and lazy-loaded posters.
 
 ## Development
@@ -182,3 +182,11 @@ The launcher uses an explicit `EmberLauncher` activity alias with the current ti
 The Fire TV tile is now an opaque **1280×720** PNG on a black background, with a **512×512** square fallback. The application icon, banner and logo all reference the wide artwork; `roundIcon` references the square fallback. This changes the primary application icon too, since supplying only an Android TV banner left the square application icon available to Fire OS's sideloaded-app treatment. LG and Samsung artwork are unchanged. The APK's embedded dimensions and primary resource mapping have been checked. Actual Fire TV launcher padding/caching behavior remains to be validated on hardware; this release does not claim that the gray padding is eliminated.
 
 Source artwork: `platforms/branding/ember-firetv-tile.svg` and `ember-firetv-square.svg`. Regenerate the packaged PNGs with `node tools/render-firetv-branding.cjs` (requires Playwright; `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` can select an existing installation).
+
+### Avoid unnecessary LG video transcoding (v0.2.94)
+
+LG now defaults to **Automatic (LG C1)** when no playback-mode preference has been saved. Explicit saved Compatibility choices remain respected. The bounded native profile includes supported H.264/HEVC video with AAC/MP3/AC3/EAC3 audio in MP4/M4V/MKV, retaining codec, bit-depth, frame-rate, bitrate, resolution and Dolby Vision restrictions. Dolby Vision remains separately opt-in and limited to the existing supported MP4 variants; unsupported audio may be converted while video is copied, and unsupported video still transcodes.
+
+Locally rendered text subtitles no longer disable direct play just because a subtitle preference or subtitle track change was applied. Per-video/per-track timing corrections continue to work. Selecting non-default audio on LG requests a remux rather than silently playing the file's default audio track. Bitmap subtitles and failed text extraction retain their existing burn-in fallback. Native decoder errors retry Compatibility once at the same position; startup errors raised synchronously by the media engine are queued until playback preparation finishes, without a retry loop.
+
+Validation: `npm run test:lg-direct-play` covers the reported 720p HEVC Main 10 / AAC / MKV / ASS case with a -3-second local subtitle correction, audio-only remuxing, explicit Compatibility preference, non-default audio selection, synchronous startup failure, decoder failure after seeking and bounded retry. Existing LG HDR/DV/remux/subtitle/diagnostic regressions and three-platform subtitle retry/menu tests also pass. This release is built but has not been deployed to or validated on the occupied LG TV.

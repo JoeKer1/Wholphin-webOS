@@ -558,6 +558,7 @@ test("library rendering stays bounded for very large continuous libraries", () =
 test("C1 native profile bounds 4K HEVC/HDR10 and Dolby audio without DTS/TrueHD", () => {
   const p = C.profile({ native: true });
   assert.equal(p.MaxStreamingBitrate, 60000000);
+  assert.equal(p.DirectPlayProfiles[0].Container, "mp4,m4v,mkv");
   assert.equal(p.DirectPlayProfiles[0].VideoCodec, "h264,hevc");
   assert.equal(p.DirectPlayProfiles[0].AudioCodec, "aac,mp3,ac3,eac3");
   assert.ok(!JSON.stringify(p).includes("truehd"));
@@ -611,7 +612,7 @@ test("C1 native profile bounds 4K HEVC/HDR10 and Dolby audio without DTS/TrueHD"
   assert.equal(
     C.profile().MaxStreamingBitrate,
     20000000,
-    "Compatibility remains the default",
+    "The shared baseline remains available for other platforms and explicit Compatibility",
   );
 });
 test("native policy requires compatible Dolby Vision MP4 and falls back for burn-in", () => {

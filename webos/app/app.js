@@ -913,7 +913,7 @@
       return P.nativePlayback === false
         ? (P.playbackName || "Samsung AVPlay") + " (Compatibility)"
         : decoder.native
-          ? "LG C1 native (experimental)"
+          ? "Automatic (LG C1)"
           : "Compatibility";
     }
     var modeControl = row(
@@ -924,7 +924,7 @@
         ? "Detect device decoders and audio output for direct play; fall back to Compatibility on errors."
         : P.nativePlayback === false
         ? (P.playbackName || "Samsung AVPlay") + " with Jellyfin compatibility transcoding."
-        : "Compatibility works with the widest range of files. Native enables supported C1 formats.",
+        : "Try supported LG formats without video conversion. Fall back to Compatibility if playback fails.",
       function (control) {
         var before = decoder.native;
         decoder.native = false; var compatible = modeValue();
@@ -6902,7 +6902,7 @@
   }
   function decoderOptions() {
     return readPreference("decoder-options", {
-      native: !!P.playbackPolicy,
+      native: !!(P.playbackPolicy || P.defaultNativePlayback),
       dolbyVision: false,
     });
   }
@@ -8006,9 +8006,14 @@
         dolbyVision: decoder.dolbyVision,
       });
       if (nativeMode && P.playbackProfile) deviceProfile = P.playbackProfile(C.profile(), sourceMetadata);
-      var forceTranscode =
-        !!live || !!options.compatibility ||
-        (!(nativeMode && P.playbackPolicy) && (!!options.trackChange || !!subtitleCues || !!options.applyPreferences));
+      // Native engines with track control can select embedded audio directly.
+      // LG's HTML player needs a remux only for a non-default audio track;
+      // text rendered by Ember must not disable direct play of the video.
+      var nativeTrackControl = nativeMode && !!P.playbackPolicy;
+      var audioNeedsRemux = !nativeTrackControl && options.audioIndex != null &&
+        (!sourceMetadata || options.audioIndex !== sourceMetadata.DefaultAudioStreamIndex);
+      var forceTranscode = !!live || !!options.compatibility || audioNeedsRemux ||
+        (!nativeMode && (!!options.trackChange || !!subtitleCues || !!options.applyPreferences));
       var requestBody = {
         UserId: session.user,
         StartTimeTicks: ticks,
@@ -8024,7 +8029,7 @@
           : nativeMode ? 6 : 2,
         AudioStreamIndex: options.audioIndex,
         SubtitleStreamIndex: subtitleCues ? -1 : options.subtitleIndex,
-        MediaSourceId: options.mediaSourceId || (nativeMode && P.playbackProfile && sourceMetadata ? sourceMetadata.Id : undefined),
+        MediaSourceId: options.mediaSourceId || ((nativeMode || subtitleCues) && sourceMetadata ? sourceMetadata.Id : undefined),
       };
       var info = await playbackApi(
         "/Items/" + encodeURIComponent(item.Id) + "/PlaybackInfo",
@@ -8162,6 +8167,11 @@
     } finally {
       if (playController === controller) playController = null;
       busy = false;
+      if (playing && playing.pendingCompatibility) {
+        var failed = playing;
+        failed.pendingCompatibility = false;
+        run(function () { return compatibilityPlayback(failed, true); });
+      }
       drainPendingAdvance();
       if (openedLive)
         await api(
@@ -8281,10 +8291,10 @@
       playing &&
       playing.nativeMode &&
       !document.hidden &&
-      !busy &&
       !playing.fallbackInProgress
     ) {
       var active = playing;
+      if (busy) { active.pendingCompatibility = true; return; }
       message(
         "Native playback failed. Trying Compatibility at the same position…",
       );

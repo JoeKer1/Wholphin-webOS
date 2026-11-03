@@ -135,11 +135,11 @@
         IsRequired: required !== false,
       };
     }
-    base.Name = "LG C1 native (experimental)";
+    base.Name = "LG C1 native";
     base.MaxStreamingBitrate = 60000000;
     base.DirectPlayProfiles = [
       {
-        Container: "mp4,m4v",
+        Container: "mp4,m4v,mkv",
         Type: "Video",
         VideoCodec: "h264,hevc",
         AudioCodec: "aac,mp3,ac3,eac3",

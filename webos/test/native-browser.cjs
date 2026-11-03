@@ -290,8 +290,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       return page.locator("#playback-panel").textContent();
     }
     await page.locator("nav [data-nav=settings]").click();
-    await click("Playback mode: Compatibility");
-    await page.locator("#setting-options").getByRole("button",{name:"LG C1 native (experimental)",exact:true}).click();
+    await page.getByRole("button", {name:"Playback mode: Automatic (LG C1)", exact:true}).waitFor();
     await click("Dolby Vision MP4 (experimental): Off");
     await page.locator("nav [data-nav=home]").click();
     await click("4K test");
@@ -507,7 +506,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     assert(text.includes("Video copied; audio encoded"));
     await stopped();
     await page.locator("nav [data-nav=settings]").click();
-    await click("Playback mode: LG C1 native (experimental)");
+    await click("Playback mode: Automatic (LG C1)");
     await page.locator("#setting-options").getByRole("button",{name:"Compatibility",exact:true}).click();
     await page.locator("nav [data-nav=home]").click();
     await click("4K test");
@@ -515,7 +514,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     assert.equal(infos().at(-1).body.MaxStreamingBitrate, 20000000);
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: opt-in 4K/HEVC profile, Dolby audio, private playback diagnostics, current-session telemetry, remux reporting, HDR/DV gating, burn-in fallback, paused/manual and decoder-error Compatibility retry, bookmark preservation and no retry loop",
+      "PASS: automatic LG 4K/HEVC profile, Dolby audio, private playback diagnostics, current-session telemetry, remux reporting, HDR/DV gating, burn-in fallback, paused/manual and decoder-error Compatibility retry, bookmark preservation and no retry loop",
     );
   } finally {
     await browser.close();

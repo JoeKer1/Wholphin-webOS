@@ -4,6 +4,7 @@
     id: "webos",
     deviceName: "LG TV",
     nativePlayback: true,
+    defaultNativePlayback: true,
     keyCode: function (event) {
       return event.keyCode;
     },

@@ -38,6 +38,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       pathToFileURL(path.resolve(__dirname, "../app/index.html")).href,
     );
     await page.locator("nav [data-nav=settings]").click();
+    await page.locator(".settings-category").first().waitFor();
     const categories = page.locator(".settings-category");
     assert.equal(await categories.count(), 5);
     await page.keyboard.press("ArrowDown");
@@ -62,6 +63,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         .textContent(),
       "Off",
     );
+    await page.keyboard.press("ArrowDown");
+    assert.equal(await page.locator(":focus").getAttribute("aria-label"), "Skip intro");
+    await page.keyboard.press("ArrowDown");
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     assert.equal(await page.locator(":focus").textContent(), "30 seconds");
@@ -101,11 +105,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       .waitFor();
     await page.getByRole("button", { name: "Device", exact: true }).click();
     const mode = page.getByRole("button", {
-      name: "Playback mode: Compatibility",
+      name: "Playback mode: Automatic (LG C1)",
       exact: true,
     });
     await mode.click();
-    await page.locator("#setting-options").getByRole("button", {name:"LG C1 native (experimental)",exact:true}).click();
+    await page.locator("#setting-options").getByRole("button", {name:"Compatibility",exact:true}).click();
+    await page.getByRole("button", {name:"Playback mode: Compatibility",exact:true}).click();
+    await page.locator("#setting-options").getByRole("button", {name:"Automatic (LG C1)",exact:true}).click();
     assert.equal(
       await page
         .getByRole("button", {
@@ -127,6 +133,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     );
     await page.reload();
     await page.locator("nav [data-nav=settings]").click();
+    await page.locator(".settings-category").first().waitFor();
     assert.equal(
       await page
         .getByRole("button", {
@@ -139,7 +146,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     assert.equal(
       await page
         .getByRole("button", {
-          name: "Playback mode: LG C1 native (experimental)",
+          name: "Playback mode: Automatic (LG C1)",
           exact: true,
         })
         .count(),
