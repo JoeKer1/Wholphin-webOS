@@ -1,6 +1,15 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const C = require("../app/core.js");
+test("Seerr request permissions distinguish media types and standard versus 4K", () => {
+  assert.deepEqual(C.seerrPermissions(2, "tv"), {standard: true, fourK: true});
+  assert.deepEqual(C.seerrPermissions(262144, "movie"), {standard: true, fourK: false});
+  assert.deepEqual(C.seerrPermissions(262144, "tv"), {standard: false, fourK: false});
+  assert.deepEqual(C.seerrPermissions(4096, "tv"), {standard: false, fourK: true});
+  assert.deepEqual(C.seerrPermissions(4096, "movie"), {standard: false, fourK: false});
+  assert.deepEqual(C.seerrPermissions(16, "tv"), {standard: false, fourK: false}, "Managing requests alone does not grant request permission");
+  assert.deepEqual(C.seerrPermissions(undefined, "movie"), {standard: false, fourK: false});
+});
 test("series choices prefer the season, match reordered tracks, and merge across devices", () => {
   const a = {reset: 0, entries: {"series:show": {Audio: {value: {language: "jpn"}, updated: 10}}}};
   const b = {reset: 0, entries: {"season:s1": {Audio: {value: {language: "eng"}, updated: 20}, Subtitle: {value: {off: true}, updated: 21}}}};

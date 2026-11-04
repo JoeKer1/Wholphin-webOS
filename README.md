@@ -2,7 +2,7 @@
 
 Ember is an unofficial, experimental Jellyfin client for LG webOS, Samsung Tizen and Android-based Fire TV devices, inspired by [Wholphin for Android TV](https://github.com/damontecres/Wholphin). This repository contains the standalone TV implementation; it does not require an Android build or a Jellyfin Web deployment.
 
-Current version: **0.2.95**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
+Current version: **0.2.96**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
 
 The app was previously named Wholphin for webOS. Existing installations update in place and keep their sign-in and settings.
 
@@ -198,3 +198,12 @@ Validation: `npm run test:lg-direct-play` covers the reported 720p HEVC Main 10 
 - Media artwork URLs include Jellyfin image tags when available, so updated posters, logos and backdrops can replace cached images.
 - **Player Options → Quality** offers Automatic and bitrate limits supported by the device profile. Changes preserve position, pause state and tracks, stay inside the player and apply only to the current video. Lowering the bitrate may require server conversion. Returning to Automatic restores normal playback negotiation.
 - Validation: 52 unit tests; cross-platform browser fixtures for show preference sync/isolation, artwork URLs, quality limits, remote navigation, retained tracks/position/pause and failed negotiation; existing language, subtitle and LG playback regressions. Packages built for all three platforms. Physical-device testing of this release is pending.
+
+
+### Fire TV system controls and HDR settings; library/Seerr polish (v0.2.96)
+
+- Fire TV native MediaSession and Amazon voice-control permission. Play, pause, seek, next/previous when available, and stop use the existing Ember playback/reporting flow. Session metadata omits playback URLs and credentials. Sessions deactivate in the background or at the end, ignore stale-generation commands, and release with the player. Alexa/catalog voice search is not included.
+- Fire TV HDR formats settings offer Automatic or Disabled for HDR10, HDR10+, HLG and Dolby Vision/base-layer fallback. Settings apply to this device for all profiles starting with the next video. They cannot force unsupported formats. Playback info includes detected display formats, Dolby Vision decoder presence and selected native format/transfer where available. This does not confirm the display's active HDR mode. Profile 7 conversion is not included.
+- Nested general-library folders inherit sort and watch status unless explicitly customized, separately per profile; parent genre/year filters remain scoped to that folder. Grid layout remains unchanged.
+- Seerr rechecks permissions on title entry and before confirmed requests, explains Standard/4K access, and offers title/permission refresh. Native request failures distinguish session expiry, quota, blocklists, duplicate requests and rate limits without displaying raw server output.
+- Validation: 55 unit tests; Java compilation; native local-HTTP Seerr/profile/quota tests; cross-platform menu/folder/quality/playback completion regressions; Fire TV system-transport/HDR fixtures; LG direct-play regressions. All three platform packages built. Physical Alexa/HDR validation is pending. No TV was updated while preparing this release.

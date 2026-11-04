@@ -360,3 +360,16 @@ During on-demand playback, open **Options → Quality** to choose Automatic or a
 Poster, backdrop, logo and screensaver image URLs include Jellyfin's image tags when available, allowing changed server artwork to replace cached images. This affects media artwork, not the TV launcher's application icon cache.
 
 These changes have browser-fixture coverage across LG, Samsung and Fire TV, including native Fire TV negotiation and LG direct-play regressions. Physical-device validation of v0.2.95 is pending.
+
+
+## System controls, HDR overrides and folder preferences (v0.2.96)
+
+Fire TV registers a native Android MediaSession while playback is active in the foreground. Supported transport commands pass through Ember's existing playback/reporting flow: play, pause, seek, next/previous when available, and stop. The session publishes title, episode name and timing without stream URLs or credentials, ignores commands for replaced playback generations, deactivates in the background or at the end, and releases when the player closes. Amazon's media-session voice-control permission is included. This is transport integration, not voice search of the Jellyfin catalog; actual Alexa behavior still needs device testing.
+
+Fire TV **Settings → Device → HDR formats** offers Automatic or Disabled for HDR10, HDR10+, HLG and Dolby Vision (including its HDR10 base-layer fallback). Defaults preserve detected support. Overrides are device-local, apply to all profiles starting with the next video, and never force-enable unsupported formats. Diagnostics show reported display HDR formats, Dolby Vision decoder presence and the native selected format/transfer where available. Selected-format metadata does not confirm the display's active HDR mode. Dolby Vision profile 7 conversion is not included.
+
+Nested general-library folders inherit the parent's sort and watch-status preferences unless they have explicit saved choices. Genre and year filters stay with the original folder. These preferences remain separate per profile; the existing fixed grid layout is unchanged.
+
+Seerr refreshes permissions when opening a title and before submitting a confirmed request, explains Standard/4K access, and provides a refresh action. The native transport distinguishes expired sessions, quota limits, blocked titles, duplicate requests and rate limits using fixed messages rather than displaying raw server responses. Request permission remains enforced by Seerr.
+
+Validation includes 55 unit tests, native Java compilation, cross-platform menu/folder/quality fixtures, Fire TV transport/HDR fixtures, Seerr request/revocation flows and native local-HTTP transport/error classification. Physical-device validation is pending; no TV was updated while preparing this release.

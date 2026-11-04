@@ -134,6 +134,16 @@ final class SeerrClient {
                         result.put("data", data);
                     }
                 } else if (status >= 300 && status < 400) result.put("error", "Seerr redirected the request. Enter its final address, including HTTPS or any path prefix.");
+                else if (path.equals("/request") && method.equals("POST")) {
+                    String body = "";
+                    InputStream error = connection.getErrorStream();
+                    if (error != null) try (InputStream input = error; ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+                        byte[] buffer = new byte[1024]; int count;
+                        while (bytes.size() < 4096 && (count = input.read(buffer, 0, Math.min(buffer.length, 4096 - bytes.size()))) > 0) bytes.write(buffer, 0, count);
+                        body = bytes.toString("UTF-8");
+                    }
+                    result.put("error", RequestErrors.message(status, body));
+                }
                 else if (status == 401 || status == 403) result.put("error", "Seerr denied access. Check your login, request permissions or quota.");
                 else if (status == 409) result.put("error", "This title has already been requested.");
                 else if (status == 429) result.put("error", "Too many requests. Try again shortly.");

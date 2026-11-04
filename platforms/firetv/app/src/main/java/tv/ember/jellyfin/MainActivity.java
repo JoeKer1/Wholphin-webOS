@@ -59,6 +59,7 @@ public final class MainActivity extends Activity {
     private AppUpdater updater;
     private PlayerView video;
     private ExoPlayer player;
+    private PlaybackSession mediaSession;
     private AssHandler assHandler;
     private AssSubtitleView assView;
     private int externalSubtitle = -1;
@@ -252,6 +253,15 @@ public final class MainActivity extends Activity {
             player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitleTrack < 0 && externalSubtitle < 0).build());
             final int token = generation;
+            mediaSession = new PlaybackSession(this, (action, position) -> {
+                if (!foreground || destroyed || player == null || token != generation || !HOME.equals(web.getUrl())) return;
+                try {
+                    JSONObject data = new JSONObject().put("id", token).put("type", "media-command")
+                        .put("action", action).put("position", position);
+                    web.evaluateJavascript("window.EmberFireTV && window.EmberFireTV.receive(" + data + ")", null);
+                } catch (Exception ignored) {}
+            });
+            mediaSession.setInfo(command.optJSONObject("media"));
             player.addListener(new Player.Listener() {
                 private boolean current() { return player != null && token == generation; }
                 @Override public void onPlaybackStateChanged(int state) {
@@ -313,6 +323,9 @@ public final class MainActivity extends Activity {
         if (name.equals("close")) { release(); return; }
         if (player == null) return;
         switch (name) {
+            case "mediaInfo":
+                if (mediaSession != null) { mediaSession.setInfo(command.optJSONObject("media")); mediaSession.update(player, foreground); }
+                break;
             case "tracks":
                 JSONObject selection = command.getJSONObject("tracks");
                 int previousAudio = audioTrack, previousSubtitle = subtitleTrack, previousExternal = externalSubtitle;
@@ -384,11 +397,17 @@ public final class MainActivity extends Activity {
         try {
             JSONObject data = new JSONObject().put("id", generation).put("type", type);
             if (player != null) {
+                if (mediaSession != null) mediaSession.update(player, foreground);
                 long duration = player.getDuration();
                 VideoSize size = player.getVideoSize();
                 data.put("position", player.getCurrentPosition()).put("duration", duration == C.TIME_UNSET ? -1 : duration)
                     .put("live", player.isCurrentMediaItemLive()).put("paused", !player.getPlayWhenReady())
                     .put("width", size.width).put("height", size.height);
+                Format format = player.getVideoFormat();
+                if (format != null) data.put("format", new JSONObject()
+                    .put("mime", format.sampleMimeType == null ? "" : format.sampleMimeType)
+                    .put("codecs", format.codecs == null ? "" : format.codecs)
+                    .put("colorTransfer", format.colorInfo == null ? -1 : format.colorInfo.colorTransfer));
                 if (player.isCurrentMediaItemSeekable() && duration > 0)
                     data.put("seekStart", 0).put("seekEnd", duration);
             }
@@ -397,6 +416,7 @@ public final class MainActivity extends Activity {
     }
     private void release() {
         restoreDisplay();
+        if (mediaSession != null) { mediaSession.release(); mediaSession = null; }
         if (assView != null) {
             video.getSubtitleView().removeView(assView);
             assView = null;
@@ -441,6 +461,7 @@ public final class MainActivity extends Activity {
         restoreDisplay();
         web.evaluateJavascript("document.dispatchEvent(new Event('ember-suspend'))", null);
         if (player != null) player.pause();
+        if (mediaSession != null) mediaSession.deactivate();
         super.onPause();
     }
     @Override protected void onDestroy() {

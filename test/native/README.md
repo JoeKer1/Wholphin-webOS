@@ -6,7 +6,7 @@ Requirements: JDK 17+, Android SDK platform 36, and `org.json:json:20240303` (te
 
 ```sh
 mkdir -p /tmp/ember-seerr-native-test
-"$JAVA_HOME/bin/javac" -cp "$JSON_JAR:$ANDROID_HOME/platforms/android-36/android.jar" -d /tmp/ember-seerr-native-test platforms/firetv/app/src/main/java/tv/ember/jellyfin/SeerrClient.java test/native/SeerrClientTest.java
+"$JAVA_HOME/bin/javac" -cp "$JSON_JAR:$ANDROID_HOME/platforms/android-36/android.jar" -d /tmp/ember-seerr-native-test platforms/firetv/app/src/main/java/tv/ember/jellyfin/SeerrClient.java platforms/firetv/app/src/main/java/tv/ember/jellyfin/RequestErrors.java test/native/SeerrClientTest.java
 "$JAVA_HOME/bin/java" -cp "/tmp/ember-seerr-native-test:$JSON_JAR:$ANDROID_HOME/platforms/android-36/android.jar" tv.ember.jellyfin.SeerrClientTest
 ```
 

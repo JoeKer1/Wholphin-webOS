@@ -67,7 +67,9 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const endedIndex = requests.findIndex(r => r.path === '/Sessions/Playing/Stopped' && r.body.ItemId === 'e1'), nextIndex = requests.findIndex(r => r.path === '/Sessions/Playing' && r.body.ItemId === 'e2'); assert.ok(endedIndex < nextIndex);
   // Skipping a partially watched episode must not mark it complete.
   await page.locator('#video').evaluate(v => {v.currentTime = 100; v.dispatchEvent(new Event('timeupdate'));});
-  await page.locator('#next-video').click(); await wait(() => starts().length === 3);
+  if (platform === 'firetv') await page.locator('#video').evaluate(v => v.dispatchEvent(new CustomEvent('ember-media-command', {detail: {action: 'next'}})));
+  else await page.locator('#next-video').click();
+  await wait(() => starts().length === 3);
   assert.equal(starts()[2].body.ItemId, 'e3'); assert.ok(!played.e2);
   assert.equal(requests.filter(r => r.path === '/Users/user/PlayedItems/e2' && r.method === 'POST').length, 0);
   await page.locator('#video').evaluate(v => {v.currentTime = 1800; v.dispatchEvent(new Event('timeupdate')); v.dispatchEvent(new Event('ended'));});

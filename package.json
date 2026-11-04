@@ -1,6 +1,6 @@
 {
   "name": "ember-tv",
-  "version": "0.2.95",
+  "version": "0.2.96",
   "private": true,
   "scripts": {
     "build:webos": "node tools/build.mjs webos",
@@ -12,6 +12,8 @@
     "check": "npm --prefix webos run check",
     "build:firetv": "node tools/build.mjs firetv",
     "package:firetv": "node tools/package.mjs firetv",
+    "test:folder-preferences": "npm run build && node test/folder-preferences-browser.cjs",
+    "test:firetv-controls": "npm run build:firetv && node test/firetv-browser.cjs",
     "test:recommendations": "npm run build && node test/recommendations-browser.cjs",
     "test:menus": "npm run build && node test/menu-platform-browser.cjs",
     "test:screensaver": "npm run build && node test/screensaver-browser.cjs",

@@ -5,13 +5,13 @@ const vm = require('node:vm');
 function fixture() {
  const commands=[], events=[];
  const parent={hidden:false,getBoundingClientRect:()=>({left:0,top:0,width:1920,height:1080})};
- const element={parentNode:parent,style:{},addEventListener(){},removeEventListener(){},dispatchEvent(event){events.push(event.type);this['on'+event.type]?.(event);}};
- const context={window:null,document:{body:{},documentElement:{classList:{add(){}}}},CSS:{supports:()=>true},innerWidth:1920,innerHeight:1080,MutationObserver:class {observe(){}},Event:class {constructor(type){this.type=type;}},EmberAndroid:{command:raw=>commands.push(JSON.parse(raw))},addEventListener(){}};
+ const element={parentNode:parent,style:{},addEventListener(){},removeEventListener(){},dispatchEvent(event){this.lastEvent=event;events.push(event.type);this['on'+event.type]?.(event);}};
+ const context={window:null,document:{body:{},documentElement:{classList:{add(){}}}},CSS:{supports:()=>true},innerWidth:1920,innerHeight:1080,MutationObserver:class {observe(){}},Event:class {constructor(type){this.type=type;}},CustomEvent:class {constructor(type,options){this.type=type;this.detail=options.detail;}},EmberAndroid:{command:raw=>commands.push(JSON.parse(raw))},addEventListener(){}};
  context.window=context;
  vm.runInNewContext(fs.readFileSync('platforms/firetv/platform.js','utf8'),context);
  const p=context.EmberPlatform.createPlayer(element);
  const receive=(type,data={})=>context.EmberFireTV.receive({id:commands.findLast(c=>c.action==='load')?.id,type,position:0,duration:120000,paused:false,...data});
- return {p,commands,events,receive,context,parent};
+ return {p,commands,events,receive,context,parent,element};
 }
 test('Fire TV bridge preserves resume seconds, waits for native playback and closes cancelled sources',async()=>{
  const f=fixture();f.p.src='https://media.test/live.m3u8#t=30';f.p.load();
@@ -74,4 +74,21 @@ test('Display matching is optional and passes only a device-local preference to 
  assert.equal(f.commands.at(-1).mode,'resolution');
  delete f.context.EmberAndroid;
  assert.doesNotThrow(()=>f.context.EmberPlatform.configureDisplay('off'));
+});
+
+test('Native media commands keep timeline state, ignore stale sessions and send only explicit metadata',()=>{
+ const f=fixture();
+ f.p.setMediaInfo({title:'Example',subtitle:'Episode',duration:120000,offset:0,live:false,next:true,previous:false});
+ f.p.src='https://media.test/video?api_key=fixture-secret';f.p.load();
+ assert.equal(f.commands.find(c=>c.action==='load').media.title,'Example');
+ assert(!JSON.stringify(f.commands.find(c=>c.action==='load').media).includes('fixture-secret'));
+ f.receive('loadedmetadata',{position:30000,format:{mime:'video/hevc',colorTransfer:6}});
+ assert.equal(f.p.nativeFormat().mime,'video/hevc');
+ f.receive('media-command',{action:'seek',position:60000});
+ assert.equal(f.element.lastEvent.detail.action,'seek');
+ assert.equal(f.p.currentTime,30,'A requested seek must not masquerade as acknowledged native progress');
+ const old=f.commands.find(c=>c.action==='load').id;
+ f.p.src='https://media.test/next';f.p.load();const count=f.events.length;
+ f.context.EmberFireTV.receive({id:old,type:'media-command',action:'stop'});
+ assert.equal(f.events.length,count,'Commands for a closed player are ignored');
 });

@@ -91,10 +91,20 @@ final class PlaybackCapabilities {
                 matchResolution |= mode.getPhysicalWidth() != currentMode.getPhysicalWidth() || mode.getPhysicalHeight() != currentMode.getPhysicalHeight();
             }
             result.put("displayMatching", new JSONObject().put("rate", matchRate).put("resolution", matchResolution));
+            JSONArray displayHdr = new JSONArray();
+            boolean dolbyDecoder = false;
+            for (MediaCodecInfo decoder : decoders) if (!decoder.isEncoder() && hardware(decoder)) {
+                for (String mime : decoder.getSupportedTypes()) if (mime.equalsIgnoreCase("video/dolby-vision")) dolbyDecoder = true;
+            }
             for (int type : manager.getDefaultDisplay().getHdrCapabilities().getSupportedHdrTypes()) {
                 if (type == Display.HdrCapabilities.HDR_TYPE_HDR10) ranges.put("HDR10");
                 if (type == Display.HdrCapabilities.HDR_TYPE_HLG) ranges.put("HLG");
+                if (type == Display.HdrCapabilities.HDR_TYPE_HDR10) displayHdr.put("HDR10");
+                if (type == Display.HdrCapabilities.HDR_TYPE_HLG) displayHdr.put("HLG");
+                if (type == Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION) displayHdr.put("Dolby Vision");
+                if (Build.VERSION.SDK_INT >= 29 && type == Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS) displayHdr.put("HDR10+");
             }
+            result.put("displayHdrTypes", displayHdr).put("dolbyVisionDecoder", dolbyDecoder);
             result.put("videos", videoCache).put("audio", audio).put("audioChannels", audioChannels).put("videoRanges", ranges)
                 .put("maxAudioChannels", surround ? Math.min(6, output.getMaxChannelCount()) : 2)
                 .put("hdr", ranges.length() > 1); // SurfaceView preserves native HDR output.

@@ -613,6 +613,13 @@
     var season = item.SeasonId || item.ParentId;
     return (season ? ["season:" + season] : []).concat("series:" + item.SeriesId);
   }
+  function seerrPermissions(value, type) {
+    var permissions = Number(value) || 0;
+    return {
+      standard: !!(permissions & (2 | 32 | (type === "movie" ? 262144 : 524288))),
+      fourK: !!(permissions & (2 | 1024 | (type === "movie" ? 2048 : 4096))),
+    };
+  }
   // Merge individual choices rather than replacing another device's entire map.
   // A reset timestamp also clears older choices on devices that were offline.
   function mergeSeriesTracks(local, remote) {
@@ -1305,6 +1312,7 @@
     trackPreference: trackPreference,
     preferredTrack: preferredTrack,
     trackScopes: trackScopes,
+    seerrPermissions: seerrPermissions,
     mergeSeriesTracks: mergeSeriesTracks,
     seriesTrack: seriesTrack,
     imageTagQuery: imageTagQuery,

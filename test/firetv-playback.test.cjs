@@ -2,6 +2,21 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const F=require('../platforms/firetv/playback.js');
 const C=require('../webos/app/core.js');
+test('HDR overrides remove formats without inventing decoder or display support',()=>{
+ const hardware={videos:[{codec:'hevc',bitDepth:10,width:3840,height:2160,frameRate:60,bitrate:60000000}],audio:['aac'],videoRanges:['SDR','HDR10','HLG']};
+ const movie=range=>({MediaStreams:[{Type:'Video',Codec:'hevc',VideoRangeType:range,BitDepth:10,DvProfile:8,DvBlSignalCompatibilityId:1}]});
+ for(const [key,range] of [['hdr10','HDR10'],['hdr10plus','HDR10Plus'],['hlg','HLG'],['dolbyVision','DOVIWithHDR10']]) {
+  assert.equal(F.policy(movie(range),{native:true},-1,hardware).native,true);
+  const blocked=F.effectiveCapabilities(hardware,{[key]:'off'});
+  assert.equal(F.policy(movie(range),{native:true},-1,blocked).native,false);
+  const ranges=F.profile(blocked,C.profile(),movie(range)).CodecProfiles.find(v=>v.Codec==='hevc').Conditions.find(v=>v.Property==='VideoRangeType').Value.split('|');
+  assert(!ranges.includes(range));
+ }
+ assert.deepEqual(F.effectiveCapabilities(hardware,{hdr10:'force-on'}).videoRanges,hardware.videoRanges,'Unknown values cannot force unsupported HDR');
+ assert.equal(F.policy(movie('DOVIWithHDR10'),{native:true},-1,F.effectiveCapabilities({...hardware,videoRanges:['SDR']},{})).native,false);
+ assert.equal(F.policy(movie('SDR'),{native:true},-1,F.effectiveCapabilities(hardware,{hdr10:'off',dolbyVision:'off',hlg:'off'})).native,true);
+ assert.deepEqual(hardware.videoRanges,['SDR','HDR10','HLG']);
+});
 const caps={videos:[{codec:'h264',width:1920,height:1080,bitDepth:8,frameRate:60,bitrate:40000000,level:42},{codec:'hevc',width:3840,height:2160,bitDepth:10,frameRate:30,bitrate:60000000}],audio:['aac','mp3','ac3'],maxAudioChannels:6};
 const source={Id:'source',MediaStreams:[{Type:'Video',Codec:'hevc',VideoRangeType:'SDR',BitDepth:10,Index:0},{Type:'Audio',Codec:'aac',Index:3},{Type:'Audio',Codec:'ac3',Index:8},{Type:'Subtitle',Codec:'ass',Index:15},{Type:'Subtitle',Codec:'srt',IsExternal:true,Index:22}]};
 test('Fire TV direct-play policy requires a detected decoder and excludes HDR or unsupported subtitles',()=>{

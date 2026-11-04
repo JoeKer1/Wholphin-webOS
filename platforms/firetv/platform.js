@@ -27,6 +27,10 @@
   function capabilities() {
     try { return JSON.parse(root.EmberAndroid.capabilities()); } catch (_) { return {}; }
   }
+  function hdrOptions() {
+    try { return JSON.parse(localStorage.getItem("ember-hdr-options")) || {}; } catch (_) { return {}; }
+  }
+  function playbackCapabilities() { return root.EmberFirePlayback.effectiveCapabilities(capabilities(), hdrOptions()); }
   // HTTPS WebViews block HTTP <img> requests even with mixed-content enabled.
   // Fetch keeps LAN HTTP support, while blob URLs remain local to this page.
   var imageRequests = new WeakMap();
@@ -75,9 +79,12 @@
       try { command("displayPreferences", {mode: mode}); } catch (_) {}
     },
     loadImage: loadImage,
+    hdrOptions: hdrOptions,
+    saveHdrOptions: function (value) { localStorage.setItem("ember-hdr-options", JSON.stringify(value)); },
+    playbackDiagnostics: capabilities,
     nativeSubtitle: function (source, index) { return root.EmberFirePlayback.nativeSubtitle(source, index); },
-    playbackPolicy: function (source, options, index) { return root.EmberFirePlayback.policy(source, options, index, capabilities()); },
-    playbackProfile: function (fallback, source) { return root.EmberFirePlayback.profile(capabilities(), fallback, source); },
+    playbackPolicy: function (source, options, index) { return root.EmberFirePlayback.policy(source, options, index, playbackCapabilities()); },
+    playbackProfile: function (fallback, source) { return root.EmberFirePlayback.profile(playbackCapabilities(), fallback, source); },
     playbackTracks: function () { return root.EmberFirePlayback.tracks.apply(null, arguments); },
     id: "firetv",
     deviceName: "Fire TV",
@@ -88,7 +95,7 @@
     createPlayer: function (element) {
       var source = "", id = 0, ready = false, paused = true, seeking = false,
         time = 0, duration = NaN, width = 0, height = 0, error = null, trackChange = null,
-        range = null, pending = [], lastRect = "", tracks = { audio: -1, subtitle: -1 };
+        range = null, format = null, pending = [], lastRect = "", media = {}, mediaKey = "", tracks = { audio: -1, subtitle: -1 };
       function settleTracks(reason) {
         if (!trackChange) return;
         root.clearTimeout(trackChange.timer);
@@ -112,6 +119,10 @@
       }
       receive = function (data) {
         if (data.id !== id || !source) return;
+        if (data.type === "media-command") {
+          element.dispatchEvent(new CustomEvent("ember-media-command", {detail: {action: data.action, position: data.position}}));
+          return;
+        }
         if (data.type === "trackschanged" || data.type === "tracksfailed") {
           settleTracks(data.type === "tracksfailed" ? new Error("Native subtitle track is unavailable") : null);
           return;
@@ -120,6 +131,7 @@
         duration = data.live ? Infinity : data.duration > 0 ? data.duration / 1000 : NaN;
         if (typeof data.paused === "boolean") paused = data.paused;
         width = data.width || 0; height = data.height || 0;
+        format = data.format || null;
         range = data.seekEnd > data.seekStart ? [data.seekStart / 1000, data.seekEnd / 1000] : null;
         if (data.type === "loadedmetadata") ready = true;
         if (data.type === "seeked") seeking = false;
@@ -137,6 +149,13 @@
         addEventListener: element.addEventListener.bind(element),
         removeEventListener: element.removeEventListener.bind(element),
         configure: function (value) { tracks = value; },
+        setMediaInfo: function (value) {
+          media = value;
+          var key = JSON.stringify(value);
+          if (key !== mediaKey && source && ready) send("mediaInfo", {media: value});
+          mediaKey = key;
+        },
+        nativeFormat: function () { return format; },
         selectTracks: function (value) {
           if (!source || !ready || value.unavailable) return Promise.reject(new Error("Native tracks are unavailable"));
           settleTracks(new Error("Track change replaced"));
@@ -151,8 +170,8 @@
           send("close");
           id++;
           ready = false; paused = true; seeking = false;
-          time = 0; duration = NaN; range = null; error = null; lastRect = "";
-          if (source) { send("load", { url: source.split("#")[0], tracks: tracks }); rect(); }
+          time = 0; duration = NaN; range = null; format = null; error = null; lastRect = "";
+          if (source) { send("load", { url: source.split("#")[0], tracks: tracks, media: media }); rect(); }
         },
         play: function () {
           return new Promise(function (resolve, reject) {

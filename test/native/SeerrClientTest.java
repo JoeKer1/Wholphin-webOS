@@ -39,7 +39,7 @@ public final class SeerrClientTest {
     }
     public static void main(String[] args) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        final int[] requests = {0}, writes = {0};
+        final int[] requests = {0}, writes = {0}, requestStatus = {200};
         server.createContext("/", exchange -> {
             requests[0]++;
             String route = exchange.getRequestURI().getPath(), body = "{}";
@@ -66,7 +66,7 @@ public final class SeerrClientTest {
             else if (route.equals("/api/v1/auth/me")) body = "{\"id\":7,\"permissions\":32,\"username\":\"" + (cookie.contains("seerr.sid=alice") ? "alice" : "bob") + "\"}";
             else if (route.equals("/api/v1/movie/99")) { status = 302; exchange.getResponseHeaders().add("Location", "/unexpected"); }
             else if (route.equals("/api/v1/request")) {
-                check("fixture-csrf".equals(exchange.getRequestHeaders().getFirst("X-XSRF-TOKEN")), "Request CSRF header"); writes[0]++; body = "{\"id\":123,\"status\":1}";
+                check("fixture-csrf".equals(exchange.getRequestHeaders().getFirst("X-XSRF-TOKEN")), "Request CSRF header"); writes[0]++; status = requestStatus[0]; body = status == 200 ? "{\"id\":123,\"status\":1}" : "{\"message\":\"Request quota exceeded for secret-user\"}";
             } else body = "{\"results\":[]}";
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(status, bytes.length); exchange.getResponseBody().write(bytes); exchange.close();
@@ -84,6 +84,10 @@ public final class SeerrClientTest {
             check(call(client, url, "profile-b", "/auth/me", null).getInt("status") == 403, "Second Ember profile cannot reuse first profile cookie");
             check(call(client, url, "profile-b", "/auth/local", new JSONObject().put("email", "bob").put("password", "correct")).getInt("status") == 200, "Independent second login");
             check(call(client, url, "profile-a", "/request", new JSONObject().put("mediaType", "tv").put("mediaId", 12).put("seasons", new org.json.JSONArray().put(2))).getInt("status") == 200 && writes[0] == 1, "Native request succeeds with session and CSRF");
+            requestStatus[0] = 403;
+            JSONObject denied = call(client, url, "profile-a", "/request", new JSONObject().put("mediaType", "movie").put("mediaId", 12));
+            check(denied.getInt("status") == 403 && denied.getString("error").contains("quota") && !denied.toString().contains("secret-user"), "Request quota is explained without leaking server output");
+            requestStatus[0] = 200;
             restored = new SeerrClient(prefs);
             check(call(restored, url, "profile-a", "/auth/me", null).getInt("status") == 200, "Cookie restored after app process restart");
             int before = requests[0];

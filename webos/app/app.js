@@ -965,6 +965,7 @@
       },
     );
     vision.disabled = !decoder.native;
+    if (P.hdrOptions) row(device, "HDR formats", "", "Detected support and format overrides for this Fire TV.", function () { return go(hdrSettings); });
     if (P.nativePlayback === false) {
       modeControl.disabled = !P.playbackPolicy;
       vision.hidden = true;
@@ -2058,7 +2059,10 @@
   async function seerrDetail(type, id, me) {
     var r = reset("Loading title…"), account = session, data;
     main.className = "seerr-page";
-    try { data = await seerrApi("/" + type + "/" + id); }
+    try {
+      var current = await Promise.all([seerrApi("/" + type + "/" + id), seerrApi("/auth/me")]);
+      data = current[0]; me = current[1];
+    }
     catch (error) { if (r === revision) { message(error.message); button("Retry", function () { return seerrDetail(type, id, me); }, main); focusFirst(); } return; }
     if (r !== revision || session !== account) return;
     main.querySelector("h1").textContent = data.title || data.name || "Title";
@@ -2069,18 +2073,18 @@
     var libraryId = info.jellyfinMediaId || info.jellyfinMediaId4k;
     if (typeof libraryId === "string" && /^[a-f0-9-]{32,36}$/i.test(libraryId)) button("Open in Jellyfin library", function () { return go(function () { return detail(libraryId); }); }, actions);
     var feedback = el("p", "", main); feedback.setAttribute("role", "status");
-    var standardAllowed = !!(permissions & (2 | 32 | (type === "movie" ? 262144 : 524288))),
-      fourKAllowed = !!(permissions & (2 | 1024 | (type === "movie" ? 2048 : 4096))),
+    var access = C.seerrPermissions(permissions, type),
+      standardAllowed = access.standard,
+      fourKAllowed = access.fourK,
       allowed = standardAllowed || fourKAllowed;
-    var pending = [2, 3, 5, 6].indexOf(info.status) >= 0;
     if (!allowed) el("p", "This Seerr account cannot request " + (type === "movie" ? "movies." : "TV shows."), main);
     else {
       var form = el("section", null, main), selected = [], is4k = !standardAllowed && fourKAllowed;
       el("h2", "Request " + (type === "movie" ? "movie" : "seasons"), form);
-      var standardPending = pending;
+      el("p", standardAllowed && fourKAllowed ? "You can request Standard or 4K." : fourKAllowed ? "This account can request 4K only." : "This account can request Standard only.", form);
       var quality = button("Quality: " + (is4k ? "4K" : "Standard"), function () {
         is4k = !is4k; quality.textContent = "Quality: " + (is4k ? "4K" : "Standard");
-        selected = []; renderSeasons(); submit.textContent = requestLabel; refresh();
+        selected = []; feedback.textContent = ""; renderSeasons(); submit.textContent = requestLabel; refresh();
       }, form);
       quality.hidden = !fourKAllowed;
       quality.disabled = !(standardAllowed && fourKAllowed);
@@ -2095,6 +2099,9 @@
           Array.prototype.forEach.call(form.querySelectorAll("button"), function (b) { b.disabled = true; });
           feedback.textContent = "Submitting request…";
           try {
+            var latest = await seerrApi("/auth/me"), latestAccess = C.seerrPermissions(latest.permissions, type);
+            if (r !== revision || session !== account) return;
+            if (!(requestedQuality ? latestAccess.fourK : latestAccess.standard)) throw new Error("Your request permissions have changed. Refresh this title to see the available options.");
             await seerrApi("/request", Object.assign({mediaType: type, mediaId: id, is4k: requestedQuality}, type === "tv" ? {seasons: requestedSeasons} : {}));
             if (r !== revision || session !== account) return;
             feedback.textContent = "Request submitted. Track its progress in My requests.";
@@ -2111,7 +2118,7 @@
             quality.disabled = !(standardAllowed && fourKAllowed);
             submit.textContent = "Requested";
             focusContent(returnButton);
-          } catch (error) { if (r === revision) { feedback.textContent = error.message; quality.disabled = !(standardAllowed && fourKAllowed); renderSeasons(); refresh(); focusContent(submit); } }
+          } catch (error) { if (r === revision && session === account) { feedback.textContent = error.message; quality.disabled = !(standardAllowed && fourKAllowed); renderSeasons(); refresh(); focusContent(submit); } }
         }, submit);
       }, form);
       function refresh() { submit.disabled = type === "movie" ? [2, 3, 5, 6].indexOf(is4k ? info.status4k : info.status) >= 0 : !selected.length; }
@@ -2129,8 +2136,9 @@
         });
       }
       renderSeasons(); refresh();
-      if (type === "movie" && standardPending) feedback.textContent = seerrStatus(info) + ".";
+      if (type === "movie" && [2, 3, 5, 6].indexOf(is4k ? info.status4k : info.status) >= 0) feedback.textContent = (is4k ? "4K" : "Standard") + " is already requested or available.";
     }
+    button("Refresh title and permissions", function () { return seerrDetail(type, id, me); }, main);
     var returnButton = button("Back to Seerr", back, main);
     focusContent(submit && !submit.disabled ? submit : (seasons && seasons.querySelector("button:not(:disabled)")) || actions.querySelector("button") || returnButton);
   }
@@ -4057,7 +4065,7 @@
       if (offset === before) break;
     }
   }
-  async function listing(id, title, focusControl, seasonContext, tvContext) {
+  async function listing(id, title, focusControl, seasonContext, tvContext, inheritedOptions) {
     if (seasonContext) return seasonBrowser(id, title, seasonContext);
     var r = reset(title),
       controller = new AbortController(),
@@ -4094,6 +4102,11 @@
       genre: "",
       year: "",
     };
+    var inheritedKey = "library-inherited-options:" + scopeKey;
+    if (inheritedOptions) localStorage.setItem(accountKey(inheritedKey), JSON.stringify({sort: inheritedOptions.sort, watched: inheritedOptions.watched}));
+    var explicitOptions = readPreference(preferenceKey, null),
+      inherited = readPreference(inheritedKey, {}),
+      effectiveOptions = Object.assign({}, defaults, inherited, explicitOptions || {});
     function fresh(options) {
       return {
         options: options,
@@ -4108,11 +4121,8 @@
         facets: null,
       };
     }
-    var state =
-      listingStates.get(key) ||
-      fresh(
-        Object.assign({}, defaults, readPreference(preferenceKey, defaults)),
-      );
+    var state = listingStates.get(key);
+    if (!state || (inheritedOptions && !explicitOptions && JSON.stringify(state.options) !== JSON.stringify(effectiveOptions))) state = fresh(effectiveOptions);
     listingStates.delete(key);
     listingStates.set(key, state);
     while (listingStates.size > 3)
@@ -4261,6 +4271,13 @@
             holder,
             seasonContext ? "landscape" : null,
             grid,
+            function (item) {
+              return go(function () {
+                if (item.IsFolder && ["Series", "Season", "BoxSet"].indexOf(item.Type) < 0)
+                  return listing(item.Id, item.Name, false, null, null, state.options);
+                return detail(item.Id, !!item.IsLiveProgram);
+              });
+            },
           );
           card = grid.lastElementChild;
           card.dataset.libraryIndex = index;
@@ -6924,6 +6941,25 @@
       dolbyVision: false,
     });
   }
+  function hdrSettings() {
+    reset("HDR formats");
+    var options = P.hdrOptions(), caps = P.playbackDiagnostics();
+    el("p", "Applies to this Fire TV for all profiles, starting with the next video. Automatic uses detected support; disabling a format requests compatible server conversion.", main);
+    el("p", "Display reports: " + ((caps.displayHdrTypes || []).join(", ") || "No HDR formats reported"), main);
+    el("p", "Dolby Vision hardware decoder: " + (caps.dolbyVisionDecoder ? "Detected" : "Not detected") + ". Decoder availability alone does not guarantee support for every Dolby Vision profile.", main);
+    var list = el("div", null, main); list.className = "screensaver-settings";
+    [["hdr10", "HDR10"], ["hdr10plus", "HDR10+"], ["hlg", "HLG"], ["dolbyVision", "Dolby Vision (including HDR10 base-layer fallback)"]].forEach(function (entry) {
+      var control = button("", function () {
+        settingChoices(entry[1], [["auto", "Automatic"], ["off", "Disabled"]], options[entry[0]] || "auto", function (value) {
+          options[entry[0]] = value; P.saveHdrOptions(options); refresh();
+        }, control);
+      }, list);
+      function refresh() { control.textContent = entry[1] + ": " + (options[entry[0]] === "off" ? "Disabled" : "Automatic"); }
+      refresh();
+    });
+    button("Reset HDR formats to Automatic", function () { P.saveHdrOptions({}); return hdrSettings(); }, list);
+    focusContent(list.querySelector("button"));
+  }
   function saveSubtitleChoice(item, source, index) {
     var choices = readPreference("subtitle-choices", {});
     choices[item.Id] = { source: source.Id, index: index, updated: Date.now() };
@@ -7114,6 +7150,15 @@
     document.getElementById("next-video").hidden = !!(active && active.live);
     document.getElementById("next-video").disabled =
       !active || active.live || (!queueItems.length && !active.episodes.length && !active.nextError);
+    if (active && video.setMediaInfo) video.setMediaInfo({
+      title: active.item.SeriesName || active.item.Name || "Ember",
+      subtitle: active.item.SeriesName ? active.item.Name : "",
+      duration: Math.max(0, Number(active.item.RunTimeTicks) / 10000 || 0),
+      offset: Math.max(0, active.offset || 0) * 1000,
+      live: active.live,
+      next: !document.getElementById("next-video").disabled,
+      previous: !document.getElementById("previous-video").disabled,
+    });
   }
   function loadFollowing(active) {
     active.nextError = null;
@@ -7346,6 +7391,12 @@
         dropped: quality && quality.droppedVideoFrames,
         frames: quality && quality.totalVideoFrames,
       });
+      if (P.playbackDiagnostics) {
+        var detected = P.playbackDiagnostics(), format = video.nativeFormat && video.nativeFormat();
+        rows.push(["Display HDR support", (detected.displayHdrTypes || []).join(", ") || "Not reported"]);
+        rows.push(["Dolby Vision decoder", detected.dolbyVisionDecoder ? "Detected" : "Not detected"]);
+        if (format) rows.push(["Selected native format", [format.mime, format.codecs, ({6: "PQ transfer", 7: "HLG transfer", 3: "SDR transfer"})[format.colorTransfer]].filter(Boolean).join(" · ")]);
+      }
       var list = el("dl", null, content);
       list.className = "playback-info";
       rows.forEach(function (row) {
@@ -8635,6 +8686,19 @@
   document.getElementById("toggle").onclick = function () {
     run(toggle);
   };
+  video.addEventListener("ember-media-command", function (event) {
+    if (!playing || !playing.started || document.hidden || busy || playing.awaitingWatching) return;
+    var command = event.detail || {};
+    if (command.action === "play" && video.paused) run(toggle);
+    else if (command.action === "pause" && !video.paused) { video.pause(); showControls(); }
+    else if (command.action === "stop") run(stop);
+    else if (command.action === "next" || command.action === "previous") {
+      var control = document.getElementById(command.action + "-video");
+      if (!control.disabled && !control.hidden) control.click();
+    } else if (!playing.live && command.action === "seek" && Number.isFinite(command.position)) seek(command.position / 1000 - video.currentTime);
+    else if (!playing.live && command.action === "forward") seek(10);
+    else if (!playing.live && command.action === "rewind") seek(-10);
+  });
   document.getElementById("rewind").onclick = function () {
     seek(-30);
   };

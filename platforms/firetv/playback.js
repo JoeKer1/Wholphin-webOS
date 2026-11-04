@@ -31,6 +31,7 @@
       text = subtitle(source, index);
     if (!support || !(caps.audio || []).length) return { native: false, reason: "No matching device decoder capability" };
     var range = video.VideoRangeType || (video.VideoRange === "HDR" || video.BitDepth > 8 ? "UnknownHDR" : "SDR");
+    if ((caps.blockedRanges || []).indexOf(range) >= 0) return {native: false, reason: "This HDR format is disabled on this Fire TV"};
     if ((caps.videoRanges || ["SDR"]).indexOf(range) < 0 && !hdr10Fallback(video, caps))
       return { native: false, reason: "Video range is not supported by the connected display" };
     if (!nativeSubtitle(source, index == null ? -1 : index))
@@ -51,6 +52,7 @@
       // Advertise an extended range only for the source whose base layer was checked.
       if (v.codec === "hevc" && v.bitDepth >= 10 && hdr10Fallback(metadata, caps) && ranges.indexOf(metadata.VideoRangeType) < 0)
         ranges.push(metadata.VideoRangeType);
+      ranges = ranges.filter(function (range) { return (caps.blockedRanges || []).indexOf(range) < 0; });
       var conditions = [condition("Width", v.width), condition("Height", v.height),
         condition("VideoBitDepth", v.bitDepth), condition("VideoFramerate", v.frameRate),
         condition("VideoBitrate", v.bitrate), condition("VideoRangeType", ranges.join("|"), "EqualsAny", false)];
@@ -97,7 +99,18 @@
     if ((audioIndex >= 0 && result.audio < 0) || (!cues && subtitleIndex >= 0 && result.subtitle < 0 && result.externalIndex == null)) return { unavailable: true };
     return result;
   }
-  var api = { nativeSubtitle: nativeSubtitle, policy: policy, profile: profile, tracks: tracks };
+  function effectiveCapabilities(caps, options) {
+    var blocked = [], result = Object.assign({}, caps);
+    options = options || {};
+    if (options.hdr10 === "off") blocked = blocked.concat(["HDR10", "HDR10Plus", "DOVIWithHDR10", "DOVIWithHDR10Plus"]);
+    if (options.hdr10plus === "off") blocked = blocked.concat(["HDR10Plus", "DOVIWithHDR10Plus"]);
+    if (options.hlg === "off") blocked = blocked.concat(["HLG", "DOVIWithHLG"]);
+    if (options.dolbyVision === "off") blocked = blocked.concat(["DOVI", "DOVIWithHDR10", "DOVIWithHDR10Plus", "DOVIWithHLG", "DOVIWithSDR"]);
+    result.blockedRanges = blocked;
+    result.videoRanges = (caps.videoRanges || ["SDR"]).filter(function (range) { return blocked.indexOf(range) < 0; });
+    return result;
+  }
+  var api = { nativeSubtitle: nativeSubtitle, policy: policy, profile: profile, tracks: tracks, effectiveCapabilities: effectiveCapabilities };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.EmberFirePlayback = api;
 })(typeof window !== "undefined" ? window : globalThis);
