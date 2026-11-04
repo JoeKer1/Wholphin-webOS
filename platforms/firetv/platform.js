@@ -15,13 +15,14 @@
       else { var error = new Error(result.error || "Could not connect to Seerr."); error.status = result.status; job.reject(error); }
     },
     receive: function (data) { receive(data); },
-    key: function (code) {
-      if (code === 457 && !document.getElementById("player").hidden && !document.body.classList.contains("live-preview")) {
+    key: function (code, phase, repeat) {
+      phase = phase === "keyup" ? "keyup" : "keydown";
+      if (phase === "keydown" && code === 457 && !document.getElementById("player").hidden && !document.body.classList.contains("live-preview")) {
         document.getElementById("player-options").click();
         return;
       }
       // Bubble from the focused control so nested menus can handle Back first.
-      (document.activeElement || document).dispatchEvent(new KeyboardEvent("keydown", { keyCode: code, which: code, bubbles: true, cancelable: true }));
+      (document.activeElement || document).dispatchEvent(new KeyboardEvent(phase, { keyCode: code, which: code, repeat: !!repeat, bubbles: true, cancelable: true }));
     },
   };
   function capabilities() {

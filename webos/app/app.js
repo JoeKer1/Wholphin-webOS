@@ -18,6 +18,8 @@
     seekState = null,
     seekCommitTimer = null,
     seekFeedbackTimer = null,
+    seekHold = null,
+    seekPreviewRequest = 0,
     resumeTimer = null,
     subtitleTimer = null,
     libraryItems = [],
@@ -197,11 +199,19 @@
         }
         throw error;
       }
-      if (options.subtitleText) {
-        var limit = 2097152;
+      if (options.subtitleText || options.imageBlob) {
+        var limit = options.imageBlob ? 8388608 : 2097152,
+          tooLarge = Object.assign(new Error(options.imageBlob ? "Thumbnail sheet is too large." : "Subtitle file is too large."), {code: options.imageBlob ? "IMAGE_TOO_LARGE" : "SUBTITLE_TOO_LARGE"}),
+          mime = (response.headers.get("content-type") || "").split(";")[0].toLowerCase();
+        if (options.imageBlob && ["image/jpeg", "image/png", "image/webp"].indexOf(mime) < 0) { controller.abort(); throw new Error("Invalid thumbnail image."); }
         if (Number(response.headers.get("content-length")) > limit) {
           if (response.body) await response.body.cancel();
-          throw Object.assign(new Error("Subtitle file is too large."), {code: "SUBTITLE_TOO_LARGE"});
+          throw tooLarge;
+        }
+        if (!response.body || !response.body.getReader) {
+          var bytesWithoutStream = await response.arrayBuffer();
+          if (bytesWithoutStream.byteLength > limit) throw tooLarge;
+          return options.imageBlob ? new Blob([bytesWithoutStream], {type: mime}) : new TextDecoder("utf-8").decode(bytesWithoutStream);
         }
         var reader = response.body.getReader(),
           chunks = [],
@@ -213,7 +223,7 @@
             bytes += part.value.length;
             if (bytes > limit) {
               await reader.cancel();
-              throw Object.assign(new Error("Subtitle file is too large."), {code: "SUBTITLE_TOO_LARGE"});
+              throw tooLarge;
             }
             chunks.push(part.value);
           }
@@ -226,7 +236,7 @@
           all.set(chunk, offset);
           offset += chunk.length;
         });
-        return new TextDecoder("utf-8").decode(all);
+        return options.imageBlob ? new Blob([all], {type: mime}) : new TextDecoder("utf-8").decode(all);
       }
       return response.status === 204 ? null : await response.json();
     } finally {
@@ -342,7 +352,9 @@
   }
   async function back() {
     if (playing && !livePreview && !document.getElementById("seek-feedback").hidden) {
+      var timelinePreview = document.getElementById("seek-feedback").classList.contains("is-timeline");
       hideSeekFeedback();
+      if (timelinePreview) hideControls();
       return;
     }
     var settingsMenu = document.getElementById("setting-options");
@@ -7240,7 +7252,7 @@
           "/Items/" +
           encodeURIComponent(active.item.Id),
         {
-          Fields: "Chapters,MediaSources,MediaStreams",
+          Fields: "Chapters,MediaSources,MediaStreams,Trickplay",
         },
         null,
         "GET",
@@ -7264,6 +7276,16 @@
     }
     if (active.item.Type === "Episode" && active.item.SeriesId)
       loadFollowing(active);
+    active.seekTiles = {cache: new Map(), failed: new Set(), pending: null, wanted: null};
+    var trickplayMetadata = active.item.Trickplay ? Promise.resolve(active.item)
+      : active.metadata ? active.metadata.then(function () { return active.item; })
+      : api("/Users/" + encodeURIComponent(active.account.user) + "/Items/" + encodeURIComponent(active.item.Id), {Fields: "Trickplay"}, null, "GET",
+          {session: active.account, signal: active.extrasController.signal, timeoutMs: 4000});
+    trickplayMetadata.then(function (item) {
+      if (playing !== active) return;
+      active.trickplayInfo = C.trickplayInfo(item, active.source.Id);
+      if (active.seekTiles.wanted) loadSeekTile(active);
+    }).catch(function () {});
   }
   function renderSubtitleTiming(container, active) {
     el("h3", "Subtitle timing", container);
@@ -8475,6 +8497,7 @@
         options.positionTicks != null ? options.positionTicks : stopped.completedPositionTicks != null ? stopped.completedPositionTicks : position();
     hideUpNext();
     hideSegment();
+    disposeSeekTiles(stopped);
     playing = null;
     livePreview = false;
     document.body.classList.remove("live-preview");
@@ -8615,14 +8638,110 @@
   }
   function hideSeekFeedback() {
     clearTimeout(seekFeedbackTimer);
+    seekPreviewRequest++;
     document.getElementById("seek-feedback").hidden = true;
+    document.getElementById("seek-preview").hidden = true;
+    if (playing && playing.seekTiles) playing.seekTiles.wanted = null;
     if (seekState) seekState.delta = 0;
   }
   function clearSeekState() {
     clearTimeout(seekCommitTimer);
     hideSeekFeedback();
     seekState = null;
+    seekHold = null;
   }
+  function disposeSeekTiles(active) {
+    var state = active && active.seekTiles;
+    if (!state) return;
+    state.wanted = null;
+    state.cache.clear();
+    var job = state.pending;
+    if (job) {
+      job.closed = true; job.controller.abort(); clearTimeout(job.timer);
+      if (job.image) { job.image.onload = job.image.onerror = null; job.image.src = ""; }
+      if (job.url) URL.revokeObjectURL(job.url);
+      state.pending = null;
+    }
+  }
+  function loadSeekTile(active) {
+    var state = active.seekTiles, info = active.trickplayInfo, wanted = state && state.wanted;
+    if (playing !== active || active.live || !wanted || !info || wanted.request !== seekPreviewRequest) return;
+    var frame = C.trickplayFrame(info, wanted.target), cached = state.cache.get(frame.sheet);
+    function draw(image) {
+      if (playing !== active || !state.wanted || state.wanted.request !== seekPreviewRequest || document.getElementById("seek-feedback").hidden) return;
+      var current = C.trickplayFrame(info, state.wanted.target);
+      if (current.sheet !== frame.sheet || image.naturalWidth < current.x + current.width || image.naturalHeight < current.y + current.height) return;
+      var canvas = document.getElementById("seek-thumbnail"), scale = Math.min(320 / current.width, 180 / current.height),
+        preview = document.getElementById("seek-preview");
+      canvas.width = Math.round(current.width * scale); canvas.height = Math.round(current.height * scale);
+      canvas.style.width = canvas.width + "px"; canvas.style.height = canvas.height + "px";
+      canvas.getContext("2d").drawImage(image, current.x, current.y, current.width, current.height, 0, 0, canvas.width, canvas.height);
+      preview.style.width = canvas.width + 4 + "px"; preview.style.marginLeft = -(canvas.width + 4) / 2 + "px";
+      canvas.dataset.sheet = String(current.sheet); canvas.dataset.x = String(current.x); canvas.dataset.y = String(current.y);
+      preview.hidden = false;
+    }
+    if (cached) { state.cache.delete(frame.sheet); state.cache.set(frame.sheet, cached); draw(cached); return; }
+    if (state.pending || state.failed.has(frame.sheet)) return;
+    var job = {sheet: frame.sheet, controller: new AbortController()}; state.pending = job;
+    function finish(image) {
+      if (job.closed) return;
+      job.closed = true; clearTimeout(job.timer);
+      if (job.image) job.image.onload = job.image.onerror = null;
+      if (job.url) URL.revokeObjectURL(job.url);
+      if (state.pending === job) state.pending = null;
+      if (playing !== active) return;
+      if (image && image.naturalWidth > 0 && image.naturalHeight > 0 && image.naturalWidth <= 4096 && image.naturalHeight <= 4096 && image.naturalWidth * image.naturalHeight <= 8388608) {
+        state.cache.set(frame.sheet, image);
+        while (state.cache.size > 2) state.cache.delete(state.cache.keys().next().value);
+        draw(image);
+      } else {
+        state.failed.add(frame.sheet);
+        if (state.failed.size > 20) state.failed.delete(state.failed.values().next().value);
+      }
+      if (state.wanted && C.trickplayFrame(info, state.wanted.target).sheet !== frame.sheet) loadSeekTile(active);
+    }
+    api("/Videos/" + encodeURIComponent(active.item.Id) + "/Trickplay/" + info.Width + "/" + frame.sheet + ".jpg",
+      {mediaSourceId: info.sourceId}, null, "GET", {session: active.account, signal: job.controller.signal, imageBlob: true, timeoutMs: 2500})
+      .then(function (blob) {
+        if (job.closed || playing !== active) return;
+        job.image = new Image(); job.url = URL.createObjectURL(blob);
+        job.image.onload = function () { finish(job.image); }; job.image.onerror = function () { finish(null); };
+        job.timer = setTimeout(function () { finish(null); }, 2000);
+        job.image.src = job.url;
+      }).catch(function (error) {
+        if (error.status === 401 || error.status === 403) active.trickplayInfo = null;
+        finish(null);
+      });
+  }
+  function showSeekPreview(target, timeline) {
+    if (!playing) return;
+    var feedback = document.getElementById("seek-feedback");
+    feedback.classList.toggle("is-timeline", !!timeline);
+    document.getElementById("seek-preview").hidden = true;
+    document.getElementById("seek-target").textContent = formatTime(target);
+    if (timeline) feedback.setAttribute("aria-label", "Seek to " + formatTime(target));
+    feedback.hidden = false;
+    var request = ++seekPreviewRequest;
+    if (!playing.live && playing.seekTiles) { playing.seekTiles.wanted = {target: target, request: request}; loadSeekTile(playing); }
+    clearTimeout(seekFeedbackTimer);
+    seekFeedbackTimer = setTimeout(hideSeekFeedback, 800);
+  }
+  function remoteSeek(key, event, minimal) {
+    if (!playing || !playing.started || playing.awaitingWatching) { seekHold = null; return; }
+    var now = Date.now(), base = key === 37 || key === 39 ? 10 : 30;
+    if (!seekHold || seekHold.key !== key || seekHold.active !== playing || now - seekHold.last > 1000)
+      seekHold = {key: key, active: playing, start: now, step: 0};
+    var held = now - seekHold.start, repeating = event.repeat || held > 350;
+    seekHold.last = now;
+    if (repeating && now - seekHold.step < 150) return;
+    seekHold.step = now;
+    var step = playing && !playing.live ? C.heldSeekStep(base, held) : base;
+    seek(key === 37 || key === 412 ? -step : step, minimal);
+  }
+  document.addEventListener("keyup", function (event) {
+    if (seekHold && P.keyCode(event) === seekHold.key) seekHold = null;
+  });
+  window.addEventListener("blur", function () { seekHold = null; });
   function seek(seconds, minimal) {
     if (!playing || !playing.started || playing.awaitingWatching) return;
     var range = liveSeekWindow();
@@ -8660,10 +8779,9 @@
       document.getElementById("seek-seconds").textContent = String(Math.round(Math.abs(state.delta)));
       feedback.setAttribute("aria-label", (state.delta < 0 ? "Back " : "Forward ") + Math.round(Math.abs(state.delta)) + " seconds");
       document.querySelector("#seek-progress div").style.width = Math.max(0, Math.min(100, (target - start) / (end - start) * 100)) + "%";
-      feedback.hidden = false;
-      clearTimeout(seekFeedbackTimer);
-      seekFeedbackTimer = setTimeout(hideSeekFeedback, 800);
+      showSeekPreview(target, false);
     }
+    else if (!playing.live) showSeekPreview(target, true);
   }
   document.getElementById("timeline").oninput = function () {
     if (!playing || !playing.started || playing.awaitingWatching) return;
@@ -8677,6 +8795,7 @@
       );
     } else video.currentTime = Number(this.value);
     showControls();
+    if (!playing.live) showSeekPreview(Number(this.value), true);
   };
   document.getElementById("timeline").onchange = function () {
     run(function () {
@@ -8767,6 +8886,7 @@
   }
   document.addEventListener("keydown", function (e) {
     var key = P.keyCode(e);
+    if ([37, 39, 412, 417].indexOf(key) < 0) seekHold = null;
     if (subtitleSearch && !subtitleSearch.hidden) {
       if (key === 461 || key === 27) { e.preventDefault(); closeSubtitleSearch(); }
       else if (key >= 37 && key <= 40) {
@@ -8868,7 +8988,7 @@
         document.getElementById("controls").style.opacity === "0";
       if (!panelOpen && controlsHidden && [37, 39, 412, 417].indexOf(key) >= 0) {
         e.preventDefault();
-        seek(key === 37 ? -10 : key === 39 ? 10 : key === 412 ? -30 : 30, true);
+        remoteSeek(key, e, true);
         return;
       }
       if (!panelOpen && controlsHidden && key === 13 && !skipSegment.hidden) {
@@ -8884,7 +9004,7 @@
         (key === 37 || key === 39)
       ) {
         e.preventDefault();
-        seek(key === 37 ? -10 : 10);
+        remoteSeek(key, e, false);
         return;
       }
       if (controlsHidden && key === 13) {
@@ -8930,7 +9050,7 @@
       }
       if (!panelOpen && (key === 412 || key === 417)) {
         e.preventDefault();
-        seek(key === 412 ? -30 : 30);
+        remoteSeek(key, e, false);
         return;
       }
     }

@@ -1,6 +1,31 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const C = require("../app/core.js");
+test("trickplay uses the selected version and a bounded thumbnail sheet size", () => {
+  const info = {Width: 320, Height: 180, TileWidth: 10, TileHeight: 10, ThumbnailCount: 725, Interval: 10000};
+  const item = {Trickplay: {"ab-cd": {320: info, 640: {...info, Width: 640}}}};
+  assert.equal(C.trickplayInfo(item, "ABCD").Width, 320);
+  assert.equal(C.trickplayInfo(item, "other"), null);
+  assert.equal(C.trickplayInfo({Trickplay: {source: {320: {...info, Interval: 0}}}}, "source"), null);
+  assert.equal(C.trickplayInfo({Trickplay: {source: {640: {...info, Width: 640}}}}, "source"), null, "Oversized sheets are not decoded on TV hardware");
+  assert.equal(C.trickplayInfo({}, "source"), null);
+});
+test("trickplay frames cross rows and sheets, clamp before zero and at the last thumbnail", () => {
+  const info = {Width: 160, Height: 90, TileWidth: 2, TileHeight: 2, ThumbnailCount: 9, Interval: 10000};
+  assert.deepEqual(C.trickplayFrame(info, 35), {sheet: 0, x: 160, y: 90, width: 160, height: 90});
+  assert.deepEqual(C.trickplayFrame(info, 40), {sheet: 1, x: 0, y: 0, width: 160, height: 90});
+  assert.equal(C.trickplayFrame(info, -1).sheet, 0);
+  assert.equal(C.trickplayFrame(info, 999).sheet, 2);
+  assert.equal(C.trickplayFrame(info, NaN), null);
+});
+test("held seeking speeds up in bounded stages while normal taps retain their step", () => {
+  assert.equal(C.heldSeekStep(10, 0), 10);
+  assert.equal(C.heldSeekStep(10, 1199), 10);
+  assert.equal(C.heldSeekStep(10, 1200), 30);
+  assert.equal(C.heldSeekStep(10, 3000), 60);
+  assert.equal(C.heldSeekStep(30, 1200), 60);
+  assert.equal(C.heldSeekStep(30, 100000), 120);
+});
 test("Seerr request permissions distinguish media types and standard versus 4K", () => {
   assert.deepEqual(C.seerrPermissions(2, "tv"), {standard: true, fourK: true});
   assert.deepEqual(C.seerrPermissions(262144, "movie"), {standard: true, fourK: false});

@@ -2,7 +2,7 @@
 
 Ember is an unofficial, experimental Jellyfin client for LG webOS, Samsung Tizen and Android-based Fire TV devices, inspired by [Wholphin for Android TV](https://github.com/damontecres/Wholphin). This repository contains the standalone TV implementation; it does not require an Android build or a Jellyfin Web deployment.
 
-Current version: **0.2.96**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
+Current version: **0.2.97**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
 
 The app was previously named Wholphin for webOS. Existing installations update in place and keep their sign-in and settings.
 
@@ -207,3 +207,11 @@ Validation: `npm run test:lg-direct-play` covers the reported 720p HEVC Main 10 
 - Nested general-library folders inherit sort and watch status unless explicitly customized, separately per profile; parent genre/year filters remain scoped to that folder. Grid layout remains unchanged.
 - Seerr rechecks permissions on title entry and before confirmed requests, explains Standard/4K access, and offers title/permission refresh. Native request failures distinguish session expiry, quota, blocklists, duplicate requests and rate limits without displaying raw server output.
 - Validation: 55 unit tests; Java compilation; native local-HTTP Seerr/profile/quota tests; cross-platform menu/folder/quality/playback completion regressions; Fire TV system-transport/HDR fixtures; LG direct-play regressions. All three platform packages built. Physical Alexa/HDR validation is pending. No TV was updated while preparing this release.
+
+
+### Seek previews and hold acceleration (v0.2.97)
+
+- Scene previews and timestamps while seeking on-demand movies or episodes, using Jellyfin's existing Trickplay thumbnails for the selected media version. Works with hidden controls, the timeline and seek buttons across LG, Samsung and Fire TV.
+- Loads only the needed authenticated sprite sheet and caches at most two decoded sheets for the current playback. Requests reject redirects and oversized/invalid images. Missing or unavailable thumbnails keep the normal seek feedback and timestamp. Late responses cannot draw on a different title. No thumbnail generation or extra video decoding is requested; Live TV does not load thumbnails.
+- Held left/right seeking accelerates through 10/30/60-second stages, resets on release or direction change, and preserves paused state. Media seek keys use 30/60/120-second stages; live seeking retains its normal step. Repeat throttling and native seek coalescing remain bounded. Fire TV forwarded media keys carry repeat/release information while native D-pad behavior stays intact.
+- Validation: 59 unit tests; all-platform sprite/crop/cache/timestamp, hold/release, delayed-response, fallback/oversize/redirect/version and source-cleanup fixtures; existing seek/menu checks, native Fire TV and LG direct-play regressions, subtitle retries. All platform packages built; physical-device validation is pending. No TV was updated during release preparation.

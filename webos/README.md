@@ -373,3 +373,14 @@ Nested general-library folders inherit the parent's sort and watch-status prefer
 Seerr refreshes permissions when opening a title and before submitting a confirmed request, explains Standard/4K access, and provides a refresh action. The native transport distinguishes expired sessions, quota limits, blocked titles, duplicate requests and rate limits using fixed messages rather than displaying raw server responses. Request permission remains enforced by Seerr.
 
 Validation includes 55 unit tests, native Java compilation, cross-platform menu/folder/quality fixtures, Fire TV transport/HDR fixtures, Seerr request/revocation flows and native local-HTTP transport/error classification. Physical-device validation is pending; no TV was updated while preparing this release.
+
+
+## Seek previews and held remote seeking (v0.2.97)
+
+On-demand movies and episodes show a timestamp and scene preview when Jellyfin has generated Trickplay thumbnails for the selected media version. Previews work with hidden-control remote seeking, the timeline and transport seek buttons. Ember reads Jellyfin's manifest, selects a bounded thumbnail size, and crops the appropriate frame from an authenticated sprite-sheet request. Only the requested sheet loads; at most two decoded sheets are cached for the active playback. No video decoding or thumbnail generation is requested by this feature.
+
+If metadata or images are missing, denied, invalid, oversized or unavailable, the existing seek feedback and timestamp remain. Thumbnails from a different media version are not substituted. Image requests use the captured playback profile's authorization header, reject redirects, and are cancelled when playback closes. Stop, source changes and late image responses cannot leave old preview scenes on the new video. Live TV does not load Trickplay images.
+
+Holding left/right speeds up from 10 to 30 to 60 seconds per accepted repeat, with repeat throttling and existing native seek coalescing. Releasing, changing direction or switching playback resets acceleration. Media seek keys use 30/60/120-second stages. Live seeking keeps its normal step. Paused playback stays paused. Fire TV's forwarded media keys include repeat/release events; native D-pad handling is retained for normal text input and navigation.
+
+Validation: 59 unit tests; cross-platform browser fixtures for sprite cropping, sheet reuse/transitions, selected-version matching, authenticated/redirect-safe requests, older fetch fallback, bad/oversized images, delayed-response races, cancellation, timestamp/timeline previews and hold/release acceleration; existing seek/menu regressions. Physical-device validation is pending.

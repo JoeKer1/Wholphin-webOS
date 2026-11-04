@@ -538,6 +538,12 @@ body:not(.signed-in) main {
 #seek-seconds { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; }
 #seek-progress { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: rgba(255,255,255,.3); }
 #seek-progress div { height: 100%; background: #a67aff; }
+#seek-preview { position: absolute; bottom: 250px; left: 50%; width: 324px; margin-left: -162px; border: 2px solid #fff; background: #000; }
+#seek-thumbnail { display: block; width: 320px; height: auto; }
+#seek-target { position: absolute; bottom: 82px; left: 50%; transform: translateX(-50%); padding: 5px 14px; background: #000; color: #fff; font-size: 26px; white-space: nowrap; }
+#seek-feedback.is-timeline #seek-indicator, #seek-feedback.is-timeline #seek-progress { display: none; }
+#seek-feedback.is-timeline #seek-preview { bottom: 330px; }
+#seek-feedback.is-timeline #seek-target { bottom: 280px; }
 @keyframes seek-forward { from { transform: rotate(0deg); } to { transform: rotate(270deg); } }
 @keyframes seek-backward { from { transform: scaleX(-1) rotate(0deg); } to { transform: scaleX(-1) rotate(270deg); } }
 @media (prefers-reduced-motion: reduce) { #seek-indicator img { animation: none; } #seek-feedback.is-backward #seek-indicator img { transform: scaleX(-1); } }

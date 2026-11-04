@@ -36,7 +36,6 @@ if (target !== "webos") {
       (target === "tizen" ? '<script src="$WEBAPIS/webapis/webapis.js"></script>\n<script src="avplay.js"></script>\n' : '<script src="playback.js"></script>\n') +
       '<script src="platform.js"></script>',
   );
-  if (target === "firetv") html = html.replace("img-src 'self'", "img-src blob: 'self'");
   if (target === "firetv") html = html.replace('width=device-width,initial-scale=1', 'width=1920');
   await fs.writeFile(path.join(out, "index.html"), html);
   const compatibility = await Promise.all(

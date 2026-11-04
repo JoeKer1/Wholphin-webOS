@@ -433,7 +433,10 @@ public final class MainActivity extends Activity {
         video.setVisibility(View.GONE);
     }
     private void key(int code) {
-        web.evaluateJavascript("window.EmberFireTV && window.EmberFireTV.key(" + code + ")", null);
+        key(code, "keydown", false);
+    }
+    private void key(int code, String phase, boolean repeat) {
+        web.evaluateJavascript("window.EmberFireTV && window.EmberFireTV.key(" + code + ",\"" + phase + "\"," + repeat + ")", null);
     }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         int code;
@@ -447,7 +450,8 @@ public final class MainActivity extends Activity {
             case KeyEvent.KEYCODE_MENU: code = 457; break;
             default: return super.dispatchKeyEvent(event);
         }
-        if (event.getAction() == KeyEvent.ACTION_DOWN) key(code);
+        if (event.getAction() == KeyEvent.ACTION_DOWN || event.getAction() == KeyEvent.ACTION_UP)
+            key(code, event.getAction() == KeyEvent.ACTION_UP ? "keyup" : "keydown", event.getRepeatCount() > 0);
         return true;
     }
     @Override public void onBackPressed() { key(27); }

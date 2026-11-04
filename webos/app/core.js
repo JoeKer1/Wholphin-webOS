@@ -620,6 +620,31 @@
       fourK: !!(permissions & (2 | 1024 | (type === "movie" ? 2048 : 4096))),
     };
   }
+  function trickplayInfo(item, sourceId) {
+    function canonical(id) { return String(id || "").replace(/-/g, "").toLowerCase(); }
+    var manifest = item && item.Trickplay;
+    if (!manifest || !sourceId) return null;
+    var key = Object.keys(manifest).find(function (id) { return canonical(id) === canonical(sourceId); });
+    if (!key) return null; // Never substitute another version's thumbnails.
+    var choices = Object.keys(manifest[key] || {}).map(function (width) { return manifest[key][width]; }).filter(function (info) {
+      return info && [info.Width, info.Height, info.TileWidth, info.TileHeight, info.ThumbnailCount, info.Interval].every(function (n) { return Number.isInteger(n) && n > 0; }) &&
+        info.Width <= 640 && info.Height <= 640 && info.TileWidth * info.Width <= 4096 && info.TileHeight * info.Height <= 4096 &&
+        info.TileWidth * info.Width * info.TileHeight * info.Height <= 8388608 &&
+        info.ThumbnailCount <= 1000000 && info.Interval >= 100;
+    });
+    choices.sort(function (a, b) { return Math.abs(a.Width - 320) - Math.abs(b.Width - 320) || a.Width - b.Width; });
+    return choices.length ? Object.assign({}, choices[0], {sourceId: key}) : null;
+  }
+  function trickplayFrame(info, seconds) {
+    if (!info || !Number.isFinite(seconds)) return null;
+    var index = Math.max(0, Math.min(info.ThumbnailCount - 1, Math.floor(seconds * 1000 / info.Interval))),
+      perSheet = info.TileWidth * info.TileHeight, tile = index % perSheet;
+    return {sheet: Math.floor(index / perSheet), x: tile % info.TileWidth * info.Width,
+      y: Math.floor(tile / info.TileWidth) * info.Height, width: info.Width, height: info.Height};
+  }
+  function heldSeekStep(base, heldMs) {
+    return base * (heldMs >= 3000 ? (base === 10 ? 6 : 4) : heldMs >= 1200 ? (base === 10 ? 3 : 2) : 1);
+  }
   // Merge individual choices rather than replacing another device's entire map.
   // A reset timestamp also clears older choices on devices that were offline.
   function mergeSeriesTracks(local, remote) {
@@ -1313,6 +1338,9 @@
     preferredTrack: preferredTrack,
     trackScopes: trackScopes,
     seerrPermissions: seerrPermissions,
+    trickplayInfo: trickplayInfo,
+    trickplayFrame: trickplayFrame,
+    heldSeekStep: heldSeekStep,
     mergeSeriesTracks: mergeSeriesTracks,
     seriesTrack: seriesTrack,
     imageTagQuery: imageTagQuery,

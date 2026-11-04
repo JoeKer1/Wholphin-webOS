@@ -1,6 +1,6 @@
 {
   "name": "ember-tv",
-  "version": "0.2.96",
+  "version": "0.2.97",
   "private": true,
   "scripts": {
     "build:webos": "node tools/build.mjs webos",
@@ -28,6 +28,7 @@
     "test:lg-direct-play": "npm run build:webos && node test/lg-direct-play-browser.cjs",
     "test:updater": "npm run build && node test/updater-browser.cjs",
     "test:segments": "npm run build && node test/segments-browser.cjs",
+    "test:trickplay": "npm run build && node test/trickplay-browser.cjs",
     "test:seeking": "npm run build && node test/seeking-browser.cjs"
   },
   "devDependencies": {

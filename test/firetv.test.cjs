@@ -92,3 +92,14 @@ test('Native media commands keep timeline state, ignore stale sessions and send 
  f.context.EmberFireTV.receive({id:old,type:'media-command',action:'stop'});
  assert.equal(f.events.length,count,'Commands for a closed player are ignored');
 });
+test('Fire TV media key forwarding retains key release and repeat state',()=>{
+ const f=fixture(),keys=[];
+ f.context.KeyboardEvent=class {constructor(type,options){this.type=type;Object.assign(this,options);}};
+ f.context.document.activeElement={dispatchEvent:e=>keys.push(e)};
+ f.context.EmberFireTV.key(417,'keydown',true);
+ f.context.EmberFireTV.key(417,'keyup');
+ f.context.EmberFireTV.key(179);
+ assert.equal(keys[0].type,'keydown');assert.equal(keys[0].repeat,true);
+ assert.equal(keys[1].type,'keyup');assert.equal(keys[1].repeat,false);
+ assert.equal(keys[2].type,'keydown');assert.equal(keys[2].keyCode,179);
+});

@@ -6,7 +6,7 @@
     <meta name="referrer" content="no-referrer" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: http: https: data:; media-src 'self' http: https: blob:; connect-src http: https:; base-uri 'none'; object-src 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' blob: file: http: https: data:; media-src 'self' http: https: blob:; connect-src http: https:; base-uri 'none'; object-src 'none'; form-action 'none'"
     />
     <title>Ember for Jellyfin</title>
     <link rel="stylesheet" href="style.css" />
@@ -33,7 +33,9 @@
       <video id="video"></video>
       <div id="live-preview-caption"></div>
       <div id="seek-feedback" hidden role="status" aria-live="polite">
+        <div id="seek-preview" hidden><canvas id="seek-thumbnail" width="320" height="180" aria-hidden="true"></canvas></div>
         <div id="seek-indicator"><img src="icons/seek-arrow.svg" alt="" /><span id="seek-seconds" aria-hidden="true"></span></div>
+        <div id="seek-target"></div>
         <div id="seek-progress"><div></div></div>
       </div>
       <button id="skip-segment" hidden aria-live="polite"></button>
