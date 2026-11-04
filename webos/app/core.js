@@ -608,6 +608,58 @@
       ids.indexOf(item.ParentId) >= 0 ||
       (ancestors || []).some(function (a) { return ids.indexOf(a.Id) >= 0 || (a.Type === "CollectionFolder" && /\banime\b/i.test(a.Name || "")); });
   }
+  function trackScopes(item) {
+    if (!item || item.Type !== "Episode" || !item.SeriesId) return [];
+    var season = item.SeasonId || item.ParentId;
+    return (season ? ["season:" + season] : []).concat("series:" + item.SeriesId);
+  }
+  // Merge individual choices rather than replacing another device's entire map.
+  // A reset timestamp also clears older choices on devices that were offline.
+  function mergeSeriesTracks(local, remote) {
+    function resetTime(data) { return data && Number.isFinite(data.reset) && data.reset > 0 ? data.reset : 0; }
+    var reset = Math.max(resetTime(local), resetTime(remote)), entries = {};
+    [remote, local].forEach(function (data) {
+      Object.keys(data && data.entries || {}).slice(0, 400).forEach(function (key) {
+        if (!/^(series|season):[a-zA-Z0-9-]{1,128}$/.test(key)) return;
+        ["Audio", "Subtitle"].forEach(function (type) {
+          var entry = data.entries[key] && data.entries[key][type], value = entry && entry.value;
+          if (!entry || !Number.isFinite(entry.updated) || entry.updated <= reset || !value) return;
+          var language = trackLanguage(value.language), clean;
+          if (type === "Subtitle" && value.off === true) clean = {off: true};
+          else if (/^[a-z]{2,3}$/.test(language) && ["main", "commentary", "description"].indexOf(value.role || "main") >= 0)
+            clean = {language: language, forced: !!value.forced, hearingImpaired: !!value.hearingImpaired, role: value.role || "main"};
+          if (!clean) return;
+          if (!entries[key]) entries[key] = {};
+          if (!entries[key][type] || entries[key][type].updated <= entry.updated)
+            entries[key][type] = {value: clean, updated: entry.updated};
+        });
+      });
+    });
+    var keys = Object.keys(entries).sort(function (a, b) {
+      function latest(key) { return Math.max(entries[key].Audio && entries[key].Audio.updated || 0, entries[key].Subtitle && entries[key].Subtitle.updated || 0); }
+      return latest(b) - latest(a);
+    });
+    keys.slice(200).forEach(function (key) { delete entries[key]; });
+    return {reset: reset, entries: entries};
+  }
+  function seriesTrack(item, type, data) {
+    var scopes = trackScopes(item), entries = data && data.entries || {};
+    for (var i = 0; i < scopes.length; i++) {
+      var entry = entries[scopes[i]] && entries[scopes[i]][type];
+      if (entry && entry.updated > (data.reset || 0)) return entry.value;
+    }
+    return null;
+  }
+  function imageTag(item, kind, owner) {
+    if (owner === item.Id) return kind === "Backdrop" ? (item.BackdropImageTags || [])[0] : (item.ImageTags || {})[kind];
+    if (kind === "Primary" && owner === item.SeriesId) return item.SeriesPrimaryImageTag;
+    if (kind === "Logo" && owner === item.ParentLogoItemId) return item.ParentLogoImageTag;
+    if (kind === "Backdrop" && owner === item.ParentBackdropItemId) return (item.ParentBackdropImageTags || [])[0];
+  }
+  function imageTagQuery(item, kind, owner) {
+    var tag = imageTag(item, kind, owner);
+    return tag ? "&tag=" + encodeURIComponent(tag) : "";
+  }
   function animeAudio(source, language, remembered) {
     var normal = preferredTrack(source, "Audio", remembered),
       match = language && preferredTrack(source, "Audio", {language: language});
@@ -1252,6 +1304,10 @@
     subtitleTimingKey: subtitleTimingKey,
     trackPreference: trackPreference,
     preferredTrack: preferredTrack,
+    trackScopes: trackScopes,
+    mergeSeriesTracks: mergeSeriesTracks,
+    seriesTrack: seriesTrack,
+    imageTagQuery: imageTagQuery,
     defaultSubtitle: defaultSubtitle,
     animeItem: animeItem,
     animeAudio: animeAudio,

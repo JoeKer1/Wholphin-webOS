@@ -1,6 +1,31 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const C = require("../app/core.js");
+test("series choices prefer the season, match reordered tracks, and merge across devices", () => {
+  const a = {reset: 0, entries: {"series:show": {Audio: {value: {language: "jpn"}, updated: 10}}}};
+  const b = {reset: 0, entries: {"season:s1": {Audio: {value: {language: "eng"}, updated: 20}, Subtitle: {value: {off: true}, updated: 21}}}};
+  const data = C.mergeSeriesTracks(a, b), item = {Type: "Episode", SeriesId: "show", SeasonId: "s1"};
+  assert.equal(C.seriesTrack(item, "Audio", data).language, "en");
+  assert.equal(C.seriesTrack({...item, SeasonId: "s2"}, "Audio", data).language, "ja");
+  assert.equal(C.seriesTrack({Type: "Movie", Id: "movie"}, "Audio", data), null);
+  assert.equal(C.seriesTrack({...item, SeriesId: "other", SeasonId: "other-season"}, "Audio", data), null);
+  assert.equal(C.preferredTrack({}, "Subtitle", C.seriesTrack(item, "Subtitle", data)), -1);
+  assert.deepEqual(C.trackScopes({Type: "Episode", SeriesId: "show"}), ["series:show"]);
+  assert.equal(C.preferredTrack({MediaStreams: [{Type: "Audio", Index: 8, Language: "jpn"}]}, "Audio", C.seriesTrack({...item, SeasonId: "s2"}, "Audio", data)), 8);
+  const reset = C.mergeSeriesTracks(data, {reset: 30, entries: {}});
+  assert.deepEqual(reset.entries, {});
+  assert.deepEqual(C.mergeSeriesTracks(reset, a), reset, "Offline devices cannot resurrect reset choices");
+  assert.deepEqual(C.mergeSeriesTracks({entries: {"series:bad": {Audio: {value: {language: "javascript:bad"}, updated: 100}}}}, reset), reset);
+});
+test("artwork cache tags belong to the actual image owner and are URL encoded", () => {
+  const episode = {Id: "episode", SeriesId: "show", ImageTags: {Primary: "still"}, SeriesPrimaryImageTag: "poster-new", ParentLogoItemId: "show", ParentLogoImageTag: "logo&new", ParentBackdropItemId: "show", ParentBackdropImageTags: ["background-new"]};
+  assert.equal(C.imageTagQuery(episode, "Primary", "episode"), "&tag=still");
+  assert.equal(C.imageTagQuery(episode, "Primary", "show"), "&tag=poster-new");
+  assert.equal(C.imageTagQuery(episode, "Logo", "show"), "&tag=logo%26new");
+  assert.equal(C.imageTagQuery(episode, "Backdrop", "show"), "&tag=background-new");
+  assert.equal(C.imageTagQuery(episode, "Thumb", "episode"), "");
+  assert.equal(C.imageTagQuery(episode, "Primary", "other"), "");
+});
 test("normalizes server base paths and rejects unsafe URLs", () => {
   assert.equal(
     C.serverUrl(" https://media.example/jellyfin/ "),

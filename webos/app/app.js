@@ -895,11 +895,12 @@
       "",
       "Clear remembered audio and subtitle choices for this profile.",
       function () {
+        saveLanguagePreference("series-track-preferences", {reset: Date.now(), entries: {}});
         localStorage.removeItem(accountKey("track-preferences"));
         localStorage.removeItem(accountKey("subtitle-choices"));
         localStorage.removeItem(accountKey("subtitle-timing"));
         message(
-          "Remembered audio/subtitle choices cleared. New videos will use Jellyfin defaults.",
+          "Remembered choices cleared. Your profile language defaults still apply.",
         );
       },
     );
@@ -1133,7 +1134,7 @@
           if (previous) setTimeout(function () { previous.remove(); }, 1600);
           title.textContent = item.Name || "Ember";
         };
-        setImageSource(img, context.server + "/Items/" + encodeURIComponent(item.Id) + "/Images/Backdrop/0?maxWidth=1920&quality=85");
+        setImageSource(img, context.server + "/Items/" + encodeURIComponent(item.Id) + "/Images/Backdrop/0?maxWidth=1920&quality=85" + C.imageTagQuery(item, "Backdrop", item.Id));
       }
       active.timer = setTimeout(next, options.duration * 1000);
     }
@@ -1206,9 +1207,19 @@
         if (!document || !document.CustomPrefs || typeof document.CustomPrefs !== "object" || Array.isArray(document.CustomPrefs))
           throw new Error("Invalid display preferences");
         var dirty = storedLanguage(account, "language-sync-pending", {}), uploaded = {}, write = false;
-        ["subtitle-defaults", "audio-defaults", "seerr-connection"].forEach(function (suffix) {
+        ["subtitle-defaults", "audio-defaults", "seerr-connection", "series-track-preferences"].forEach(function (suffix) {
           var local = storedLanguage(account, suffix, null), remote = null;
           try { remote = JSON.parse(document.CustomPrefs["ember-" + suffix]); } catch (_) {}
+          if (suffix === "series-track-preferences") {
+            var merged = C.mergeSeriesTracks(local, remote), serialized = JSON.stringify(merged);
+            if (local || remote) localStorage.setItem(languageKey(account, suffix), serialized);
+            if ((local || remote) && (dirty[suffix] || serialized !== JSON.stringify(remote))) {
+              uploaded[suffix] = serialized;
+              document.CustomPrefs["ember-" + suffix] = serialized;
+              write = true;
+            }
+            return;
+          }
           if (suffix === "seerr-connection") {
             var legacy = storedLanguage(account, "seerr", {});
             local = normalizedSeerrConnection(local) || normalizedSeerrConnection({server: legacy.server || localStorage.getItem("wholphin-seerr-server:" + account.server)});
@@ -2624,7 +2635,7 @@
       ? session.server +
           "/Items/" +
           encodeURIComponent(id) +
-          "/Images/Backdrop?maxWidth=1280&quality=80"
+          "/Images/Backdrop?maxWidth=1280&quality=80" + C.imageTagQuery(item, "Backdrop", id)
       : null;
   }
   function setBackdrop(item) {
@@ -2718,13 +2729,14 @@
     var image = document.getElementById("preview-logo"),
       title = document.getElementById("preview-title"),
       id = C.logoItem(item);
-    if (id && image.dataset.logoItem === id) {
+    var logoKey = id ? id + C.imageTagQuery(item, "Logo", id) : "";
+    if (id && image.dataset.logoItem === logoKey) {
       title.classList.toggle("has-logo", !image.hidden);
       return;
     }
     clearTimeout(logoTimer);
     var request = ++logoRequest;
-    image.dataset.logoItem = id || "";
+    image.dataset.logoItem = logoKey;
     image.hidden = true;
     title.classList.remove("has-logo");
     if (!id) {
@@ -2750,7 +2762,7 @@
       setImageSource(image, session.server +
         "/Items/" +
         encodeURIComponent(id) +
-        "/Images/Logo?maxWidth=600&quality=90");
+        "/Images/Logo?maxWidth=600&quality=90" + C.imageTagQuery(item, "Logo", id));
     }, 150);
   }
   function updatePreview(item) {
@@ -2821,7 +2833,7 @@
       encodeURIComponent(id) +
       "/Images/" +
       kind +
-      (landscape ? "?maxWidth=720&quality=80" : "?maxWidth=450&quality=80")
+      (landscape ? "?maxWidth=720&quality=80" : "?maxWidth=450&quality=80") + C.imageTagQuery(item, kind, id)
     );
   }
   function setImageSource(img, url) {
@@ -5745,7 +5757,7 @@
               style.enabled = true;
               localStorage.setItem(accountKey("subtitle-appearance"), JSON.stringify(style));
             }
-            saveSubtitleChoice(item.Id, updated, track.Index);
+            saveSubtitleChoice(item, updated, track.Index);
             closeSubtitleSearch(false);
             try {
               await downloaded(updated, track);
@@ -5843,9 +5855,7 @@
           chosen =
             saved && saved.source === source.Id
               ? saved.index
-              : C.defaultSubtitle(source,
-                  await defaultAudio(item, source),
-                  subtitleDefaults(), readPreference("track-preferences", {}).Subtitle);
+              : defaultSubtitle(item, source, await defaultAudio(item, source));
         if (!subtitlePicker.isConnected) return;
         if (chosen == null) chosen = source.DefaultSubtitleStreamIndex;
         if (
@@ -5878,7 +5888,7 @@
           subtitlePicker.setAttribute("aria-expanded", "false");
           if (persist) {
             subtitlePicker.dataset.explicit = "true";
-            saveSubtitleChoice(item.Id, source, track.index);
+            saveSubtitleChoice(item, source, track.index);
             subtitlePicker.focus();
           }
         }
@@ -5986,7 +5996,7 @@
         movieLogo.onload = function () {
           if (heading.isConnected) { movieLogo.hidden = false; heading.classList.add("has-logo"); }
         };
-        setImageSource(movieLogo, session.server + "/Items/" + encodeURIComponent(movieLogoId) + "/Images/Logo?maxWidth=720&quality=90");
+        setImageSource(movieLogo, session.server + "/Items/" + encodeURIComponent(movieLogoId) + "/Images/Logo?maxWidth=720&quality=90" + C.imageTagQuery(item, "Logo", movieLogoId));
       }
     }
     setBackdrop(item);
@@ -6589,6 +6599,9 @@
   }
   var animeAncestry = new Map();
   async function defaultAudio(item, source, signal) {
+    var scoped = C.seriesTrack(item, "Audio", readPreference("series-track-preferences", {})),
+      chosen = C.preferredTrack(source || {}, "Audio", scoped);
+    if (chosen != null) return chosen;
     var remembered = readPreference("track-preferences", {}).Audio,
       language = readPreference("audio-defaults", {}).animeLanguage;
     if (!language) return C.preferredTrack(source || {}, "Audio", remembered);
@@ -6614,10 +6627,15 @@
   function subtitleDefaults() {
     return Object.assign({mode: "remember", language: "eng", foreignEnglish: true}, readPreference("subtitle-defaults", {}));
   }
+  function defaultSubtitle(item, source, audioIndex) {
+    var scoped = C.seriesTrack(item, "Subtitle", readPreference("series-track-preferences", {}));
+    return scoped ? C.preferredTrack(source, "Subtitle", scoped)
+      : C.defaultSubtitle(source, audioIndex, subtitleDefaults(), readPreference("track-preferences", {}).Subtitle);
+  }
   function subtitleDefaultsSettings() {
     reset("Subtitle defaults");
     el("p", languageSyncText(), main).className = "language-sync-status";
-    el("p", "A manual choice for a title takes priority.", main);
+    el("p", "Manual choices for an episode, season or show take priority.", main);
     var options = subtitleDefaults(), list = el("div", null, main);
     list.className = "screensaver-settings";
     function choice(key, label, choices) {
@@ -6906,9 +6924,9 @@
       dolbyVision: false,
     });
   }
-  function saveSubtitleChoice(itemId, source, index) {
+  function saveSubtitleChoice(item, source, index) {
     var choices = readPreference("subtitle-choices", {});
-    choices[itemId] = { source: source.Id, index: index, updated: Date.now() };
+    choices[item.Id] = { source: source.Id, index: index, updated: Date.now() };
     Object.keys(choices)
       .sort(function (a, b) {
         return choices[b].updated - choices[a].updated;
@@ -6922,7 +6940,7 @@
         accountKey("subtitle-choices"),
         JSON.stringify(choices),
       );
-      rememberTrack("Subtitle", C.trackPreference(source, "Subtitle", index));
+      rememberTrack("Subtitle", C.trackPreference(source, "Subtitle", index), item);
     } catch (_) {}
   }
   function playbackOptions() {
@@ -6931,7 +6949,18 @@
       readPreference("playback-options", {}),
     );
   }
-  function rememberTrack(type, preference) {
+  function rememberTrack(type, preference, item) {
+    var scopes = C.trackScopes(item);
+    if (scopes.length) {
+      if (!preference) return;
+      var data = C.mergeSeriesTracks(readPreference("series-track-preferences", {}), null), updated = Math.max(Date.now(), data.reset + 1);
+      scopes.forEach(function (key) {
+        if (!data.entries[key]) data.entries[key] = {};
+        data.entries[key][type] = {value: preference, updated: updated};
+      });
+      saveLanguagePreference("series-track-preferences", C.mergeSeriesTracks(data, null));
+      return;
+    }
     var preferences = readPreference("track-preferences", {});
     if (preference) preferences[type] = preference;
     else delete preferences[type];
@@ -7077,6 +7106,7 @@
       !active || active.live || !C.tracks(active.source, "Subtitle").length;
     document.getElementById("subtitle-timing").disabled = !active || active.live;
     document.getElementById("subtitle-appearance").disabled = !active || active.live;
+    document.getElementById("quality").disabled = !active || active.live;
     document.getElementById("chapters").disabled =
       !active || active.live || !C.chapters(active.item).length;
     document.getElementById("previous-video").hidden = !!(active && active.live);
@@ -7255,9 +7285,10 @@
       info: "Playback information",
       appearance: "Subtitle appearance",
       timing: "Subtitle timing",
+      quality: "Playback quality",
     }[kind];
     panel.classList.toggle("subtitle-picker", kind === "subtitles");
-    panel.classList.toggle("compact-menu", kind === "audio" || kind === "chapters");
+    panel.classList.toggle("compact-menu", kind === "audio" || kind === "chapters" || kind === "quality");
     panel.classList.toggle("subtitle-appearance-panel", kind === "appearance");
     panel.setAttribute("aria-label", title);
     el("h2", title, panel);
@@ -7350,6 +7381,14 @@
           },
           content,
         );
+    } else if (kind === "quality") {
+      el("p", "For this playback only. A lower limit can reduce buffering and may convert the video. Your position and selected tracks are kept.", content);
+      [[0, "Automatic"], [60000000, "60 Mbps"], [40000000, "40 Mbps"], [20000000, "20 Mbps"], [10000000, "10 Mbps"], [5000000, "5 Mbps"], [2000000, "2 Mbps"]].forEach(function (entry) {
+        if (entry[0] > active.profileMaxBitrate) return;
+        var control = button(entry[1], function () { return switchQuality(active, entry[0]); }, content);
+        control.setAttribute("aria-pressed", String(entry[0] === active.maxBitrate));
+      });
+      focusContent(content.querySelector('[aria-pressed="true"]') || content.querySelector("button"));
     } else if (kind === "appearance") renderSubtitleAppearance(content, true);
     else if (kind === "timing") renderSubtitleTiming(content, active);
     else if (kind === "queue") renderQueue(content, true);
@@ -7443,7 +7482,7 @@
         option(track.index, track.label, subtitle ? [track.external ? "External" : "Embedded", localSubtitle(track.index) ? "No burn-in" : "Requires video conversion"].join(" · ") : null);
       });
       if (subtitle && findButton) content.appendChild(findButton);
-      if (!subtitle) el("p", "Language choices are remembered for this account on this TV.", content);
+      if (!subtitle) el("p", active.item.Type === "Episode" ? "Choices are remembered for this show and season, and synced for this profile." : "Language choices are remembered for this profile on this TV.", content);
       {
         var currentOption = content.querySelector('[aria-pressed="true"]');
         if (currentOption) focusContent(currentOption);
@@ -7465,8 +7504,8 @@
     var preference = C.trackPreference(active.source, type, index);
     if ((subtitle ? active.subtitleIndex : active.audioIndex) === index &&
         !(subtitle && index >= 0 && !active.subtitleCues && subtitleOptions().enabled && C.textSubtitle(active.source, index))) {
-      rememberTrack(type, preference);
-      if (subtitle) saveSubtitleChoice(active.item.Id, active.source, index);
+      if (subtitle) saveSubtitleChoice(active.item, active.source, index);
+      else rememberTrack(type, preference, active.item);
       closePlaybackPanel();
       return;
     }
@@ -7491,8 +7530,7 @@
         active.subtitleIndex = index;
         active.subtitleCues = cues;
         active.subtitleStyle = style;
-        rememberTrack(type, preference);
-        saveSubtitleChoice(active.item.Id, active.source, index);
+        saveSubtitleChoice(active.item, active.source, index);
         applySubtitleStyle(subtitleOverlay, style);
         renderSubtitleOverlay();
         closePlaybackPanel();
@@ -7507,7 +7545,8 @@
     var nextSubtitle = active.subtitleIndex;
     if (!subtitle && nextSubtitle < 0) {
       var manualSubtitle = readPreference("subtitle-choices", {})[active.item.Id];
-      if (!(manualSubtitle && manualSubtitle.source === active.source.Id && manualSubtitle.index === -1)) {
+      var scopedSubtitle = C.seriesTrack(active.item, "Subtitle", readPreference("series-track-preferences", {}));
+      if (!(scopedSubtitle && scopedSubtitle.off) && !(manualSubtitle && manualSubtitle.source === active.source.Id && manualSubtitle.index === -1)) {
         var automatic = C.defaultSubtitle(active.source, index, {mode: "off", foreignEnglish: subtitleDefaults().foreignEnglish});
         if (automatic >= 0) nextSubtitle = automatic;
       }
@@ -7527,6 +7566,21 @@
     } catch (error) {
       if (playing === active && !paused) await video.play();
       message("Could not change track. " + error.message);
+    }
+  }
+  async function switchQuality(active, maxBitrate) {
+    if (playing !== active || busy || !active.started || active.live) return;
+    if (active.maxBitrate === maxBitrate) { closePlaybackPanel(); return; }
+    var ticks = position(), paused = video.paused;
+    video.pause();
+    try {
+      await play(active.item, ticks, false, false, {
+        trackChange: true, maxBitrate: maxBitrate, paused: paused,
+        mediaSourceId: active.source.Id, audioIndex: active.audioIndex, subtitleIndex: active.subtitleIndex,
+      });
+    } catch (error) {
+      if (playing === active && !paused && !document.hidden) await video.play();
+      message("Could not change quality. " + error.message);
     }
   }
   var upNext = el("section", null, player);
@@ -7715,7 +7769,7 @@
       return openPlaybackPanel("info");
     });
   };
-  ["audio", "subtitles", "chapters", "queue"].forEach(function (kind) {
+  ["audio", "subtitles", "chapters", "queue", "quality"].forEach(function (kind) {
     document.getElementById(kind).onclick = function () {
       run(function () {
         return openPlaybackPanel(kind);
@@ -7847,10 +7901,11 @@
     active.lastPositionTicks = Math.round(video.currentTime * 10000000);
     if (active.pendingPreference) {
       if (active.pendingPreference.type === "Subtitle")
-        saveSubtitleChoice(active.item.Id, active.source, active.subtitleIndex);
-      rememberTrack(
+        saveSubtitleChoice(active.item, active.source, active.subtitleIndex);
+      else rememberTrack(
         active.pendingPreference.type,
         active.pendingPreference.value,
+        active.item,
       );
       active.pendingPreference = null;
     }
@@ -7879,6 +7934,10 @@
     message("Preparing playback…");
     var returnItem = item,
       openedLive = null;
+    if (options.trackChange && previous && previous.item.Id === item.Id) {
+      if (options.maxBitrate == null) options.maxBitrate = previous.maxBitrate;
+      if (options.compatibility == null) options.compatibility = previous.compatibility;
+    }
     try {
       if (live) {
         if (!item.ChannelId)
@@ -7906,10 +7965,10 @@
       var sourceMetadata = null;
       if (
         !live &&
-        ((decoder.native && !options.compatibility) ||
+        ((decoder.native && !options.compatibility) || options.maxBitrate ||
           subtitleOptions().enabled ||
           preferences.Audio ||
-          preferences.Subtitle ||
+          preferences.Subtitle || C.seriesTrack(item, "Audio", readPreference("series-track-preferences", {})) || C.seriesTrack(item, "Subtitle", readPreference("series-track-preferences", {})) ||
           subtitleDefaults().mode !== "remember" || subtitleDefaults().foreignEnglish || readPreference("audio-defaults", {}).animeLanguage ||
           ((options.audioIndex != null || options.subtitleIndex != null) &&
             !options.mediaSourceId))
@@ -7947,7 +8006,7 @@
           options.subtitleIndex = savedSubtitle && sourceMetadata && savedSubtitle.source === sourceMetadata.Id &&
             (savedSubtitle.index === -1 || (sourceMetadata.MediaStreams || []).some(function (s) { return s.Type === "Subtitle" && s.Index === savedSubtitle.index; }))
             ? savedSubtitle.index
-            : C.defaultSubtitle(sourceMetadata || {}, options.audioIndex, subtitleDefaults(), preferences.Subtitle);
+            : defaultSubtitle(item, sourceMetadata || {}, options.audioIndex);
         }
         if (
           options.audioIndex != null ||
@@ -8006,13 +8065,17 @@
         dolbyVision: decoder.dolbyVision,
       });
       if (nativeMode && P.playbackProfile) deviceProfile = P.playbackProfile(C.profile(), sourceMetadata);
+      var profileMaxBitrate = deviceProfile.MaxStreamingBitrate,
+        maxBitrate = [2000000, 5000000, 10000000, 20000000, 40000000, 60000000].indexOf(options.maxBitrate) >= 0 ? options.maxBitrate : 0,
+        qualityConversion = maxBitrate > 0 && (!sourceMetadata || !Number.isFinite(sourceMetadata.Bitrate) || sourceMetadata.Bitrate <= 0 || sourceMetadata.Bitrate > Math.min(maxBitrate, profileMaxBitrate));
+      if (maxBitrate) deviceProfile.MaxStreamingBitrate = Math.min(maxBitrate, profileMaxBitrate);
       // Native engines with track control can select embedded audio directly.
       // LG's HTML player needs a remux only for a non-default audio track;
       // text rendered by Ember must not disable direct play of the video.
       var nativeTrackControl = nativeMode && !!P.playbackPolicy;
       var audioNeedsRemux = !nativeTrackControl && options.audioIndex != null &&
         (!sourceMetadata || options.audioIndex !== sourceMetadata.DefaultAudioStreamIndex);
-      var forceTranscode = !!live || !!options.compatibility || audioNeedsRemux ||
+      var forceTranscode = !!live || !!options.compatibility || qualityConversion || audioNeedsRemux ||
         (!nativeMode && (!!options.trackChange || !!subtitleCues || !!options.applyPreferences));
       var requestBody = {
         UserId: session.user,
@@ -8020,10 +8083,10 @@
         IsPlayback: true,
         AutoOpenLiveStream: true,
         EnableDirectPlay: !forceTranscode,
-        EnableDirectStream: nativeMode,
+        EnableDirectStream: nativeMode && !qualityConversion,
         EnableTranscoding: true,
         AllowVideoStreamCopy:
-          !options.compatibility && (!(deliveredSubtitleIndex >= 0) || (nativeMode && !!P.playbackPolicy)),
+          !options.compatibility && !qualityConversion && (!(deliveredSubtitleIndex >= 0) || (nativeMode && !!P.playbackPolicy)),
         MaxAudioChannels: nativeMode && P.playbackProfile
           ? Number(deviceProfile.TranscodingProfiles[0].MaxAudioChannels) || 2
           : nativeMode ? 6 : 2,
@@ -8086,6 +8149,9 @@
             ? options.subtitleIndex
             : selected.source.DefaultSubtitleStreamIndex,
         nativeMode: nativeMode,
+        compatibility: !!options.compatibility,
+        maxBitrate: maxBitrate,
+        profileMaxBitrate: profileMaxBitrate,
         profileName: deviceProfile.Name,
         policyReason: policy.reason,
         pendingPreference: options.pendingPreference,
@@ -8142,7 +8208,7 @@
       playerLogo.dataset.playingItem = item.Id;
       playerLogo.onload = function () { if (playerLogo.dataset.playingItem === item.Id) playerLogo.hidden = false; };
       playerLogo.onerror = function () { playerLogo.hidden = true; };
-      if (logoId) setImageSource(playerLogo, session.server + "/Items/" + encodeURIComponent(logoId) + "/Images/Logo?maxWidth=400&quality=90");
+      if (logoId) setImageSource(playerLogo, session.server + "/Items/" + encodeURIComponent(logoId) + "/Images/Logo?maxWidth=400&quality=90" + C.imageTagQuery(item, "Logo", logoId));
       else playerLogo.removeAttribute("src");
       document.getElementById("end-time").textContent = "";
       if (P.playbackTracks && video.configure)

@@ -349,3 +349,14 @@ The Fire TV build supports direct Seerr sign-in with Jellyfin or Seerr-local cre
 Discover provides trending titles, movies, TV, upcoming movies, search and My requests, with additional results loaded as you browse. Movie and season requests require confirmation and respect Seerr permissions/quotas; 4K is offered when allowed. Available titles can open their Jellyfin detail page when Seerr supplies a Jellyfin item ID.
 
 Native HTTP handles cookies and CSRF. Cookies are stored in Android app-private storage, scoped to the Ember profile, Jellyfin server and Seerr URL; passwords are not saved. Cookie expiry is respected and disconnect clears the current profile’s saved session. LG and Samsung do not show this Fire TV-only integration.
+
+
+## Show preferences, artwork and playback quality (v0.2.95)
+
+Manual episode audio/subtitle choices now apply to the current season and series for the selected profile. Episode-specific subtitle choices take priority, followed by season and series choices, then general language defaults (including Anime). Matching uses language and track role/accessibility flags instead of reusing stream indices. Show choices sync through Jellyfin DisplayPreferences when opening the profile or Settings and after a manual selection; offline changes retry later. This does not provide live push updates to another TV already playing. Reset track preferences clears the synced show choices for this profile as well as this device's remembered title choices.
+
+During on-demand playback, open **Options → Quality** to choose Automatic or a maximum bitrate. Lower limits may require server video conversion. Position, pause state, audio and subtitles are retained; the limit remains through track changes but resets for the next video. Automatic restores the device's normal playback policy rather than guaranteeing Direct Play. Live TV quality switching is not supported.
+
+Poster, backdrop, logo and screensaver image URLs include Jellyfin's image tags when available, allowing changed server artwork to replace cached images. This affects media artwork, not the TV launcher's application icon cache.
+
+These changes have browser-fixture coverage across LG, Samsung and Fire TV, including native Fire TV negotiation and LG direct-play regressions. Physical-device validation of v0.2.95 is pending.

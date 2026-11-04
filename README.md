@@ -2,7 +2,7 @@
 
 Ember is an unofficial, experimental Jellyfin client for LG webOS, Samsung Tizen and Android-based Fire TV devices, inspired by [Wholphin for Android TV](https://github.com/damontecres/Wholphin). This repository contains the standalone TV implementation; it does not require an Android build or a Jellyfin Web deployment.
 
-Current version: **0.2.94**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
+Current version: **0.2.95**. Developed for an LG C1 running webOS 6.5; Samsung Q6FN / Tizen 4.0 installation and startup are also confirmed. Android-based Fire TV devices use Media3 1.11.1 with device-derived Direct Play profiles, native subtitle support and compatibility fallback. Direct Play has been validated on Fire TV hardware, including HDR10 on a supported display. Other models and media combinations remain under testing. This is not affiliated with or an official release of Wholphin, Jellyfin, LG, Samsung, or Amazon, and does not have feature parity with Android Wholphin.
 
 The app was previously named Wholphin for webOS. Existing installations update in place and keep their sign-in and settings.
 
@@ -190,3 +190,11 @@ LG now defaults to **Automatic (LG C1)** when no playback-mode preference has be
 Locally rendered text subtitles no longer disable direct play just because a subtitle preference or subtitle track change was applied. Per-video/per-track timing corrections continue to work. Selecting non-default audio on LG requests a remux rather than silently playing the file's default audio track. Bitmap subtitles and failed text extraction retain their existing burn-in fallback. Native decoder errors retry Compatibility once at the same position; startup errors raised synchronously by the media engine are queued until playback preparation finishes, without a retry loop.
 
 Validation: `npm run test:lg-direct-play` covers the reported 720p HEVC Main 10 / AAC / MKV / ASS case with a -3-second local subtitle correction, audio-only remuxing, explicit Compatibility preference, non-default audio selection, synchronous startup failure, decoder failure after seeking and bounded retry. Existing LG HDR/DV/remux/subtitle/diagnostic regressions and three-platform subtitle retry/menu tests also pass. This release is built but has not been deployed to or validated on the occupied LG TV.
+
+
+### Show preferences, artwork refresh and quality controls (v0.2.95)
+
+- Episode audio/subtitle choices are remembered per season and series, separately for each profile, and synced through Jellyfin. Choices match languages, roles and accessibility flags across episodes with different stream indices. Existing profile language defaults remain the fallback.
+- Media artwork URLs include Jellyfin image tags when available, so updated posters, logos and backdrops can replace cached images.
+- **Player Options → Quality** offers Automatic and bitrate limits supported by the device profile. Changes preserve position, pause state and tracks, stay inside the player and apply only to the current video. Lowering the bitrate may require server conversion. Returning to Automatic restores normal playback negotiation.
+- Validation: 52 unit tests; cross-platform browser fixtures for show preference sync/isolation, artwork URLs, quality limits, remote navigation, retained tracks/position/pause and failed negotiation; existing language, subtitle and LG playback regressions. Packages built for all three platforms. Physical-device testing of this release is pending.

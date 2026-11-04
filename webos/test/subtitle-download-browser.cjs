@@ -200,6 +200,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         return remove.call(this, name);
       };
     });
+    // This branch exercises compatibility overlays; LG now defaults to native playback.
+    if (!native) await page.addInitScript(() => localStorage.setItem("wholphin-decoder-options:https://jellyfin.test:user", JSON.stringify({native: false})));
     if (native) await page.addInitScript(() => {
       window.downloadNativeCommands = [];
       window.downloadNativeState = { position: 0, duration: 1800000, paused: true, id: 0 };
