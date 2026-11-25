@@ -41,6 +41,7 @@ import java.util.ArrayList;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.extractor.DefaultExtractorsFactory;
+import androidx.media3.extractor.ExtractorsFactory;
 import io.github.peerless2012.ass.media.AssHandler;
 import io.github.peerless2012.ass.media.AssHandlerConfig;
 import io.github.peerless2012.ass.media.factory.AssRenderersFactory;
@@ -234,11 +235,19 @@ public final class MainActivity extends Activity {
             subtitleTrack = tracks == null ? -1 : tracks.optInt("subtitle", -1);
             externalSubtitle = tracks == null ? -1 : tracks.optInt("externalIndex", -1);
             tracksApplied = false;
-            DefaultRenderersFactory renderers = new DefaultRenderersFactory(this).setEnableDecoderFallback(true);
+            final DolbyVisionConversion conversion;
+            if (tracks != null && tracks.optBoolean("convertProfile7")) {
+                if (!PlaybackCapabilities.read(this).optBoolean("dolbyVisionConversionAvailable")) { send("error"); return; }
+                try { conversion = new DolbyVisionConversion(); }
+                catch (LinkageError error) { send("error"); return; }
+            } else conversion = null;
+            DefaultRenderersFactory renderers = conversion == null ? new DefaultRenderersFactory(this) : conversion.renderers(this);
+            renderers.setEnableDecoderFallback(true);
             assHandler = new AssHandler(AssRenderType.OVERLAY_CANVAS, new AssHandlerConfig(10000, 128, 1920 * 1080));
             AssSubtitleParserFactory parser = new AssSubtitleParserFactory(assHandler);
-            DefaultMediaSourceFactory sources = new DefaultMediaSourceFactory(new DefaultDataSource.Factory(this),
-                AssPlayerKt.withAssMkvSupport(new DefaultExtractorsFactory(), parser, assHandler))
+            ExtractorsFactory extractors = AssPlayerKt.withAssMkvSupport(new DefaultExtractorsFactory(), parser, assHandler);
+            if (conversion != null) extractors = conversion.wrap(extractors);
+            DefaultMediaSourceFactory sources = new DefaultMediaSourceFactory(new DefaultDataSource.Factory(this), extractors)
                 .setSubtitleParserFactory(parser);
             player = new ExoPlayer.Builder(this, new AssRenderersFactory(assHandler, renderers))
                 .setMediaSourceFactory(sources).build();
@@ -274,6 +283,9 @@ public final class MainActivity extends Activity {
                         if (player.getPlayWhenReady()) send("playing");
                     } else if (state == Player.STATE_ENDED) send("ended");
                     else if (state == Player.STATE_BUFFERING) send("waiting");
+                }
+                @Override public void onRenderedFirstFrame() {
+                    if (current() && conversion != null && !conversion.hasConverted()) send("error");
                 }
                 @Override public void onVideoSizeChanged(VideoSize size) {
                     if (current()) matchDisplay();

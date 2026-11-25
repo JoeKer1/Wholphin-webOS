@@ -24,6 +24,11 @@
     return ["DOVIWithHDR10", "DOVIWithHDR10Plus"].indexOf(video.VideoRangeType) >= 0 &&
       Number(video.DvProfile) === 8 && Number(video.DvBlSignalCompatibilityId) === 1;
   }
+  function convertsProfile7(source, video, caps) {
+    return !!(caps.convertProfile7 && caps.dolbyVisionConversionAvailable &&
+      video && String(video.Codec).toLowerCase() === "hevc" && Number(video.DvProfile) === 7 &&
+      video.VideoRangeType === "DOVIWithEL" && /^(mkv|mp4|m4v)$/.test(source.Container || ""));
+  }
   function policy(source, options, index, caps) {
     if (!options.native) return { native: false, reason: "Compatibility mode selected" };
     var video = ((source && source.MediaStreams) || []).find(function (s) { return s.Type === "Video"; }),
@@ -31,18 +36,20 @@
       text = subtitle(source, index);
     if (!support || !(caps.audio || []).length) return { native: false, reason: "No matching device decoder capability" };
     var range = video.VideoRangeType || (video.VideoRange === "HDR" || video.BitDepth > 8 ? "UnknownHDR" : "SDR");
-    if ((caps.blockedRanges || []).indexOf(range) >= 0) return {native: false, reason: "This HDR format is disabled on this Fire TV"};
-    if ((caps.videoRanges || ["SDR"]).indexOf(range) < 0 && !hdr10Fallback(video, caps))
+    if ((caps.blockedRanges || []).indexOf(range) >= 0) return {native: false, reason: "This HDR format is disabled on this device"};
+    var convert = convertsProfile7(source, video, caps);
+    if ((caps.videoRanges || ["SDR"]).indexOf(range) < 0 && !hdr10Fallback(video, caps) && !convert)
       return { native: false, reason: "Video range is not supported by the connected display" };
     if (!nativeSubtitle(source, index == null ? -1 : index))
       return { native: false, reason: "Selected subtitles require server conversion" };
-    return { native: true, reason: hdr10Fallback(video, caps) ? "HDR10-compatible HEVC base layer (Media3)" : "Fire TV device decoder and audio-route negotiation" };
+    if (convert) return {native: true, convertProfile7: true, reason: "Experimental Dolby Vision 7 → 8.1"};
+    return { native: true, reason: hdr10Fallback(video, caps) ? "HDR10-compatible HEVC base layer (Media3)" : (caps.deviceName || "Fire TV") + " device decoder and audio-route negotiation" };
   }
   function profile(caps, fallback, source) {
     var videos = (caps.videos || []).filter(function (v) { return ["h264", "hevc", "vp9", "av1"].indexOf(v.codec) >= 0; }),
       audio = (caps.audio || []).filter(function (a) { return ["aac", "mp3", "flac", "opus", "vorbis", "ac3", "eac3"].indexOf(a) >= 0; }),
       channels = Math.max(2, Math.min(6, Number(caps.maxAudioChannels) || 2));
-    fallback.Name = "Fire TV Media3 (device capabilities)";
+    fallback.Name = (caps.playbackName || "Fire TV Media3") + " (device capabilities)";
     fallback.MaxStreamingBitrate = 80000000;
     fallback.DirectPlayProfiles = [{ Container: "mkv,mp4,m4v,mov,webm,ts,mpegts", Type: "Video",
       VideoCodec: videos.map(function (v) { return v.codec; }).join(","), AudioCodec: audio.join(",") }];
@@ -52,6 +59,7 @@
       // Advertise an extended range only for the source whose base layer was checked.
       if (v.codec === "hevc" && v.bitDepth >= 10 && hdr10Fallback(metadata, caps) && ranges.indexOf(metadata.VideoRangeType) < 0)
         ranges.push(metadata.VideoRangeType);
+      if (v.codec === "hevc" && v.bitDepth >= 10 && convertsProfile7(source, metadata, caps)) ranges.push("DOVIWithEL");
       ranges = ranges.filter(function (range) { return (caps.blockedRanges || []).indexOf(range) < 0; });
       var conditions = [condition("Width", v.width), condition("Height", v.height),
         condition("VideoBitDepth", v.bitDepth), condition("VideoFramerate", v.frameRate),
@@ -106,6 +114,7 @@
     if (options.hdr10plus === "off") blocked = blocked.concat(["HDR10Plus", "DOVIWithHDR10Plus"]);
     if (options.hlg === "off") blocked = blocked.concat(["HLG", "DOVIWithHLG"]);
     if (options.dolbyVision === "off") blocked = blocked.concat(["DOVI", "DOVIWithHDR10", "DOVIWithHDR10Plus", "DOVIWithHLG", "DOVIWithSDR"]);
+    result.convertProfile7 = options.convertProfile7 === true && options.dolbyVision !== "off" && options.hdr10 !== "off";
     result.blockedRanges = blocked;
     result.videoRanges = (caps.videoRanges || ["SDR"]).filter(function (range) { return blocked.indexOf(range) < 0; });
     return result;

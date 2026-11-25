@@ -2,17 +2,26 @@ const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-function fixture() {
+function fixture(identity) {
  const commands=[], events=[];
  const parent={hidden:false,getBoundingClientRect:()=>({left:0,top:0,width:1920,height:1080})};
  const element={parentNode:parent,style:{},addEventListener(){},removeEventListener(){},dispatchEvent(event){this.lastEvent=event;events.push(event.type);this['on'+event.type]?.(event);}};
  const context={window:null,document:{body:{},documentElement:{classList:{add(){}}}},CSS:{supports:()=>true},innerWidth:1920,innerHeight:1080,MutationObserver:class {observe(){}},Event:class {constructor(type){this.type=type;}},CustomEvent:class {constructor(type,options){this.type=type;this.detail=options.detail;}},EmberAndroid:{command:raw=>commands.push(JSON.parse(raw))},addEventListener(){}};
  context.window=context;
+ if(identity) context.EmberAndroid.capabilities=()=>JSON.stringify(identity);
  vm.runInNewContext(fs.readFileSync('platforms/firetv/platform.js','utf8'),context);
  const p=context.EmberPlatform.createPlayer(element);
  const receive=(type,data={})=>context.EmberFireTV.receive({id:commands.findLast(c=>c.action==='load')?.id,type,position:0,duration:120000,paused:false,...data});
  return {p,commands,events,receive,context,parent,element};
 }
+test('Android bridge uses the native device identity and preserves older Fire TV wrappers',()=>{
+ assert.equal(fixture().context.EmberPlatform.deviceName,'Fire TV');
+ for(const name of ['DIRECTV Android TV','Android TV','Fire TV']){
+  const platform=fixture({deviceName:name,playbackName:name+' Media3'}).context.EmberPlatform;
+  assert.equal(platform.deviceName,name);
+  assert.equal(platform.playbackName,name+' Media3');
+ }
+});
 test('Fire TV bridge preserves resume seconds, waits for native playback and closes cancelled sources',async()=>{
  const f=fixture();f.p.src='https://media.test/live.m3u8#t=30';f.p.load();
  assert.equal(f.commands.find(c=>c.action==='load').url,'https://media.test/live.m3u8');

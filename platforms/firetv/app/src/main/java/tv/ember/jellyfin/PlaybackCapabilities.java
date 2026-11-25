@@ -19,6 +19,14 @@ final class PlaybackCapabilities {
     static synchronized JSONObject read(Context context) {
         JSONObject result = new JSONObject();
         try {
+            String manufacturer = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER;
+            String model = Build.MODEL == null ? "" : Build.MODEL;
+            String identity = (manufacturer + " " + Build.BRAND + " " + model).toLowerCase(java.util.Locale.ROOT);
+            boolean fireTv = context.getPackageManager().hasSystemFeature("amazon.hardware.fire_tv");
+            boolean directTv = identity.contains("directv") || identity.contains("direct tv") || model.equalsIgnoreCase("AT&T TV");
+            String deviceName = fireTv ? "Fire TV" : directTv ? "DIRECTV Android TV" : "Android TV";
+            result.put("deviceName", deviceName);
+            result.put("playbackName", deviceName + " Media3");
             MediaCodecInfo[] decoders = new MediaCodecList(MediaCodecList.REGULAR_CODECS).getCodecInfos();
             if (videoCache == null) {
                 videoCache = new JSONArray();
@@ -92,19 +100,32 @@ final class PlaybackCapabilities {
             }
             result.put("displayMatching", new JSONObject().put("rate", matchRate).put("resolution", matchResolution));
             JSONArray displayHdr = new JSONArray();
-            boolean dolbyDecoder = false;
+            boolean dolbyDecoder = false, profile7 = false, profile8 = false;
             for (MediaCodecInfo decoder : decoders) if (!decoder.isEncoder() && hardware(decoder)) {
-                for (String mime : decoder.getSupportedTypes()) if (mime.equalsIgnoreCase("video/dolby-vision")) dolbyDecoder = true;
+                for (String mime : decoder.getSupportedTypes()) if (mime.equalsIgnoreCase("video/dolby-vision")) {
+                    dolbyDecoder = true;
+                    try {
+                        MediaCodecInfo.CodecCapabilities capabilities = decoder.getCapabilitiesForType(mime);
+                        if (capabilities.isFeatureRequired(MediaCodecInfo.CodecCapabilities.FEATURE_SecurePlayback)
+                            || capabilities.isFeatureRequired(MediaCodecInfo.CodecCapabilities.FEATURE_TunneledPlayback)) continue;
+                        for (MediaCodecInfo.CodecProfileLevel level : capabilities.profileLevels) {
+                            profile7 |= level.profile == MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheDtb;
+                            profile8 |= level.profile == MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheSt;
+                        }
+                    } catch (IllegalArgumentException ignored) {}
+                }
             }
+            boolean dolbyDisplay = false;
             for (int type : manager.getDefaultDisplay().getHdrCapabilities().getSupportedHdrTypes()) {
                 if (type == Display.HdrCapabilities.HDR_TYPE_HDR10) ranges.put("HDR10");
                 if (type == Display.HdrCapabilities.HDR_TYPE_HLG) ranges.put("HLG");
                 if (type == Display.HdrCapabilities.HDR_TYPE_HDR10) displayHdr.put("HDR10");
                 if (type == Display.HdrCapabilities.HDR_TYPE_HLG) displayHdr.put("HLG");
-                if (type == Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION) displayHdr.put("Dolby Vision");
+                if (type == Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION) { displayHdr.put("Dolby Vision"); dolbyDisplay = true; }
                 if (Build.VERSION.SDK_INT >= 29 && type == Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS) displayHdr.put("HDR10+");
             }
-            result.put("displayHdrTypes", displayHdr).put("dolbyVisionDecoder", dolbyDecoder);
+            result.put("displayHdrTypes", displayHdr).put("dolbyVisionDecoder", dolbyDecoder)
+                .put("dolbyVisionConversionAvailable", dolbyDisplay && profile8 && !profile7);
             result.put("videos", videoCache).put("audio", audio).put("audioChannels", audioChannels).put("videoRanges", ranges)
                 .put("maxAudioChannels", surround ? Math.min(6, output.getMaxChannelCount()) : 2)
                 .put("hdr", ranges.length() > 1); // SurfaceView preserves native HDR output.

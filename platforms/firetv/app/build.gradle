@@ -21,6 +21,7 @@ android {
     buildTypes.debug { applicationIdSuffix '.debug' }
 }
 dependencies {
+    implementation 'com.suyashbelekar:exoplayerhdrutils:0.3.0'
     implementation 'io.github.peerless2012:ass-media:0.5.1'
     implementation 'androidx.webkit:webkit:1.12.1'
     implementation 'androidx.media3:media3-exoplayer:1.11.1'

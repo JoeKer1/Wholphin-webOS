@@ -231,7 +231,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         image.src = url;
         return { background, width: await loaded };
       });
-      assert.ok(artwork.background.includes(theme + ".svg") && artwork.background.includes("linear-gradient"));
+      assert.ok(artwork.background.includes(theme + ".png") && artwork.background.includes("linear-gradient"));
       assert.ok(artwork.width >= 240, "Seasonal decoration decodes locally");
       await page.screenshot({ path: "/tmp/ember-bonfire-" + theme + ".png" });
     }

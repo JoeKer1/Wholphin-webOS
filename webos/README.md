@@ -66,7 +66,7 @@ The initial device profile advertises MP4 H.264/AAC/MP3 direct playback, with co
 
 Resume reloads the latest server bookmark, then seeks the native player to that absolute time for both direct playback and HLS. Initial seeks are retried as the TV becomes ready; session reporting begins only after the seek is confirmed. Progress and stop reports are ordered, with no extra offset added to HLS timestamps. A failed initial seek preserves the bookmark. Seeking still depends on the TV's native HLS seekable window. Native mode has a single Compatibility retry on decoder failure.
 
-Not implemented: multiple accounts, DVR recording management, music, Seerr on LG/Tizen, subtitle search/download, trickplay, refresh-rate switching, and Android/MPV-specific playback features.
+Ember's Live TV guide supports single-programme recordings, cancellation of scheduled recordings, and playback of completed recordings. Series recording rules, recording deletion, and catch-up TV are outside this DVR workflow.
 
 
 ## Home and loading

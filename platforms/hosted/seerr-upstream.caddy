@@ -1,0 +1,22 @@
+# Define this snippet before the site that imports ember.caddy.
+(ember_seerr_upstream) {
+	route {
+		rewrite * /api/v1{http.regexp.ember.2}
+		header {
+			Cache-Control "no-store"
+			Content-Security-Policy "default-src 'none'; sandbox"
+			X-Content-Type-Options nosniff
+		}
+		reverse_proxy {args[0]} {
+			header_up -Authorization
+			header_up -X-Api-Key
+			header_up -X-Ember-Seerr
+			header_up Cookie "connect.sid={http.request.cookie.connect.sid}; _csrf={http.request.cookie._csrf}; XSRF-TOKEN={http.request.cookie.XSRF-TOKEN}"
+			header_up X-XSRF-TOKEN "{http.request.cookie.XSRF-TOKEN}"
+			header_up X-CSRF-Token "{http.request.cookie.XSRF-TOKEN}"
+			header_up Origin {args[1]}
+			header_up Referer {args[1]}/
+			header_down Set-Cookie "(?i);[[:space:]]*path=[^;]*" "; Path=/ember-seerr/{http.regexp.ember.1}/"
+		}
+	}
+}

@@ -22,7 +22,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       maxJobs = 0,
       failChannel = false,
       failGuide = true,
-      denyChannels = false;
+      denyChannels = false,
+      timer = null;
     const channels = Array.from({ length: 83 }, (_, i) => ({
       Id: "c" + i,
       Name: "Station " + i,
@@ -94,6 +95,23 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       }
       if (u.pathname.startsWith("/LiveTv/Programs/"))
         json = programmes.get(u.pathname.split("/").at(-1));
+      if (u.pathname === "/LiveTv/Timers/Defaults")
+        json = { ProgramId: u.searchParams.get("ProgramId"), PrePaddingSeconds: 60 };
+      if (u.pathname === "/LiveTv/Timers") {
+        if (req.method() === "POST") {
+          assert.equal(body.ProgramId, "c0next");
+          assert.equal(body.PrePaddingSeconds, 60);
+          timer = { ...programmes.get(body.ProgramId), Id: "timer", ProgramId: body.ProgramId };
+          return route.fulfill({ status: 204 });
+        }
+        json = { Items: timer ? [timer] : [] };
+      }
+      if (u.pathname === "/LiveTv/Timers/timer" && req.method() === "DELETE") {
+        timer = null;
+        return route.fulfill({ status: 204 });
+      }
+      if (u.pathname === "/LiveTv/Recordings")
+        json = { Items: [{ Id: "saved-recording", Name: "Recorded news", MediaType: "Video" }] };
       if (u.pathname.startsWith("/Users/user/FavoriteItems/")) {
         const id = u.pathname.split("/").at(-1);
         if (req.method() === "DELETE") favorites.delete(id);
@@ -265,7 +283,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await row("c1")
       .getByRole("button", { name: /Morning news/ })
       .waitFor();
-    assert.match(await row("c3").textContent(), /No programme listed/);
+    assert.match(await row("c3").textContent(), /No program listed/);
     await row("c0").getByRole("button", { name: "Favorite Station 0" }).click();
     await wait(() => favorites.has("c0"));
     await click("Channels: All");
@@ -286,6 +304,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page
       .getByRole("heading", { name: "Afternoon show", exact: true })
       .waitFor();
+    await click("Record program");
+    await page.getByRole("button", { name: "Recording scheduled", exact: true }).waitFor();
     await page.keyboard.press("Escape");
     await row("c0")
       .getByRole("button", { name: /Morning news/ })
@@ -647,6 +667,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       await page.evaluate(() => window.guideAborts > 0),
       "Leaving guide cancels its pending requests",
     );
+    await click("Scheduled recordings");
+    page.once("dialog", (dialog) => dialog.accept());
+    await click("Cancel recording for Afternoon show");
+    await page.getByText("No scheduled recordings.", { exact: true }).waitFor();
+    assert.equal(timer, null);
+    await page.keyboard.press("Escape");
+    await click("Recordings");
+    await click("Recorded news");
+    await wait(() => requests.some((request) => request.path === "/Items/saved-recording/PlaybackInfo"));
     assert.deepEqual(errors, []);
     console.log(
       "PASS: Live TV now/next, lazy bounded guide, two-request limit, row/channel retries, favorites, future programme labels, D-pad and Back focus, continuous channels, no-EPG playback/tuner cleanup and denied access",

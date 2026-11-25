@@ -4,11 +4,13 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  const browser = await chromium.launch({headless: true, ...(process.env.CHROMIUM_PATH ? {executablePath: process.env.CHROMIUM_PATH} : {})});
  try {for (const platform of ['webos', 'tizen', 'firetv']) {
   const page = await browser.newPage({viewport: {width: 1920, height: 1080}}), errors = [], calls = [], positions = {movie: 0, episode: 1200000000};
+  let releaseMovieStop;
+  const movieStop = new Promise(resolve => { releaseMovieStop = resolve; });
   page.on('pageerror', e => errors.push(e.message));
   await page.route('**/webapis/webapis.js', r => r.fulfill({body: ''}));
   const source = {Id: 'source', Container: 'mkv', DefaultAudioStreamIndex: 1, DefaultSubtitleStreamIndex: -1, MediaStreams: [{Type: 'Video', Index: 0, Codec: 'h264'}, {Type: 'Audio', Index: 1, Codec: 'aac', Language: 'eng'}]};
   const item = id => ({Id: id, Name: 'Rewatch ' + id, Type: id === 'movie' ? 'Movie' : 'Episode', ...(id === 'episode' ? {SeriesId: 'show', SeriesName: 'Rewatch show', ParentId: 'season', ParentIndexNumber: 1, IndexNumber: 1} : {}), MediaType: 'Video', RunTimeTicks: 18000000000, Chapters: [], UserData: {Played: true, PlaybackPositionTicks: positions[id], PlayedPercentage: 100, IsFavorite: true}, MediaSources: [source]});
-  await page.route('https://jellyfin.test/**', r => {
+  await page.route('https://jellyfin.test/**', async r => {
    const u = new URL(r.request().url()), body = r.request().postDataJSON(); calls.push({path: u.pathname, method: r.request().method(), body}); let json = {Items: []};
    if (u.pathname.endsWith('/Views')) json = {Items: [{Id: 'movies', Name: 'Movies', CollectionType: 'movies'}]};
    else if (u.pathname.endsWith('/Latest')) json = [item('movie')];
@@ -17,7 +19,11 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
    else if (u.pathname === '/Users/user/Items' && u.searchParams.get('ParentId') === 'season') json = {Items: [item('episode')], TotalRecordCount: 1};
    else if (/\/Users\/user\/Items\/(movie|episode)$/.test(u.pathname)) json = item(u.pathname.split('/').at(-1));
    else if (u.pathname.endsWith('/PlaybackInfo')) json = {PlaySessionId: 'fixture', MediaSources: [{...source, SupportsDirectPlay: false, TranscodingUrl: '/Videos/mock/master.m3u8'}]};
-   else if (u.pathname === '/Sessions/Playing/Stopped') {positions[body.ItemId] = body.PositionTicks >= 18000000000 ? 0 : body.PositionTicks; return r.fulfill({status: 204});}
+   else if (u.pathname === '/Sessions/Playing/Stopped') {
+    if (body.ItemId === 'movie' && body.PositionTicks < 18000000000) await movieStop;
+    positions[body.ItemId] = body.PositionTicks >= 18000000000 ? 0 : body.PositionTicks;
+    return r.fulfill({status: 204});
+   }
    else if (u.pathname.startsWith('/Sessions/') || u.pathname.endsWith('/ActiveEncodings')) return r.fulfill({status: 204});
    return r.fulfill({json});
   });
@@ -43,10 +49,15 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
    await page.locator('#video').evaluate(v => {v.currentTime = 600; v.dispatchEvent(new Event('timeupdate'));});
    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', {keyCode: 413, bubbles: true})));
    await page.waitForSelector('body:not(.is-playing)');
-   await page.getByRole('button', {name: 'Resume', exact: true}).waitFor();
-   assert.equal(positions[id], 6000000000, 'Rewatch stop saves position without unmarking watched');
+   if (id === 'episode') await page.getByRole('button', {name: 'Resume', exact: true}).waitFor();
    await page.locator('nav [data-nav=home]').click();
+   if (id === 'movie') {
+    await page.locator('#home-rows [data-item=movie]').first().waitFor();
+    assert.equal(await resumed(id).count(), 0, 'Home opened before Jellyfin saved the stop report');
+    releaseMovieStop();
+   }
    await resumed(id).waitFor();
+   assert.equal(positions[id], 6000000000, 'Rewatch stop saves position without unmarking watched');
    assert.equal(await resumed(id).locator('.watched-badge').count(), 1);
    assert.equal(await resumed(id).locator('.card-progress').count(), 1, 'Watched check does not hide rewatch progress');
    const width = await resumed(id).locator('.card-progress div').evaluate(n => parseFloat(n.style.width));

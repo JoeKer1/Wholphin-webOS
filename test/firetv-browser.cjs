@@ -24,7 +24,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.addInitScript(()=>{
    localStorage.setItem('wholphin-session',JSON.stringify({server:'https://jellyfin.test',user:'user',token:'token',name:'Joe'}));
    window.nativeCommands=[];window.nativeState={position:0,duration:120000,paused:true,id:0};
-   window.EmberAndroid={capabilities:()=>JSON.stringify({videos:[{codec:'h264',width:1920,height:1080,bitDepth:8,frameRate:60,bitrate:40000000,level:42}],audio:['aac','ac3'],maxAudioChannels:6}),command(raw){
+   window.EmberAndroid={capabilities:()=>JSON.stringify({videos:[{codec:'h264',width:1920,height:1080,bitDepth:8,frameRate:60,bitrate:40000000,level:42}],audio:['aac','ac3'],maxAudioChannels:6,...(window.dvCapable?{dolbyVisionConversionAvailable:true,videos:[{codec:'hevc',width:3840,height:2160,bitDepth:10}]}:{})}),command(raw){
     const c=JSON.parse(raw);nativeCommands.push(c);
     const event=(type)=>setTimeout(()=>window.EmberFireTV.receive({...nativeState,type,seekStart:0,seekEnd:120000}),0);
     if(c.action==='load'){nativeState={position:0,duration:120000,paused:true,id:c.id};if(window.failNextNativeLoad&&c.url.includes('/stream?')){window.failNextNativeLoad=false;event('error');}else event('loadedmetadata');}
@@ -109,12 +109,25 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.ok(await page.getByRole('button',{name:'Playback mode: Fire TV Media3 (Compatibility)',exact:true}).isVisible());
   await page.getByRole('button',{name:'Playback mode: Fire TV Media3 (Compatibility)',exact:true}).click();
   await page.locator("#setting-options").getByRole("button",{name:"Fire TV Media3 (Automatic)",exact:true}).click();
+  Object.assign(source.MediaStreams[0],{Codec:'hevc',VideoRangeType:'DOVIWithEL',DvProfile:7,BitDepth:10});
+  await page.addInitScript(()=>{window.dvCapable=true;});
+  await page.reload();
+  await page.locator('nav [data-nav=settings]').click();
+  await page.getByRole('button',{name:'HDR formats',exact:true}).click();
+  await page.getByRole('button',{name:'Convert Dolby Vision profile 7 (experimental): Off',exact:true}).click();
   await page.evaluate(()=>{window.failNextNativeLoad=true;nativeCommands.length=0;});
+  const beforeConversion=requests.length;
   await page.locator('nav [data-nav=home]').click();
   await page.getByRole('button',{name:'Fire TV movie',exact:true}).first().click();
   await page.getByRole('button',{name:/^Resume/}).first().click();
   await page.waitForFunction(()=>nativeCommands.some(c=>c.action==='load'&&c.url.includes('master.m3u8'))&&nativeState.position>=30000&&!nativeState.paused);
-  assert.ok(await page.evaluate(()=>nativeCommands.some(c=>c.action==='load'&&c.url.includes('/stream?'))));
+  const loads=await page.evaluate(()=>nativeCommands.filter(c=>c.action==='load'));
+  assert.equal(loads.length,2);
+  assert.ok(loads[0].url.includes('/stream?')&&loads[0].tracks.convertProfile7===true);
+  assert.ok(loads[1].url.includes('master.m3u8')&&!loads[1].tracks.convertProfile7);
+  const conversion=requests.slice(beforeConversion).find(r=>r.body?.EnableDirectPlay);
+  assert.equal(conversion.body.EnableDirectStream,false);
+  assert.equal(conversion.body.AllowVideoStreamCopy,false);
   await page.evaluate(()=>document.dispatchEvent(new Event('ember-suspend')));
   await page.locator('#player[hidden]').waitFor({state:'attached'});
   assert.deepEqual(errors,[]);

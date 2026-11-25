@@ -66,6 +66,22 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       assert.ok(await page.locator(':focus').getAttribute('aria-label').then(v => v.startsWith('Text size:')));
       await page.screenshot({path:`/private/tmp/ember-menu-${platform}.png`});
       await back();
+      if (platform === 'firetv') {
+        await page.getByRole('button',{name:'Device',exact:true}).click();
+        assert.match(await page.locator(':focus').getAttribute('aria-label'), /^Playback mode:/);
+        for (const label of ['HDR formats', 'Screensaver', 'App updates', 'Sign out']) {
+          await page.evaluate(() => EmberFireTV.key(40));
+          assert.equal(await page.locator(':focus').getAttribute('aria-label'), label);
+        }
+        const signOut = await page.locator(':focus').boundingBox();
+        assert.ok(signOut.y >= 0 && signOut.y + signOut.height <= 1080, 'The final settings row scrolls into view');
+        await page.evaluate(() => EmberFireTV.key(38));
+        assert.equal(await page.locator(':focus').getAttribute('aria-label'), 'App updates');
+      }
+      if (platform === 'tizen') {
+        await page.getByRole('button',{name:'Device',exact:true}).click();
+        assert.equal(await page.locator(':focus').getAttribute('aria-label'), 'Screensaver');
+      }
       await page.getByRole('button',{name:'Customize Home',exact:true}).click();
       await page.locator('.home-options input[type=checkbox]').first().focus();
       await page.keyboard.press('ArrowRight');

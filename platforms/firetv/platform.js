@@ -60,6 +60,9 @@
         if (imageRequests.get(img) === request) img.dispatchEvent(new Event("error"));
       });
   }
+  var deviceIdentity = capabilities(),
+    deviceName = deviceIdentity.deviceName || "Fire TV",
+    playbackName = deviceIdentity.playbackName || deviceName + " Media3";
   root.EmberPlatform = {
     appVersion: function () { try { return root.EmberAndroid.appVersion(); } catch (_) { return ""; } },
     updateApp: function (action, callback) {
@@ -71,7 +74,7 @@
         var id = ++seerrId;
         seerrJobs[id] = {resolve: resolve, reject: reject, timer: setTimeout(function () { delete seerrJobs[id]; reject(new Error("Seerr request timed out. Try again.")); }, 45000)};
         try { root.EmberAndroid.seerrRequest(JSON.stringify(Object.assign({id: id}, values))); }
-        catch (_) { clearTimeout(seerrJobs[id].timer); delete seerrJobs[id]; reject(new Error("Update the Fire TV app to connect to Seerr.")); }
+        catch (_) { clearTimeout(seerrJobs[id].timer); delete seerrJobs[id]; reject(new Error("Update the Ember app to connect to Seerr.")); }
       });
     },
     displayMatching: function () { var modes = capabilities().displayMatching; return modes && (modes.rate || modes.resolution) ? modes : null; },
@@ -88,8 +91,8 @@
     playbackProfile: function (fallback, source) { return root.EmberFirePlayback.profile(playbackCapabilities(), fallback, source); },
     playbackTracks: function () { return root.EmberFirePlayback.tracks.apply(null, arguments); },
     id: "firetv",
-    deviceName: "Fire TV",
-    playbackName: "Fire TV Media3",
+    deviceName: deviceName,
+    playbackName: playbackName,
     nativePlayback: false,
     keyCode: function (event) { return event.keyCode; },
     exit: function () { command("exit"); },
@@ -139,7 +142,7 @@
         if (data.type === "playing") settle();
         if (data.type === "ended") paused = true;
         if (data.type === "error") {
-          error = { code: 4, message: "Fire TV playback failed." };
+          error = { code: 4, message: deviceName + " playback failed." };
           settle(new Error(error.message));
         }
         rect();

@@ -18,7 +18,7 @@ The preset enables the appropriate server negotiation; it does not control the T
 
 Server HLS is labelled as remux, video-copy/audio-encode, or video transcode only when the server supplies the corresponding flags. A source HDR tag is shown as source metadata and does not establish the TV's active display mode. Audio copied by the server does not establish receiver passthrough. Refresh is manual; the panel does not add a permanent session polling loop. Closing it aborts a pending diagnostics request.
 
-A native decoder error triggers one H.264/AAC Compatibility retry with video copy disabled and the last known playback position retained. A second error stops playback. Manual per-video Compatibility preserves paused state. Both leave the global preset unchanged, and Stop/navigation cancel pending negotiation so a late response cannot restart playback.
+A native decoder error or an on-demand stream that fails to start within 30 seconds triggers one H.264/AAC Compatibility retry with video copy disabled and the resume or last known playback position retained. If the retry also fails, Ember stops playback. Manual per-video Compatibility preserves paused state. Both leave the global preset unchanged, and Stop/navigation cancel pending negotiation so a late response cannot restart playback.
 
 ## Pending C1 device validation
 

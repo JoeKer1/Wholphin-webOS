@@ -93,3 +93,21 @@ test('DV profile 8 HDR10 base layer stays direct-playable without advertising ge
  const hdr10plus=structuredClone(movie);hdr10plus.MediaStreams[0].VideoRangeType='HDR10Plus';
  assert.equal(F.policy(hdr10plus,{native:true},-1,hardware).native,true);
 });
+test('Experimental DV7 conversion requires opt-in, eligible hardware, and an eligible source',()=>{
+ const hardware={...caps,dolbyVisionConversionAvailable:true};
+ const movie={...structuredClone(source),Container:'mkv'};
+ Object.assign(movie.MediaStreams[0],{DvProfile:7,VideoRangeType:'DOVIWithEL'});
+ const selected={native:true};
+ const enabled=F.effectiveCapabilities(hardware,{convertProfile7:true});
+ assert.equal(F.policy(movie,selected,-1,enabled).convertProfile7,true);
+ const ranges=media=>F.profile(enabled,C.profile(),media).CodecProfiles.find(p=>p.Codec==='hevc').Conditions.find(c=>c.Property==='VideoRangeType').Value.split('|');
+ assert.ok(ranges(movie).includes('DOVIWithEL'));
+ assert.ok(!ranges().includes('DOVIWithEL'));
+ for(const options of [{},{convertProfile7:true,dolbyVision:'off'},{convertProfile7:true,hdr10:'off'}]){
+  assert.equal(F.policy(movie,selected,-1,F.effectiveCapabilities(hardware,options)).native,false);
+ }
+ assert.equal(F.policy(movie,selected,-1,F.effectiveCapabilities(caps,{convertProfile7:true})).native,false);
+ assert.equal(F.policy({...movie,Container:'ts'},selected,-1,enabled).native,false);
+ movie.MediaStreams[0].DvProfile=undefined;
+ assert.equal(F.policy(movie,selected,-1,enabled).native,false);
+});

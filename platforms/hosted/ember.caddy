@@ -1,0 +1,37 @@
+route /ember-tv {
+	redir /ember-tv/ 308
+}
+
+route /ember-tv/* {
+	uri strip_prefix /ember-tv
+	root * /data/ember-tv
+	header Cache-Control "no-cache"
+	file_server
+}
+
+route /ember-seerr/* {
+	@emberApi {
+		path_regexp ember ^/ember-seerr/([a-f0-9]{32})(/.*)$
+		header X-Ember-Seerr 1
+	}
+	handle @emberApi {
+		@reads {
+			method GET
+			path_regexp ^/ember-seerr/[a-f0-9]{32}/(status|auth/me|discover/(trending|movies(/upcoming)?|tv)|search|request|(movie|tv)/[0-9]+)$
+		}
+		@writes {
+			method POST
+			path_regexp ^/ember-seerr/[a-f0-9]{32}/(auth/logout|auth/jellyfin/quickconnect/(initiate|authenticate)|request)$
+		}
+		route {
+			handle @reads {
+				import ember_seerr_upstream {args[0]} {args[1]}
+			}
+			handle @writes {
+				import ember_seerr_upstream {args[0]} {args[1]}
+			}
+			respond 404
+		}
+	}
+	respond 403
+}

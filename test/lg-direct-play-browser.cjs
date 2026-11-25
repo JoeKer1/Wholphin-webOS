@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 (async()=>{
  const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});
- try {for(const scenario of ['direct','audio-remux','explicit-compatibility','startup-error','decoder-error']){
+ try {for(const scenario of ['direct','audio-remux','explicit-compatibility','startup-error','startup-timeout','decoder-error']){
   const page=await browser.newPage({viewport:{width:1920,height:1080}}),infos=[],starts=[],errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   const source={Id:'source',Container:'mkv',DefaultAudioStreamIndex:1,DefaultSubtitleStreamIndex:2,MediaStreams:[
@@ -32,9 +32,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     '["episode","source",[false,0,"",false,false],"ass","eng"]':{delay:-3,updated:1}
    }));
    if(scenario==='explicit-compatibility')localStorage.setItem('wholphin-decoder-options:https://jellyfin.test:user',JSON.stringify({native:false}));
+   const now=Date.now;
+   Date.now=()=>now()+(window.startupClockOffset||0);
    const p=HTMLMediaElement.prototype;
    Object.defineProperties(p,{src:{get(){return this._src||'';},set(v){this._src=v;this._time=0;}},currentTime:{get(){return this._time||0;},set(v){this._time=v;setTimeout(()=>this.dispatchEvent(new Event('seeked')),0);}},duration:{get(){return 1800;}},readyState:{get(){return 4;}},seeking:{get(){return false;}},paused:{get(){return !this._playing;}}});
-   p.load=function(){if(!this._src)return;if(scenario==='startup-error'&&!window.failedOnce&&this._src.includes('/stream?')){window.failedOnce=true;this.dispatchEvent(new Event('error'));return;}setTimeout(()=>this.dispatchEvent(new Event('loadedmetadata')),0);};
+   p.load=function(){if(!this._src)return;if(scenario==='startup-error'&&!window.failedOnce&&this._src.includes('/stream?')){window.failedOnce=true;this.dispatchEvent(new Event('error'));return;}if(scenario==='startup-timeout'&&this._src.includes('/stream?')){window.startupClockOffset=31000;return;}setTimeout(()=>this.dispatchEvent(new Event('loadedmetadata')),0);};
    p.play=function(){this._playing=true;this.dispatchEvent(new Event('play'));this.dispatchEvent(new Event('playing'));return Promise.resolve();};
    p.pause=function(){this._playing=false;this.dispatchEvent(new Event('pause'));};
    const remove=Element.prototype.removeAttribute;p.removeAttribute=function(n){if(n==='src')this._src='';return remove.call(this,n);};
@@ -72,7 +74,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    await wait(()=>infos.length===2&&starts.length===2);
    assert.equal(infos[1].StartTimeTicks,3210000000);
   }
-  if(scenario==='startup-error'||scenario==='decoder-error'){
+  if(scenario==='startup-error'||scenario==='startup-timeout'||scenario==='decoder-error'){
    await wait(()=>infos.length===2);
    assert.equal(infos[1].AllowVideoStreamCopy,false,'A failed native decoder must retry with actual H.264 conversion');
    assert.equal(infos[1].EnableDirectStream,false);assert.equal(infos[1].SubtitleStreamIndex,-1);
