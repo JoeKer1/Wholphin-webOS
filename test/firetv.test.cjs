@@ -22,6 +22,31 @@ test('Android bridge uses the native device identity and preserves older Fire TV
   assert.equal(platform.playbackName,name+' Media3');
  }
 });
+test('Native diagnostics retain real frame counts and reset for a replacement stream',()=>{
+ const f=fixture();
+ f.p.src='https://media.test/video';f.p.load();
+ f.receive('timeupdate',{diagnostics:{dropped:4,rendered:240,bufferMs:12500,rebufferCount:2,rebufferMs:800}});
+ assert.equal(f.p.getVideoPlaybackQuality().droppedVideoFrames,4);
+ assert.equal(f.p.getVideoPlaybackQuality().totalVideoFrames,244);
+ assert.equal(f.p.nativeDiagnostics().bufferMs,12500);
+ f.p.src='https://media.test/next';f.p.load();
+ assert.equal(f.p.nativeDiagnostics(),null);
+ assert.equal(f.p.getVideoPlaybackQuality().totalVideoFrames,null);
+});
+test('Home integration sends only through optional native methods',()=>{
+ const f=fixture(), calls=[];
+ f.context.EmberAndroid.systemProfile=value=>calls.push(['profile',value]);
+ f.context.EmberAndroid.syncWatchNext=value=>calls.push(['sync',JSON.parse(value)]);
+ f.context.EmberAndroid.takeSystemResume=()=>JSON.stringify({profile:'owner',item:'movie'});
+ f.context.EmberPlatform.setSystemProfile('owner');
+ f.context.EmberPlatform.syncContinueWatching({profile:'owner',items:[]});
+ assert.equal(calls[0][1],'owner');
+ assert.equal(calls[1][1].items.length,0);
+ assert.equal(f.context.EmberPlatform.takeSystemResume('owner').item,'movie');
+ delete f.context.EmberAndroid;
+ assert.doesNotThrow(()=>f.context.EmberPlatform.setSystemProfile(''));
+ assert.equal(f.context.EmberPlatform.takeSystemResume('owner'),null);
+});
 test('Fire TV bridge preserves resume seconds, waits for native playback and closes cancelled sources',async()=>{
  const f=fixture();f.p.src='https://media.test/live.m3u8#t=30';f.p.load();
  assert.equal(f.commands.find(c=>c.action==='load').url,'https://media.test/live.m3u8');

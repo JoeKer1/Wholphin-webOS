@@ -24,6 +24,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.addInitScript(()=>{
    localStorage.setItem('wholphin-session',JSON.stringify({server:'https://jellyfin.test',user:'user',token:'token',name:'Joe'}));
    window.nativeCommands=[];window.nativeState={position:0,duration:120000,paused:true,id:0};
+   window.systemSyncs=[];window.artworkRequests=[];
    window.EmberAndroid={capabilities:()=>JSON.stringify({videos:[{codec:'h264',width:1920,height:1080,bitDepth:8,frameRate:60,bitrate:40000000,level:42}],audio:['aac','ac3'],maxAudioChannels:6,...(window.dvCapable?{dolbyVisionConversionAvailable:true,videos:[{codec:'hevc',width:3840,height:2160,bitDepth:10}]}:{})}),command(raw){
     const c=JSON.parse(raw);nativeCommands.push(c);
     const event=(type)=>setTimeout(()=>window.EmberFireTV.receive({...nativeState,type,seekStart:0,seekEnd:120000}),0);
@@ -32,9 +33,20 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     if(c.action==='play'){nativeState.paused=false;event('play');event('playing');}
     if(c.action==='pause'){nativeState.paused=true;event('pause');}
     if(c.action==='seek'){nativeState.position=c.ms;event('seeked');}
-   }};
+   },
+    systemProfile(profile){window.systemProfile=profile;},
+    syncWatchNext(raw){window.systemSyncs.push(JSON.parse(raw));},
+    takeSystemResume(profile){
+     if(window.pendingSystemResume?.profile!==profile)return '';
+     const link=window.pendingSystemResume;window.pendingSystemResume=null;return JSON.stringify(link);
+    },
+    artwork(raw){window.artworkRequests.push(JSON.parse(raw));}
+   };
   });
   await page.goto(pathToFileURL(path.resolve('dist/firetv/index.html')).href);
+  await page.waitForFunction(()=>systemSyncs.length>0);
+  assert.equal(await page.evaluate(()=>systemSyncs[0].items[0].id),'movie');
+  assert.equal(await page.evaluate(()=>JSON.stringify(systemSyncs[0].items).includes('token')),false);
   await page.getByRole('button',{name:'Fire TV movie',exact:true}).first().click();
   await page.getByRole('button',{name:/^Resume/}).first().click();
   await page.waitForFunction(()=>nativeCommands.some(c=>c.action==='seek'&&c.ms>=30000)&&nativeCommands.some(c=>c.action==='play'));
@@ -47,6 +59,17 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.waitForFunction(()=>!nativeState.paused);
   const media = await page.evaluate(()=>nativeCommands.find(c=>c.action==='load').media);
   assert.equal(media.title,'Fire TV movie'); assert(!JSON.stringify(media).includes('token'));
+  assert.equal(await page.evaluate(()=>artworkRequests[0].item),'movie');
+  await page.evaluate(()=>EmberFireTV.receive({...nativeState,type:'timeupdate',diagnostics:{
+   bufferMs:12500,state:3,dropped:4,rendered:240,rebufferCount:2,rebufferMs:800,
+   videoDecoder:'fixture.decoder',audioDecoder:'fixture.audio',audioMime:'audio/mp4a-latm',audioChannels:2,frameRate:23.976
+  }}));
+  await page.locator('#player-options').click();
+  await page.locator('#playback-info').click();
+  await page.getByText('12.5 seconds',{exact:true}).waitFor();
+  await page.getByText('4 / 244',{exact:true}).waitFor();
+  await page.getByText('fixture.decoder',{exact:true}).waitFor();
+  await page.locator('#playback-panel').getByRole('button',{name:'Close',exact:true}).click();
   await page.evaluate(()=>EmberFireTV.receive({id:nativeState.id,type:'media-command',action:'pause'}));
   await page.waitForFunction(()=>nativeState.paused);
   await page.evaluate(()=>EmberFireTV.receive({id:nativeState.id,type:'media-command',action:'seek',position:45000}));
@@ -91,6 +114,20 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.equal(await page.evaluate(()=>nativeCommands.findLast(c=>c.action==='load').tracks.subtitle),-1);
   assert.equal(await page.evaluate(()=>nativeState.paused),true);
   assert.ok(requests.some(r=>r.body?.DeviceProfile?.Name==='Ember (H.264 / AAC)'&&r.body.AudioStreamIndex===7));
+  await page.evaluate(()=>document.dispatchEvent(new Event('ember-suspend')));
+  await page.locator('#player[hidden]').waitFor({state:'attached'});
+  await page.evaluate(()=>{
+   window.pendingSystemResume={profile:'another-profile',item:'movie'};
+   document.dispatchEvent(new Event('ember-system-resume'));
+  });
+  await page.waitForTimeout(100);
+  assert.equal(await page.locator('#player').isVisible(),false,'Launcher cannot resume another profile');
+  await page.evaluate(()=>{
+   window.pendingSystemResume={profile:window.systemProfile,item:'movie'};
+   document.dispatchEvent(new Event('ember-system-resume'));
+  });
+  await page.waitForFunction(()=>!nativeState.paused);
+  assert.equal(await page.evaluate(()=>nativeState.position),30000,'Launcher resumes from Jellyfin bookmark');
   await page.evaluate(()=>document.dispatchEvent(new Event('ember-suspend')));
   await page.locator('#player[hidden]').waitFor({state:'attached'});
   assert.ok(await page.evaluate(()=>nativeCommands.some(c=>c.action==='close')));

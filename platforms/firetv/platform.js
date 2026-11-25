@@ -64,6 +64,15 @@
     deviceName = deviceIdentity.deviceName || "Fire TV",
     playbackName = deviceIdentity.playbackName || deviceName + " Media3";
   root.EmberPlatform = {
+    setSystemProfile: function (profile) {
+      try { root.EmberAndroid.systemProfile(profile); } catch (_) {}
+    },
+    syncContinueWatching: function (request) {
+      try { root.EmberAndroid.syncWatchNext(JSON.stringify(request)); } catch (_) {}
+    },
+    takeSystemResume: function (profile) {
+      try { return JSON.parse(root.EmberAndroid.takeSystemResume(profile) || "null"); } catch (_) { return null; }
+    },
     appVersion: function () { try { return root.EmberAndroid.appVersion(); } catch (_) { return ""; } },
     updateApp: function (action, callback) {
       if (callback) updateListener = callback;
@@ -99,7 +108,7 @@
     createPlayer: function (element) {
       var source = "", id = 0, ready = false, paused = true, seeking = false,
         time = 0, duration = NaN, width = 0, height = 0, error = null, trackChange = null,
-        range = null, format = null, pending = [], lastRect = "", media = {}, mediaKey = "", tracks = { audio: -1, subtitle: -1 };
+        range = null, format = null, diagnostics = null, pending = [], lastRect = "", media = {}, mediaKey = "", tracks = { audio: -1, subtitle: -1 };
       function settleTracks(reason) {
         if (!trackChange) return;
         root.clearTimeout(trackChange.timer);
@@ -136,6 +145,7 @@
         if (typeof data.paused === "boolean") paused = data.paused;
         width = data.width || 0; height = data.height || 0;
         format = data.format || null;
+        diagnostics = data.diagnostics || null;
         range = data.seekEnd > data.seekStart ? [data.seekStart / 1000, data.seekEnd / 1000] : null;
         if (data.type === "loadedmetadata") ready = true;
         if (data.type === "seeked") seeking = false;
@@ -160,6 +170,15 @@
           mediaKey = key;
         },
         nativeFormat: function () { return format; },
+        nativeDiagnostics: function () { return diagnostics; },
+        setArtwork: function (request) {
+          try { root.EmberAndroid.artwork(JSON.stringify(request)); } catch (_) {}
+        },
+        getVideoPlaybackQuality: function () {
+          return { droppedVideoFrames: diagnostics && diagnostics.dropped,
+            totalVideoFrames: diagnostics && Number.isFinite(diagnostics.rendered) && Number.isFinite(diagnostics.dropped)
+              ? diagnostics.rendered + diagnostics.dropped : null };
+        },
         selectTracks: function (value) {
           if (!source || !ready || value.unavailable) return Promise.reject(new Error("Native tracks are unavailable"));
           settleTracks(new Error("Track change replaced"));
@@ -174,7 +193,7 @@
           send("close");
           id++;
           ready = false; paused = true; seeking = false;
-          time = 0; duration = NaN; range = null; format = null; error = null; lastRect = "";
+          time = 0; duration = NaN; range = null; format = null; diagnostics = null; error = null; lastRect = "";
           if (source) { send("load", { url: source.split("#")[0], tracks: tracks, media: media }); rect(); }
         },
         play: function () {

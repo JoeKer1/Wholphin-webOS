@@ -59,3 +59,11 @@ Only the bundled `appassets.androidplatform.net/assets/index.html` page can navi
 On backgrounding, Ember stops its session/tuner and pauses native playback. Audio focus is handled by Media3. App data backup/transfer is disabled; sessions and settings remain local to this APK. WebView inspection is enabled only in debug builds.
 
 Media3, AndroidX WebKit and their dependencies retain their upstream licenses. The shared Ember UI retains the repository's GPL license and Wholphin attribution.
+
+## Android TV system integration (0.2.99)
+
+Now Playing includes title, episode subtitle, artwork fetched with the active Jellyfin session, and a return-to-Ember action. Authentication stays inside Ember; public system metadata and launcher links contain no access token.
+
+Android TV Watch Next receives up to 12 resumable videos for the active profile when Home loads and after playback stops. Cards resume from Jellyfin's current bookmark. Switching profiles or signing out clears published cards; a launcher link waits for its matching profile instead of bypassing profile selection. Android TV providers and launcher support vary, especially on DIRECTV and Fire TV. Playback information shows provider synchronization status; successful synchronization does not establish that the launcher displays a row.
+
+Playback information updates native buffer depth, player state, dropped/rendered frame counts, rebuffer count/time, decoder names, selected audio format/channels, and video frame rate while the panel is open. These describe Media3's native playback, not measured receiver output or HDMI passthrough.

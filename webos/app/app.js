@@ -508,6 +508,7 @@
       : null;
   }
   function navigation() {
+    if (P.setSystemProfile) P.setSystemProfile(document.body.classList.contains("choosing-profile") ? "" : systemProfile(session));
     document.getElementById("profile-initial").textContent =
       session && session.name ? session.name.charAt(0).toUpperCase() : "U";
     document.getElementById("profile-initial").hidden = bonfireAvailable;
@@ -2295,6 +2296,7 @@
   }
   async function profilesPage() {
     if (playing) await stop();
+    if (P.setSystemProfile) P.setSystemProfile("");
     var r = reset("Who's watching?"),
       account = profileAccount(),
       current = session;
@@ -3100,7 +3102,32 @@
     if (!items.length && !existing) el("p", "No items found.", parent);
     return grid;
   }
+  function systemProfile(account) {
+    return account && account.token ? JSON.stringify([account.server, account.user]) : "";
+  }
+  function publishSystemContinueWatching(items, account) {
+    if (!P.syncContinueWatching || session !== account) return;
+    P.syncContinueWatching({
+      profile: systemProfile(account), server: account.server, token: account.token,
+      items: C.combineResume(items, []).slice(0, 12).map(function (item) {
+        return { id: item.Id, artworkItem: item.SeriesId || item.Id, title: item.SeriesName || item.Name,
+          subtitle: item.SeriesName ? item.Name : "", episode: item.Type === "Episode",
+          position: Math.max(0, Number(item.UserData && item.UserData.PlaybackPositionTicks) / 10000 || 0),
+          duration: Math.max(0, Number(item.RunTimeTicks) / 10000 || 0) };
+      }),
+    });
+  }
+  async function resumeFromSystem() {
+    if (!P.takeSystemResume || !session || busy || document.hidden ||
+        document.body.classList.contains("choosing-profile")) return;
+    var account = session, link = P.takeSystemResume(systemProfile(account));
+    if (!link || link.profile !== systemProfile(account) || !/^[a-zA-Z0-9-]{1,128}$/.test(link.item)) return;
+    var item = await api("/Users/" + encodeURIComponent(account.user) + "/Items/" + encodeURIComponent(link.item), null, null, "GET", { session: account });
+    if (session === account && !document.hidden) await play(item, 0, true, false);
+  }
+  document.addEventListener("ember-system-resume", function () { run(resumeFromSystem); });
   async function fetchHomeRow(row, signal) {
+    var rowAccount = session;
     function request(path, values) {
       return api(path, values, null, "GET", { signal: signal });
     }
@@ -3114,6 +3141,7 @@
         IncludeItemTypes: row.parent ? row.type || "Episode" : undefined,
         Fields: fields,
       }).then(function (data) {
+        if (!row.parent) publishSystemContinueWatching(data.Items || [], rowAccount);
         return data.Items || [];
       });
     }
@@ -3245,6 +3273,7 @@
   async function home(tvLibraryItem) {
     var r = reset(tvLibraryItem ? tvLibraryItem.Name : "Home"),
       options = homeOptions();
+    if (P.setSystemProfile) P.setSystemProfile(systemProfile(session));
     homeController = new AbortController();
     var homeSignal = homeController.signal,
       earlyRows = new Map();
@@ -3542,6 +3571,7 @@
     }
     var first = rows.querySelector("section:not([hidden]) button");
     if (first) first.focus();
+    run(resumeFromSystem);
   }
   function tvTabs(library, selected) {
     var tabs = el("div", null, main);
@@ -7499,9 +7529,25 @@
     if (local) el("p", "Remembered only for this video's selected subtitle track.", container);
     refresh();
   }
-  var panelRequest = 0;
+  function nativePlaybackRows() {
+    var stats = video.nativeDiagnostics && video.nativeDiagnostics();
+    if (!stats) return [];
+    return [
+      ["Buffer ahead", (Math.max(0, stats.bufferMs) / 1000).toFixed(1) + " seconds"],
+      ["Native player state", ({1: "Idle", 2: "Buffering", 3: "Ready", 4: "Ended"})[stats.state] || "Unknown"],
+      ["Dropped frames", Number.isFinite(stats.dropped) && Number.isFinite(stats.rendered)
+        ? stats.dropped + " / " + (stats.dropped + stats.rendered) : "Not reported"],
+      ["Buffering after startup", stats.rebufferCount + " times · " + (stats.rebufferMs / 1000).toFixed(1) + " seconds"],
+      ["Video decoder", stats.videoDecoder || "Not reported"],
+      ["Audio decoder", stats.audioDecoder || "Not reported"],
+      ["Selected audio", [stats.audioMime, stats.audioChannels > 0 ? stats.audioChannels + " channels" : ""].filter(Boolean).join(" · ") || "Not reported"],
+      ["Video frame rate", stats.frameRate > 0 ? stats.frameRate.toFixed(3) + " fps" : "Not reported"],
+    ];
+  }
+  var panelRequest = 0, infoUpdate = null;
   function closePlaybackPanel(restore) {
     panelRequest++;
+    if (infoUpdate) { video.removeEventListener("timeupdate", infoUpdate); infoUpdate = null; }
     if (infoController) {
       infoController.abort();
       infoController = null;
@@ -7514,6 +7560,7 @@
     showControls();
   }
   async function openPlaybackPanel(kind) {
+    if (infoUpdate) { video.removeEventListener("timeupdate", infoUpdate); infoUpdate = null; }
     hideSegment();
     hideUpNext();
     closePlayerTools();
@@ -7603,6 +7650,11 @@
         rows.push(["Display HDR support", (detected.displayHdrTypes || []).join(", ") || "Not reported"]);
         rows.push(["Dolby Vision decoder", detected.dolbyVisionDecoder ? "Detected" : "Not detected"]);
         if (format) rows.push(["Selected native format", [format.mime, format.codecs, ({6: "PQ transfer", 7: "HLG transfer", 3: "SDR transfer"})[format.colorTransfer]].filter(Boolean).join(" · ")]);
+        if (video.nativeDiagnostics) {
+          rows = rows.filter(function (row) { return row[0] !== "Dropped frames"; });
+          rows = rows.concat(nativePlaybackRows());
+        }
+        if (detected.watchNextStatus) rows.push(["Home-screen Continue Watching", detected.watchNextStatus]);
       }
       var list = el("dl", null, content);
       list.className = "playback-info";
@@ -7613,6 +7665,19 @@
         el("dt", row[0], entry);
         el("dd", row[1], entry);
       });
+      if (video.nativeDiagnostics) {
+        var updatedAt = 0;
+        infoUpdate = function () {
+          if (playing !== active || token !== panelRequest || Date.now() - updatedAt < 1000) return;
+          updatedAt = Date.now();
+          nativePlaybackRows().forEach(function (row) {
+            Array.prototype.forEach.call(list.children, function (entry) {
+              if (entry.querySelector("dt").textContent === row[0]) entry.querySelector("dd").textContent = row[1];
+            });
+          });
+        };
+        video.addEventListener("timeupdate", infoUpdate);
+      }
       if (telemetryUnavailable)
         el(
           "p",
@@ -8489,6 +8554,10 @@
       video.src = selected.url + (ticks ? "#t=" + ticks / 10000000 : "");
       resumeTimer = setInterval(finishResume, 250);
       video.load();
+      if (video.setArtwork) video.setArtwork({
+        profile: systemProfile(playing.account), server: playing.account.server,
+        token: playing.account.token, item: playing.item.SeriesId || playing.item.Id,
+      });
       if (livePreview && activeGuide) activeGuide.focusChannel(item.Id);
       else document.getElementById("toggle").focus();
       message(subtitleNotice);
@@ -8716,6 +8785,11 @@
     )
       stopped.returnFocus.focus();
     await finishPlaybackReporting(stopped, ticks);
+    if (!options.transition && stopped.started && !stopped.live && P.syncContinueWatching && session === stopped.account) {
+      api("/Users/" + encodeURIComponent(stopped.account.user) + "/Items/Resume",
+        { Limit: 24, MediaTypes: "Video" }, null, "GET", { session: stopped.account })
+        .then(function (data) { publishSystemContinueWatching(data.Items || [], stopped.account); }).catch(function () {});
+    }
     if (session === stopped.account) { homeCache.clear(); listingStates.clear(); previewCache.clear(); }
     if (!options.transition && stopped.started && !stopped.live &&
         session === stopped.account && main.refreshPlaybackRows)

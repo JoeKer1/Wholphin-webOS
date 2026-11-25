@@ -1,6 +1,9 @@
 package tv.ember.jellyfin;
 
 import android.content.Context;
+import android.app.PendingIntent;
+import android.content.Intent;
+import android.graphics.Bitmap;
 import android.media.MediaMetadata;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
@@ -15,8 +18,12 @@ final class PlaybackSession {
     interface Commands { void send(String action, long positionMs); }
     private final MediaSession session;
     private JSONObject info = new JSONObject();
+    private Bitmap artwork;
     PlaybackSession(Context context, Commands commands) {
         session = new MediaSession(context, "Ember playback");
+        session.setSessionActivity(PendingIntent.getActivity(context, 0,
+            new Intent(context, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
         session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
         session.setCallback(new MediaSession.Callback() {
             @Override public void onPlay() { commands.send("play", 0); }
@@ -34,8 +41,15 @@ final class PlaybackSession {
         String title = info.optString("title", "Ember"), subtitle = info.optString("subtitle", "");
         session.setMetadata(new MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, title.substring(0, Math.min(title.length(), 500)))
+            .putString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE, title.substring(0, Math.min(title.length(), 500)))
             .putString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE, subtitle.substring(0, Math.min(subtitle.length(), 500)))
+            .putBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON, artwork)
+            .putBitmap(MediaMetadata.METADATA_KEY_ART, artwork)
             .putLong(MediaMetadata.METADATA_KEY_DURATION, Math.max(0, info.optLong("duration", 0))).build());
+    }
+    void setArtwork(Bitmap bitmap) {
+        artwork = bitmap;
+        setInfo(info);
     }
     void update(ExoPlayer player, boolean foreground) {
         session.setActive(foreground && player.getPlaybackState() != Player.STATE_ENDED && player.getPlaybackState() != Player.STATE_IDLE);
