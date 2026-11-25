@@ -1,6 +1,6 @@
 {
   "name": "ember-webos",
-  "version": "0.2.99",
+  "version": "0.2.100",
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.cjs",

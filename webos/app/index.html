@@ -6,7 +6,7 @@
     <meta name="referrer" content="no-referrer" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' blob: file: http: https: data:; media-src 'self' http: https: blob:; connect-src http: https:; base-uri 'none'; object-src 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' blob: file: http: https: data:; media-src 'self' http: https: blob:; connect-src http: https: ws: wss:; base-uri 'none'; object-src 'none'; form-action 'none'"
     />
     <title>Ember for Jellyfin</title>
     <link rel="stylesheet" href="style.css" />
@@ -84,6 +84,7 @@
           </div>
         </div>
         <div id="player-tools" hidden>
+          <button id="leave-watch-group" hidden>Leave Watch Together</button>
           <div class="player-tool-group"><span>Playback</span><button id="chapters">Chapters</button><button id="queue">Queue</button><button id="quality">Quality</button></div>
           <div class="player-tool-group"><span>Subtitles</span><button id="subtitle-timing" aria-label="Subtitle timing">Timing</button><button id="subtitle-appearance" aria-label="Subtitle appearance">Appearance</button></div>
           <div class="player-tool-group"><span>Display &amp; diagnostics</span><button id="fit">Fill screen</button><button id="playback-info">Playback info</button></div>

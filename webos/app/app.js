@@ -625,6 +625,7 @@
     libraries.filter(function (item) { return libraryRank(item) >= 4; }).forEach(libraryEntry);
     if (P.seerrRequest || hostedSeerr || requestsPluginAccount === session)
       entry("Requests", "search", function () { return go(seerrDiscover); }, "seerr");
+    entry("Watch Together", "movie", function () { return go(watchTogetherPage); }, "watch-together");
     entry(
       "Settings",
       "settings",
@@ -681,6 +682,7 @@
   }
   async function signOut() {
     try { await stop(); } catch (_) {}
+    await leaveWatchGroup(true);
     try {
       var root = profileAccount();
       await Promise.allSettled([
@@ -2296,6 +2298,7 @@
   }
   async function profilesPage() {
     if (playing) await stop();
+    await leaveWatchGroup(true);
     if (P.setSystemProfile) P.setSystemProfile("");
     var r = reset("Who's watching?"),
       account = profileAccount(),
@@ -7362,21 +7365,21 @@
     }
   }
   function updatePlaybackButtons() {
-    var active = playing;
+    var active = playing, synced = active && watchActive(active.watchGroup);
     document.getElementById("audio").disabled =
-      !active || active.live || !C.tracks(active.source, "Audio").length;
+      !active || synced || active.live || !C.tracks(active.source, "Audio").length;
     document.getElementById("subtitles").disabled =
-      !active || active.live || !C.tracks(active.source, "Subtitle").length;
+      !active || synced || active.live || !C.tracks(active.source, "Subtitle").length;
     document.getElementById("subtitle-timing").disabled = !active || active.live;
-    document.getElementById("subtitle-appearance").disabled = !active || active.live;
-    document.getElementById("quality").disabled = !active || active.live;
+    document.getElementById("subtitle-appearance").disabled = !active || synced || active.live;
+    document.getElementById("quality").disabled = !active || synced || active.live;
     document.getElementById("chapters").disabled =
       !active || active.live || !C.chapters(active.item).length;
     document.getElementById("previous-video").hidden = !!(active && active.live);
-    document.getElementById("previous-video").disabled = !active || active.live || !playbackHistory.length;
+    document.getElementById("previous-video").disabled = !active || synced || active.live || !playbackHistory.length;
     document.getElementById("next-video").hidden = !!(active && active.live);
     document.getElementById("next-video").disabled =
-      !active || active.live || (!queueItems.length && !active.episodes.length && !active.nextError);
+      !active || synced || active.live || (!queueItems.length && !active.episodes.length && !active.nextError);
     if (active && video.setMediaInfo) video.setMediaInfo({
       title: active.item.SeriesName || active.item.Name || "Ember",
       subtitle: active.item.SeriesName ? active.item.Name : "",
@@ -7424,7 +7427,7 @@
   }
   function updateSegment() {
     var active = playing;
-    if (!active || active.live || !active.started || video.seeking || livePreview || active.awaitingWatching ||
+    if (!active || watchActive(active.watchGroup) || active.live || !active.started || video.seeking || livePreview || active.awaitingWatching ||
         !document.getElementById("playback-panel").hidden ||
         !document.getElementById("player-tools").hidden) { hideSegment(); return; }
     var time = position() / 10000000, segment = (active.segments || []).find(function (s) {
@@ -7733,6 +7736,8 @@
               return;
             }
             clearSeekState();
+            if (watchActive(active.watchGroup))
+              return watchApi(active.watchGroup, "Seek", {PositionTicks: chapter.StartPositionTicks});
             video.currentTime = chapter.StartPositionTicks / 10000000;
             closePlaybackPanel();
             return report("/Progress");
@@ -7821,6 +7826,7 @@
     }
   }
   async function switchTrack(subtitle, index) {
+    if (playing && watchActive(playing.watchGroup)) return message("Leave Watch Together to change tracks.");
     var active = playing;
     if (!active || active.live || busy || !active.started) return;
     var type = subtitle ? "Subtitle" : "Audio";
@@ -7892,6 +7898,7 @@
     }
   }
   async function switchQuality(active, maxBitrate) {
+    if (watchActive(active.watchGroup)) return message("Leave Watch Together to change quality.");
     if (playing !== active || busy || !active.started || active.live) return;
     if (active.maxBitrate === maxBitrate) { closePlaybackPanel(); return; }
     var ticks = position(), paused = video.paused;
@@ -7980,6 +7987,7 @@
       options = playbackOptions();
     if (
       !active ||
+      watchActive(active.watchGroup) ||
       active.live ||
       !active.started ||
       active.cancelAdvance ||
@@ -8009,6 +8017,7 @@
   async function advancePlayback(manual) {
     var active = playing;
     if (!active || active.live) return;
+    if (watchActive(active.watchGroup)) return;
     if (active.advancing) { if (!manual && active.completed) active.pendingAdvance = true; return; }
     if (busy) { if (!manual && active.completed) active.pendingAdvance = true; return; }
     active.pendingAdvance = false;
@@ -8061,6 +8070,10 @@
   }
   async function compatibilityPlayback(active, automatic) {
     if (playing !== active || busy || active.fallbackInProgress) return;
+    if (watchActive(active.watchGroup)) {
+      await leaveWatchGroup(true, "Left Watch Together after a playback problem.");
+      if (playing !== active || busy) return;
+    }
     active.fallbackInProgress = true;
     var ticks =
       automatic && active.lastPositionTicks != null
@@ -8247,8 +8260,231 @@
       return report("");
     });
   }
+  var watchGroup = null;
+
+  function watchApi(group, action, body) {
+    return api("/SyncPlay/" + action, null, body, "POST",
+      { session: group.account, timeoutMs: 5000 });
+  }
+  function watchActive(group) {
+    return group && watchGroup === group && session === group.account;
+  }
+  async function leaveWatchGroup(notifyServer, reason) {
+    var group = watchGroup;
+    if (!group) return;
+    watchGroup = null;
+    clearTimeout(group.commandTimer);
+    clearInterval(group.keepAlive);
+    clearInterval(group.clockTimer);
+    group.socket.close();
+    document.getElementById("leave-watch-group").hidden = true;
+    if (playing && playing.watchGroup === group) updatePlaybackButtons();
+    if (playing && playing.watchGroup === group && reason) video.pause();
+    if (reason) message(reason);
+    if (notifyServer) await watchApi(group, "Leave").catch(function () {});
+  }
+  async function watchClock(group) {
+    var sent = Date.now();
+    var clock = await api("/GetUtcTime", null, null, "GET", {session: group.account, timeoutMs: 5000});
+    var received = Date.now(), serverReceived = Date.parse(clock.RequestReceptionTime),
+      serverSent = Date.parse(clock.ResponseTransmissionTime);
+    if (!Number.isFinite(serverReceived) || !Number.isFinite(serverSent))
+      throw new Error("Could not synchronize the Jellyfin clock.");
+    group.clockOffset = ((serverReceived - sent) + (serverSent - received)) / 2;
+    group.ping = Math.round(Math.max(0, (received - sent - (serverSent - serverReceived)) / 2));
+  }
+  function watchReport(group, buffering) {
+    if (!watchActive(group) || !playing || playing.watchGroup !== group ||
+        playing.watchEntry !== group.entry || !group.entry) return;
+    var native = video.nativeDiagnostics && video.nativeDiagnostics();
+    if (!buffering && (!playing.started || video.seeking || video.readyState < 3 ||
+        (native && native.state !== 3))) return;
+    var state = buffering ? "Buffering" : "Ready";
+    if (group.playerState === state) return;
+    group.playerState = state;
+    run(async function () {
+      if (!watchActive(group) || group.playerState !== state) return;
+      try {
+        await watchApi(group, state, {
+          When: new Date(Date.now() + group.clockOffset).toISOString(),
+          PositionTicks: position(), IsPlaying: !video.paused,
+          PlaylistItemId: group.entry.PlaylistItemId,
+        });
+      } catch (_) {
+        if (watchActive(group)) await leaveWatchGroup(true, "Lost contact with the Watch Together group.");
+      }
+    });
+  }
+  function applyWatchCommand(group) {
+    var cmd = group.command, active = playing;
+    if (!watchActive(group) || !cmd || !active || active.watchGroup !== group ||
+        active.watchEntry !== group.entry || group.commandTimer || (!active.started && cmd.Command !== "Stop")) return;
+    var when = Date.parse(cmd.When) - group.clockOffset;
+    group.commandTimer = setTimeout(function () {
+      group.commandTimer = null;
+      if (!watchActive(group) || playing !== active || group.command !== cmd) return;
+      group.command = null;
+      if (cmd.Command === "Stop") return run(function () { return stop({ keepWatchGroup: true }); });
+      if (cmd.Command === "Pause") video.pause();
+      var target = Number(cmd.PositionTicks) / 10000000;
+      if (cmd.Command === "Unpause") target += Math.max(0, Date.now() - when) / 1000;
+      if (Number.isFinite(target) && Math.abs(video.currentTime - target) > (cmd.Command === "Seek" ? 0.05 : 0.35)) {
+        group.playerState = null;
+        video.currentTime = Math.max(0, target);
+      } else if (cmd.Command === "Seek") {
+        group.playerState = null;
+        watchReport(group, false);
+      }
+      if (cmd.Command === "Unpause") run(async function () {
+        try { await video.play(); }
+        catch (_) {
+          if (watchActive(group) && playing === active)
+            await leaveWatchGroup(true, "Could not resume the group video.");
+        }
+      });
+    }, Math.min(10000, Math.max(0, when - Date.now())));
+  }
+  function watchQueue(group, queue) {
+    var entry = queue.Playlist && queue.Playlist[queue.PlayingItemIndex];
+    if (!entry || !entry.ItemId || !entry.PlaylistItemId) {
+      clearTimeout(group.commandTimer);
+      group.commandTimer = null;
+      group.entry = null;
+      group.command = null;
+      if (playing && playing.watchGroup === group) run(function () { return stop({keepWatchGroup: true}); });
+      return;
+    }
+    if (group.entry && group.entry.PlaylistItemId === entry.PlaylistItemId) return;
+    group.entry = entry;
+    group.command = null;
+    group.playerState = null;
+    clearTimeout(group.commandTimer);
+    group.commandTimer = null;
+    group.loading = group.loading.catch(function () {}).then(async function () {
+      if (!watchActive(group) || group.entry !== entry) return;
+      var item = await api("/Users/" + encodeURIComponent(group.account.user) + "/Items/" + encodeURIComponent(entry.ItemId),
+        null, null, "GET", {session: group.account, timeoutMs: 5000});
+      if (!watchActive(group) || group.entry !== entry) return;
+      if (item.MediaType !== "Video" || item.IsFolder || item.Type === "TvChannel")
+        throw new Error("Watch Together supports on-demand videos.");
+      await play(item, Math.max(0, Number(queue.StartPositionTicks) || 0), false, false,
+        {paused: true, watchGroup: group, watchEntry: entry});
+      if (watchActive(group) && group.entry === entry && (!playing || playing.watchEntry !== entry))
+        throw new Error("Could not start the group video.");
+    }).catch(function (error) {
+      if (watchActive(group) && group.entry === entry) return leaveWatchGroup(true, error.message);
+    });
+  }
+  async function connectWatchGroup(name, groupId) {
+    if (watchGroup) return;
+    var account = session, url = new URL(account.server + "/socket");
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.search = C.query({api_key: account.token, deviceId: device});
+    var socket = new WebSocket(url.href);
+    var group = {account: account, socket: socket, name: name, loading: Promise.resolve()};
+    watchGroup = group;
+    try {
+      socket.onmessage = function (event) {
+        if (!watchActive(group)) return;
+        var packet;
+        try { packet = JSON.parse(event.data); } catch (_) { return; }
+        var data = packet && packet.Data;
+        if (packet && packet.MessageType === "ForceKeepAlive") {
+          clearInterval(group.keepAlive);
+          var seconds = Number(data);
+          if (seconds > 0) group.keepAlive = setInterval(function () {
+            if (socket.readyState === 1) socket.send(JSON.stringify({MessageType: "KeepAlive"}));
+          }, Math.max(1000, seconds * 500));
+        } else if (packet && packet.MessageType === "SyncPlayGroupUpdate" && data) {
+          if (data.Type === "GroupJoined" && data.Data) {
+            group.joined = true;
+            group.name = data.Data.GroupName || group.name;
+          } else if (data.Type === "PlayQueue" && data.Data && group.joined) watchQueue(group, data.Data);
+          else if (["NotInGroup", "GroupLeft", "SyncPlayIsDisabled", "JoinGroupDenied", "CreateGroupDenied",
+            "GroupDoesNotExist", "LibraryAccessDenied"].indexOf(data.Type) >= 0)
+            run(function () { return leaveWatchGroup(false, "Jellyfin could not keep you in the Watch Together group."); });
+        } else if (packet && packet.MessageType === "SyncPlayCommand" && data &&
+            ["Unpause", "Pause", "Seek", "Stop"].indexOf(data.Command) >= 0 &&
+            Number.isFinite(Date.parse(data.When)) &&
+            (data.Command === "Stop" || (group.entry && data.PlaylistItemId === group.entry.PlaylistItemId))) {
+          group.command = data;
+          clearTimeout(group.commandTimer);
+          group.commandTimer = null;
+          applyWatchCommand(group);
+        }
+      };
+      await Promise.all([watchClock(group), new Promise(function (resolve, reject) {
+        var timeout = setTimeout(function () { reject(new Error("Could not connect to Jellyfin SyncPlay.")); }, 5000);
+        socket.onopen = function () { clearTimeout(timeout); resolve(); };
+        socket.onerror = socket.onclose = function () { clearTimeout(timeout); reject(new Error("Could not connect to Jellyfin SyncPlay.")); };
+      })]);
+      if (!watchActive(group)) return;
+      socket.onclose = function () {
+        if (watchActive(group)) run(function () { return leaveWatchGroup(true, "Watch Together disconnected. Rejoin from the sidebar."); });
+      };
+      var result = await watchApi(group, groupId ? "Join" : "New", groupId ? {GroupId: groupId} : {GroupName: name});
+      if (!watchActive(group)) return;
+      group.joined = true;
+      if (result && result.GroupName) group.name = result.GroupName;
+      function ping() { return watchApi(group, "Ping", {Ping: group.ping}).catch(function () {}); }
+      ping();
+      group.clockTimer = setInterval(function () {
+        watchClock(group).then(function () { if (watchActive(group)) return ping(); }).catch(function () {});
+      }, 30000);
+    } catch (error) {
+      if (watchActive(group)) await leaveWatchGroup(false);
+      throw error;
+    }
+  }
+  async function watchTogetherPage() {
+    var r = reset("Watch Together"), account = session;
+    selectNav("watch-together");
+    var actions = el("div", null, main);
+    actions.className = "actions";
+    var backButton = button("Back", back, actions);
+    backButton.focus();
+    if (watchActive(watchGroup) && watchGroup.joined) {
+      el("p", "Group: " + watchGroup.name, main);
+      el("p", "Choose a movie or episode in Ember, or start one from Jellyfin Web.", main);
+      button("Leave group", async function () {
+        await leaveWatchGroup(true);
+        if (r === revision) return watchTogetherPage();
+      }, actions);
+      return;
+    }
+    var joining = false;
+    async function enter(name, id) {
+      if (joining || r !== revision || session !== account) return;
+      joining = true;
+      try {
+        await connectWatchGroup(name, id);
+        if (r === revision && !playing && watchActive(watchGroup)) return watchTogetherPage();
+      } finally { joining = false; }
+    }
+    button("Create group", function () { return enter((account.name || "Ember") + "’s watch group"); }, actions);
+    button("Refresh groups", watchTogetherPage, actions);
+    var groups = await api("/SyncPlay/List", null, null, "GET", {session: account, timeoutMs: 5000}).catch(function () { return null; });
+    if (r !== revision || session !== account) return;
+    if (!Array.isArray(groups)) { el("p", "Could not list groups. Check your Jellyfin SyncPlay permissions.", main); return; }
+    if (!groups.length) el("p", "No groups are available.", main);
+    groups.forEach(function (group) {
+      button("Join " + group.GroupName, function () { return enter(group.GroupName, group.GroupId); }, actions);
+    });
+  }
   async function play(item, ticks, resumeSaved, live, options) {
     options = options || {};
+    if (!options.watchGroup && watchActive(watchGroup) && watchGroup.joined) {
+      var group = watchGroup;
+      if (live) return message("Leave Watch Together to watch Live TV.");
+      if (resumeSaved) {
+        var fresh = await api("/Users/" + encodeURIComponent(group.account.user) + "/Items/" + encodeURIComponent(item.Id),
+          null, null, "GET", {session: group.account, timeoutMs: 5000});
+        ticks = fresh.UserData && fresh.UserData.PlaybackPositionTicks;
+      }
+      if (watchActive(group)) return watchApi(group, "SetNewQueue",
+        {PlayingQueue: [item.Id], PlayingItemPosition: 0, StartPositionTicks: Math.max(0, Number(ticks) || 0)});
+      return;
+    }
     if (live && playing && playing.live && item.ChannelId === playing.item.Id) {
       fullscreenLive();
       return;
@@ -8457,7 +8693,10 @@
           positionTicks: previous.item.Id === item.Id ? ticks : undefined,
         });
       if (request !== playRequest || document.hidden) return;
+      if (options.watchGroup && (!watchActive(options.watchGroup) || options.watchGroup.entry !== options.watchEntry)) return;
       playing = Object.assign(selected, {
+        watchGroup: options.watchGroup,
+        watchEntry: options.watchEntry,
         item: item,
         account: session,
         episodeCount:
@@ -8554,6 +8793,7 @@
       video.src = selected.url + (ticks ? "#t=" + ticks / 10000000 : "");
       resumeTimer = setInterval(finishResume, 250);
       video.load();
+      document.getElementById("leave-watch-group").hidden = !watchActive(playing.watchGroup);
       if (video.setArtwork) video.setArtwork({
         profile: systemProfile(playing.account), server: playing.account.server,
         token: playing.account.token, item: playing.item.SeriesId || playing.item.Id,
@@ -8610,6 +8850,7 @@
     }
     playing.hasPlayed = true;
     finishResume();
+    watchReport(playing && playing.watchGroup, false);
   };
   ["canplay", "durationchange", "progress", "seeked"].forEach(function (event) {
     video.addEventListener(event, finishResume);
@@ -8617,6 +8858,18 @@
   video.addEventListener("seeked", function () {
     if (playing && playing.started && !video.error)
       playing.lastPositionTicks = Math.round(video.currentTime * 10000000);
+  });
+  ["loadedmetadata", "canplay", "seeked", "timeupdate"].forEach(function (event) {
+    video.addEventListener(event, function () {
+      var group = playing && playing.watchGroup;
+      if (watchActive(group) && playing.started) {
+        watchReport(group, false);
+        applyWatchCommand(group);
+      }
+    });
+  });
+  video.addEventListener("waiting", function () {
+    if (playing && !video.paused && !video.seeking) watchReport(playing.watchGroup, true);
   });
   function formatTime(seconds) {
     seconds = Math.max(0, Math.floor(seconds || 0));
@@ -8726,6 +8979,10 @@
     clearInterval(timer);
     run(async function () {
       await finishPlaybackReporting(active, active.completedPositionTicks);
+      if (playing === active && watchActive(active.watchGroup)) {
+        await watchApi(active.watchGroup, "Stop");
+        return;
+      }
       if (playing === active) return advancePlayback(false);
     });
   };
@@ -8766,6 +9023,9 @@
     hideSegment();
     disposeSeekTiles(stopped);
     playing = null;
+    if (!options.transition && !options.keepWatchGroup && watchActive(stopped.watchGroup))
+      run(function () { return leaveWatchGroup(true); });
+    document.getElementById("leave-watch-group").hidden = true;
     livePreview = false;
     document.body.classList.remove("live-preview");
     closeSubtitleSearch(false);
@@ -8899,9 +9159,11 @@
   });
   function toggle() {
     if (playing && playing.awaitingWatching) return;
+    if (playing && watchActive(playing.watchGroup)) return watchApi(playing.watchGroup, video.paused ? "Unpause" : "Pause");
     if (video.paused) return video.play();
     video.pause();
   }
+  document.getElementById("leave-watch-group").onclick = function () { run(stop); };
   function liveSeekWindow() {
     if (!playing || !playing.live || !playing.started || !video.seekable.length)
       return null;
@@ -9031,6 +9293,10 @@
     if (!Number.isFinite(base) || !Number.isFinite(end) || end <= start) return;
     var target = Math.max(start, Math.min(end, base + seconds)), delta = target - base;
     if (!delta) return;
+    if (watchActive(playing.watchGroup)) {
+      var group = playing.watchGroup;
+      return run(function () { return watchApi(group, "Seek", {PositionTicks: Math.round(target * 10000000)}); });
+    }
     var state = previous || { active: playing, sent: 0 };
     if (!previous || now - state.updated >= 800 || Math.sign(state.delta) !== Math.sign(delta)) state.delta = 0;
     state.delta += delta;
@@ -9061,6 +9327,10 @@
   }
   document.getElementById("timeline").oninput = function () {
     if (!playing || !playing.started || playing.awaitingWatching) return;
+    if (watchActive(playing.watchGroup)) {
+      showSeekPreview(Number(this.value), true);
+      return;
+    }
     clearSeekState();
     if (playing.live) {
       var range = liveSeekWindow();
@@ -9074,6 +9344,10 @@
     if (!playing.live) showSeekPreview(Number(this.value), true);
   };
   document.getElementById("timeline").onchange = function () {
+    if (playing && watchActive(playing.watchGroup)) {
+      var group = playing.watchGroup, target = Number(this.value);
+      return run(function () { return watchApi(group, "Seek", {PositionTicks: Math.round(target * 10000000)}); });
+    }
     run(function () {
       return report("/Progress");
     });
@@ -9085,7 +9359,7 @@
     if (!playing || !playing.started || document.hidden || busy || playing.awaitingWatching) return;
     var command = event.detail || {};
     if (command.action === "play" && video.paused) run(toggle);
-    else if (command.action === "pause" && !video.paused) { video.pause(); showControls(); }
+    else if (command.action === "pause" && !video.paused) { run(toggle); showControls(); }
     else if (command.action === "stop") run(stop);
     else if (command.action === "next" || command.action === "previous") {
       var control = document.getElementById(command.action + "-video");
@@ -9305,13 +9579,14 @@
       if (key === 415) {
         e.preventDefault();
         run(function () {
+          if (playing && watchActive(playing.watchGroup)) return watchApi(playing.watchGroup, "Unpause");
           return video.play();
         });
         return;
       }
       if (key === 19) {
         e.preventDefault();
-        video.pause();
+        if (!video.paused) run(toggle);
         return;
       }
       if (key === 179 || key === 32) {
@@ -9679,9 +9954,14 @@
     if (next) focusContent(next);
   });
   document.addEventListener("ember-suspend", function () {
+    if (watchGroup && !playing) run(function () { return leaveWatchGroup(true); });
     run(stop);
   });
   document.addEventListener("visibilitychange", function () {
+    if (document.hidden && watchGroup) {
+      if (playing && watchActive(playing.watchGroup)) run(stop);
+      else run(function () { return leaveWatchGroup(true); });
+    }
     if (document.hidden) closeSubtitleSearch(false);
     if (document.hidden && cancelQuickConnect) {
       login();
