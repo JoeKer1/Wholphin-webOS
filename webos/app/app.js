@@ -509,6 +509,7 @@
   }
   function navigation() {
     if (P.setSystemProfile) P.setSystemProfile(document.body.classList.contains("choosing-profile") ? "" : systemProfile(session));
+    if (P.homeSearch) selectHomeSearchProfile(document.body.classList.contains("choosing-profile") ? null : session);
     document.getElementById("profile-initial").textContent =
       session && session.name ? session.name.charAt(0).toUpperCase() : "U";
     document.getElementById("profile-initial").hidden = bonfireAvailable;
@@ -991,6 +992,16 @@
       vision.hidden = true;
     }
     row(device, "Screensaver", "", "Artwork, idle delay and clock for this profile.", function () { return go(screensaverSettings); });
+    if (P.homeSearch) row(device, "Home-screen voice search", function () {
+      return homeSearchEnabled(session) ? "On" : "Off";
+    }, "Allow Android TV search to see movie and show titles from this Jellyfin profile.", function (control) {
+      localStorage.setItem(accountKey("home-voice-search"), homeSearchEnabled(session) ? "off" : "on");
+      selectHomeSearchProfile(session);
+      run(syncHomeSearch);
+      control.refreshSetting();
+    }, function () {
+      return "Home-screen voice search: " + (homeSearchEnabled(session) ? "On" : "Off");
+    });
     var about = section("About", "Ember for Jellyfin" + (P.appVersion && P.appVersion() ? " · v" + P.appVersion() : ""));
     if (P.updateApp) row(about, "App updates", "", "Check GitHub Releases for Ember updates.", function () { return go(appUpdates); });
     var server = el("p", "Connected to " + session.server, about);
@@ -2300,6 +2311,7 @@
     if (playing) await stop();
     await leaveWatchGroup(true);
     if (P.setSystemProfile) P.setSystemProfile("");
+    if (P.homeSearch) selectHomeSearchProfile(null);
     var r = reset("Who's watching?"),
       account = profileAccount(),
       current = session;
@@ -3120,10 +3132,86 @@
       }),
     });
   }
+  var homeSearchProfile = "", homeSearchUpdated = 0, homeSearchRefresh = null;
+  function homeSearchEnabled(account) {
+    return !!(account && account.token &&
+      localStorage.getItem("wholphin-home-voice-search:" + account.server + ":" + account.user) === "on");
+  }
+  function selectHomeSearchProfile(account) {
+    var owner = homeSearchEnabled(account) ? systemProfile(account) : "";
+    if (homeSearchProfile !== owner) {
+      homeSearchProfile = owner;
+      homeSearchUpdated = 0;
+      if (homeSearchRefresh) homeSearchRefresh.abort();
+      homeSearchRefresh = null;
+    }
+    P.homeSearch.profile(owner);
+  }
+  async function syncHomeSearch() {
+    var account = session, owner = homeSearchProfile;
+    if (!P.homeSearch || !owner || owner !== systemProfile(account) || homeSearchRefresh ||
+        Date.now() - homeSearchUpdated < 1800000) return;
+    var controller = new AbortController(), titles = [];
+    homeSearchRefresh = controller;
+    try {
+      for (var start = 0; start < 5000; start += 250) {
+        var page = await api("/Users/" + encodeURIComponent(account.user) + "/Items", {
+          Recursive: true, IncludeItemTypes: "Movie,Series", SortBy: "SortName", Limit: 250, StartIndex: start,
+          EnableImages: false, EnableUserData: false,
+        }, null, "GET", {session: account, signal: controller.signal});
+        var items = page.Items || [];
+        items.forEach(function (item) {
+          if (typeof item.Name === "string" && /^[a-fA-F0-9-]{32,36}$/.test(item.Id))
+            titles.push({id: item.Id, title: item.Name.slice(0, 256), year: item.ProductionYear,
+              duration: Math.round((item.RunTimeTicks || 0) / 10000)});
+        });
+        if (items.length < 250 || start + 250 >= page.TotalRecordCount) break;
+      }
+      if (session === account && owner === homeSearchProfile && !controller.signal.aborted) {
+        P.homeSearch.publish(owner, titles);
+        homeSearchUpdated = Date.now();
+      }
+    } catch (_) { /* Retain the last successful index for this profile. */ }
+    finally { if (homeSearchRefresh === controller) homeSearchRefresh = null; }
+  }
+  async function playTitle(item, account, pageRevision) {
+    function current() { return session === account && revision === pageRevision && !document.hidden && !busy; }
+    if (item.Type === "Series") {
+      var series = item;
+      var data = await api("/Shows/NextUp", {UserId: account.user, SeriesId: series.Id, Limit: 1,
+        EnableResumable: true, EnableRewatching: false}, null, "GET", {session: account});
+      if (!current()) return;
+      item = (data.Items || []).find(function (entry) { return entry.Type === "Episode" && entry.SeriesId === series.Id; });
+      if (!item) {
+        data = await api("/Users/" + encodeURIComponent(account.user) + "/Items", {
+          ParentId: series.Id, Recursive: true, IncludeItemTypes: "Episode", IsPlayed: false,
+          SortBy: "ParentIndexNumber,IndexNumber,SortName", Limit: 1,
+        }, null, "GET", {session: account});
+        if (!current()) return;
+        item = (data.Items || []).find(function (entry) { return entry.Type === "Episode" && entry.SeriesId === series.Id; });
+      }
+      if (!item) return go(function () { return detail(series.Id); });
+    }
+    if (current() && (item.Type === "Episode" || item.Type === "Movie")) {
+      var ticks = item.UserData && item.UserData.PlaybackPositionTicks || 0;
+      await play(item, ticks, false, false);
+    }
+  }
   async function resumeFromSystem() {
-    if (!P.takeSystemResume || !session || busy || document.hidden ||
+    if (!session || busy || document.hidden ||
         document.body.classList.contains("choosing-profile")) return;
-    var account = session, link = P.takeSystemResume(systemProfile(account));
+    var account = session, owner = systemProfile(account), r = revision;
+    var title = P.homeSearch && owner === homeSearchProfile && P.homeSearch.takeTitle(owner);
+    if (title && typeof title.query === "string" && title.query)
+      return go(function () { return search(title.query); });
+    if (title && /^[a-fA-F0-9-]{32,36}$/.test(title.item)) {
+      var selected = await api("/Users/" + encodeURIComponent(account.user) + "/Items/" + encodeURIComponent(title.item),
+        null, null, "GET", {session: account});
+      if (session !== account || owner !== homeSearchProfile || r !== revision || document.hidden) return;
+      if (title.play) return playTitle(selected, account, r);
+      return go(function () { return detail(selected.Id); });
+    }
+    var link = P.takeSystemResume && P.takeSystemResume(owner);
     if (!link || link.profile !== systemProfile(account) || !/^[a-zA-Z0-9-]{1,128}$/.test(link.item)) return;
     var item = await api("/Users/" + encodeURIComponent(account.user) + "/Items/" + encodeURIComponent(link.item), null, null, "GET", { session: account });
     if (session === account && !document.hidden) await play(item, 0, true, false);
@@ -3277,6 +3365,10 @@
     var r = reset(tvLibraryItem ? tvLibraryItem.Name : "Home"),
       options = homeOptions();
     if (P.setSystemProfile) P.setSystemProfile(systemProfile(session));
+    if (P.homeSearch) {
+      selectHomeSearchProfile(session);
+      if (!tvLibraryItem) run(syncHomeSearch);
+    }
     homeController = new AbortController();
     var homeSignal = homeController.signal,
       earlyRows = new Map();
@@ -4831,7 +4923,7 @@
     if (!state.items.length && !state.done) await loadNext();
     else schedule();
   }
-  function search() {
+  function search(initialTitle) {
     reset("Search");
     selectNav("search");
     var account = session;
@@ -4854,8 +4946,10 @@
           var result = await P.voiceSearch();
           if (!form.isConnected || session !== account || requestedRevision !== revision) return;
           if (result.status === "ok" && typeof result.title === "string" && result.title.trim()) {
-            input.value = result.title.trim().slice(0, 256);
-            return await searchTitle();
+            var spoken = result.title.trim().slice(0, 256);
+            var command = /^play\s+(.+)$/i.exec(spoken);
+            input.value = command ? command[1].trim() : spoken;
+            return await searchTitle(!!command);
           }
           message(result.status === "cancelled" ? "" : result.status === "unavailable"
             ? "This device doesn’t provide voice search to Ember. You can type a title."
@@ -4867,7 +4961,7 @@
       voice.type = "button";
     }
     results = el("section", null, main);
-    async function searchTitle() {
+    async function searchTitle(playExact) {
       var title = input.value.trim();
       if (!title) return;
       var r = ++revision;
@@ -4881,8 +4975,16 @@
         });
         if (r !== revision || session !== account) return;
         results.textContent = "";
-        cards(data.Items, results);
+        var items = data.Items || [];
+        cards(items, results);
         message("");
+        if (playExact && (data.TotalRecordCount == null ? items.length < 48 : data.TotalRecordCount <= items.length)) {
+          var exact = items.filter(function (item) {
+            return ["Movie", "Series", "Episode"].indexOf(item.Type) >= 0 &&
+              typeof item.Name === "string" && item.Name.trim().toLowerCase() === title.toLowerCase();
+          });
+          if (exact.length === 1) return await playTitle(exact[0], account, r);
+        }
         var first = results.querySelector("button");
         if (first) first.focus();
       } catch (error) {
@@ -4894,6 +4996,10 @@
       run(searchTitle);
     };
     focusFirst();
+    if (typeof initialTitle === "string" && initialTitle.trim()) {
+      input.value = initialTitle.trim();
+      run(searchTitle);
+    }
   }
   function guideTime(value) {
     var date = new Date(value);

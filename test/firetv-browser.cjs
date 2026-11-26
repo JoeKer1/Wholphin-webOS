@@ -9,12 +9,18 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   page.on('pageerror',e=>errors.push(e.message));
   const source={Id:'source',Container:'mkv',DefaultAudioStreamIndex:3,DefaultSubtitleStreamIndex:9,MediaStreams:[{Type:'Video',Index:0,Codec:'h264',VideoRangeType:'SDR',Width:1920,Height:1080,BitDepth:8},{Type:'Audio',Index:3,Codec:'aac',Language:'eng',DisplayTitle:'English stereo'},{Type:'Audio',Index:7,Codec:'ac3',Language:'spa',DisplayTitle:'Spanish surround'},{Type:'Subtitle',Index:9,Codec:'ass',IsExternal:false,Language:'eng',DisplayTitle:'English ASS'}]};
  const movie={Id:'movie',Name:'Fire TV movie',Type:'Movie',MediaType:'Video',RunTimeTicks:1200000000,UserData:{PlaybackPositionTicks:300000000},ImageTags:{},MediaSources:[source]};
+ const homeMovie={...movie,Id:'0123456789abcdef0123456789abcdef'};
   await page.route('https://jellyfin.test/**',r=>{
    const u=new URL(r.request().url());requests.push({path:u.pathname,term:u.searchParams.get('SearchTerm'),auth:r.request().headers().authorization,body:r.request().postDataJSON()});
    let data={Items:[]};
    if(u.pathname.endsWith('/Views'))data={Items:[{Id:'movies',Name:'Movies',CollectionType:'movies'}]};
    else if(u.pathname.endsWith('/Resume'))data={Items:[movie]};
    else if(u.searchParams.get('SearchTerm')===movie.Name)data={Items:[movie]};
+   else if(u.searchParams.get('SearchTerm')==='Same Title')data={Items:[
+    {...movie,Name:'Same Title'},{...homeMovie,Name:'Same Title'}
+   ]};
+   else if(u.searchParams.get('Limit')==='250')data={Items:[homeMovie],TotalRecordCount:1};
+   else if(u.pathname.endsWith('/Items/'+homeMovie.Id))data=homeMovie;
    else if(u.pathname.endsWith('/Items/movie'))data=movie;
    else if(u.pathname.endsWith('/PlaybackInfo')){
     const body=r.request().postDataJSON(), direct=body?.DeviceProfile?.Name.startsWith('Fire TV');
@@ -42,7 +48,15 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
      const link=window.pendingSystemResume;window.pendingSystemResume=null;return JSON.stringify(link);
     },
     artwork(raw){window.artworkRequests.push(JSON.parse(raw));},
-    voiceSearch(id){window.voiceRequestId=id;}
+    voiceSearch(id){window.voiceRequestId=id;},
+    supportsHomeSearch(){return true;},
+    homeSearchProfile(profile){window.homeSearchProfile=profile;},
+    publishHomeTitles(profile,items){window.homeTitles=JSON.parse(items);},
+    takeHomeTitle(profile){
+     if(window.homeLink?.profile!==profile)return '';
+     const link=window.homeLink;window.homeLink=null;
+     return JSON.stringify(link);
+    }
    };
   });
   await page.goto(pathToFileURL(path.resolve('dist/firetv/index.html')).href);
@@ -70,6 +84,31 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.evaluate(()=>EmberFireTV.voiceSearchResult({id:3,status:'cancelled',title:''}));
   await page.locator('button[aria-busy="true"]').filter({hasText:'Voice search'}).waitFor({state:'detached'});
   assert.equal(titleSearches(),beforeCancelledSearch);
+  await voice.click();
+  await page.waitForFunction(()=>window.voiceRequestId===4);
+  await page.evaluate(()=>EmberFireTV.voiceSearchResult({id:4,status:'ok',title:'Play Same Title'}));
+  await page.getByRole('button',{name:'Same Title',exact:true}).first().waitFor();
+  assert.equal(await page.locator('#player').isVisible(),false);
+  await voice.click();
+  await page.waitForFunction(()=>window.voiceRequestId===5);
+  await page.evaluate(()=>EmberFireTV.voiceSearchResult({id:5,status:'ok',title:'Play Fire TV movie'}));
+  await page.waitForFunction(()=>!nativeState.paused && nativeState.position===30000);
+  await page.evaluate(()=>document.dispatchEvent(new Event('ember-suspend')));
+  await page.locator('#player[hidden]').waitFor({state:'attached'});
+  await page.locator('nav [data-nav=settings]').click();
+  await page.getByRole('button',{name:'Home-screen voice search: Off',exact:true}).click();
+  await page.waitForFunction(()=>window.homeTitles?.length===1);
+  assert.equal(await page.evaluate(()=>JSON.stringify(homeTitles).includes('token')),false);
+  await page.evaluate(()=>{
+   window.homeLink={profile:homeSearchProfile,item:homeTitles[0].id,play:true};
+   document.dispatchEvent(new Event('ember-system-resume'));
+  });
+  await page.waitForFunction(()=>!nativeState.paused);
+  assert.ok(requests.some(r=>r.path.endsWith(homeMovie.Id+'/PlaybackInfo')));
+  await page.evaluate(()=>document.dispatchEvent(new Event('ember-suspend')));
+  await page.locator('#player[hidden]').waitFor({state:'attached'});
+  await page.evaluate(()=>{nativeCommands.length=0;artworkRequests.length=0;});
+  requests.length=0;
   await page.locator('nav [data-nav=home]').click();
   await page.getByRole('button',{name:'Fire TV movie',exact:true}).first().click();
   await page.getByRole('button',{name:/^Resume/}).first().click();

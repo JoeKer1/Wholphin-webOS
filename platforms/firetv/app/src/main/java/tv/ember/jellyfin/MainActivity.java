@@ -60,6 +60,7 @@ public final class MainActivity extends Activity {
     private static final String HOME = "https://appassets.androidplatform.net/assets/index.html";
     private static final int VOICE_SEARCH_REQUEST = 401;
     private int voiceSearchId;
+    private Intent pendingHomeSearch;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WebView web;
     private SeerrClient seerr;
@@ -125,6 +126,7 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        pendingHomeSearch = getIntent();
         tvHome = new TvHomeIntegration(this);
         tvHome.intent(getIntent());
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -194,6 +196,26 @@ public final class MainActivity extends Activity {
         }
     };
     private final class Bridge {
+        @JavascriptInterface public boolean supportsHomeSearch() {
+            return HomeSearchProvider.supported(MainActivity.this);
+        }
+        @JavascriptInterface public void homeSearchProfile(String profile) {
+            if (supportsHomeSearch() && profile != null && profile.length() <= 4096)
+                HomeSearchProvider.selectProfile(MainActivity.this, profile);
+        }
+        @JavascriptInterface public void publishHomeTitles(String profile, String items) {
+            if (supportsHomeSearch() && profile != null && items != null && items.length() <= 2500000)
+                HomeSearchProvider.update(MainActivity.this, profile, items);
+        }
+        @JavascriptInterface public String takeHomeTitle(String profile) {
+            synchronized (MainActivity.this) {
+                if (profile == null) return "";
+                JSONObject item = HomeSearchProvider.open(MainActivity.this, pendingHomeSearch, profile);
+                if (item == null) return "";
+                pendingHomeSearch = null;
+                return item.toString();
+            }
+        }
         @JavascriptInterface public void voiceSearch(int id) {
             handler.post(() -> startVoiceSearch(id));
         }
@@ -546,7 +568,7 @@ public final class MainActivity extends Activity {
         voiceSearchId = id;
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a movie or show title")
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a title, or say Play followed by a title")
             .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
         try {
             startActivityForResult(intent, VOICE_SEARCH_REQUEST);
@@ -584,6 +606,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        synchronized (this) { pendingHomeSearch = intent; }
         setIntent(intent);
         tvHome.intent(intent);
         if (web != null) web.evaluateJavascript("document.dispatchEvent(new Event('ember-system-resume'))", null);

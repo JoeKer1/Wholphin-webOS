@@ -35,6 +35,9 @@
   function capabilities() {
     try { return JSON.parse(root.EmberAndroid.capabilities()); } catch (_) { return {}; }
   }
+  function supportsHomeSearch() {
+    try { return root.EmberAndroid.supportsHomeSearch(); } catch (_) { return false; }
+  }
   function hdrOptions() {
     try { return JSON.parse(localStorage.getItem("ember-hdr-options")) || {}; } catch (_) { return {}; }
   }
@@ -71,6 +74,11 @@
     deviceName = deviceIdentity.deviceName || "Fire TV",
     playbackName = deviceIdentity.playbackName || deviceName + " Media3";
   root.EmberPlatform = {
+    homeSearch: supportsHomeSearch() ? {
+      profile: function (profile) { root.EmberAndroid.homeSearchProfile(profile); },
+      publish: function (profile, items) { root.EmberAndroid.publishHomeTitles(profile, JSON.stringify(items)); },
+      takeTitle: function (profile) { return JSON.parse(root.EmberAndroid.takeHomeTitle(profile) || "null"); },
+    } : null,
     voiceSearch: root.EmberAndroid && typeof root.EmberAndroid.voiceSearch === "function"
       ? function () {
           if (voiceRequest) return Promise.resolve({status: "cancelled"});
