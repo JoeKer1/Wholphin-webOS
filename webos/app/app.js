@@ -4834,6 +4834,7 @@
   function search() {
     reset("Search");
     selectNav("search");
+    var account = session;
     var form = el("form", null, main);
     var label = el("label", "Title", form);
     label.htmlFor = "search";
@@ -4842,25 +4843,55 @@
     input.required = true;
     var submit = el("button", "Search", form);
     submit.type = "submit";
-    var results = el("section", null, main);
-    form.onsubmit = function (e) {
-      e.preventDefault();
+    var results;
+    if (P.voiceSearch) {
+      var voice = button("Voice search", async function () {
+        if (voice.getAttribute("aria-busy") === "true") return;
+        voice.setAttribute("aria-busy", "true");
+        var requestedRevision = revision;
+        message("Listening for a title…");
+        try {
+          var result = await P.voiceSearch();
+          if (!form.isConnected || session !== account || requestedRevision !== revision) return;
+          if (result.status === "ok" && typeof result.title === "string" && result.title.trim()) {
+            input.value = result.title.trim().slice(0, 256);
+            return await searchTitle();
+          }
+          message(result.status === "cancelled" ? "" : result.status === "unavailable"
+            ? "This device doesn’t provide voice search to Ember. You can type a title."
+            : "No title recognized. Try again or type a title.");
+        } finally {
+          voice.removeAttribute("aria-busy");
+        }
+      }, form);
+      voice.type = "button";
+    }
+    results = el("section", null, main);
+    async function searchTitle() {
+      var title = input.value.trim();
+      if (!title) return;
       var r = ++revision;
-      run(async function () {
-        message("Searching…");
+      message("Searching…");
+      try {
         var data = await api("/Users/" + session.user + "/Items", {
-          SearchTerm: input.value,
+          SearchTerm: title,
           Recursive: true,
           IncludeItemTypes: "Movie,Series,Episode",
           Limit: 48,
         });
-        if (r !== revision) return;
+        if (r !== revision || session !== account) return;
         results.textContent = "";
         cards(data.Items, results);
         message("");
         var first = results.querySelector("button");
         if (first) first.focus();
-      });
+      } catch (error) {
+        if (r === revision && session === account) throw error;
+      }
+    }
+    form.onsubmit = function (e) {
+      e.preventDefault();
+      run(searchTitle);
     };
     focusFirst();
   }

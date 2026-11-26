@@ -10,10 +10,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   const source={Id:'source',Container:'mkv',DefaultAudioStreamIndex:3,DefaultSubtitleStreamIndex:9,MediaStreams:[{Type:'Video',Index:0,Codec:'h264',VideoRangeType:'SDR',Width:1920,Height:1080,BitDepth:8},{Type:'Audio',Index:3,Codec:'aac',Language:'eng',DisplayTitle:'English stereo'},{Type:'Audio',Index:7,Codec:'ac3',Language:'spa',DisplayTitle:'Spanish surround'},{Type:'Subtitle',Index:9,Codec:'ass',IsExternal:false,Language:'eng',DisplayTitle:'English ASS'}]};
  const movie={Id:'movie',Name:'Fire TV movie',Type:'Movie',MediaType:'Video',RunTimeTicks:1200000000,UserData:{PlaybackPositionTicks:300000000},ImageTags:{},MediaSources:[source]};
   await page.route('https://jellyfin.test/**',r=>{
-   const u=new URL(r.request().url());requests.push({path:u.pathname,auth:r.request().headers().authorization,body:r.request().postDataJSON()});
+   const u=new URL(r.request().url());requests.push({path:u.pathname,term:u.searchParams.get('SearchTerm'),auth:r.request().headers().authorization,body:r.request().postDataJSON()});
    let data={Items:[]};
    if(u.pathname.endsWith('/Views'))data={Items:[{Id:'movies',Name:'Movies',CollectionType:'movies'}]};
    else if(u.pathname.endsWith('/Resume'))data={Items:[movie]};
+   else if(u.searchParams.get('SearchTerm')===movie.Name)data={Items:[movie]};
    else if(u.pathname.endsWith('/Items/movie'))data=movie;
    else if(u.pathname.endsWith('/PlaybackInfo')){
     const body=r.request().postDataJSON(), direct=body?.DeviceProfile?.Name.startsWith('Fire TV');
@@ -40,13 +41,36 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
      if(window.pendingSystemResume?.profile!==profile)return '';
      const link=window.pendingSystemResume;window.pendingSystemResume=null;return JSON.stringify(link);
     },
-    artwork(raw){window.artworkRequests.push(JSON.parse(raw));}
+    artwork(raw){window.artworkRequests.push(JSON.parse(raw));},
+    voiceSearch(id){window.voiceRequestId=id;}
    };
   });
   await page.goto(pathToFileURL(path.resolve('dist/firetv/index.html')).href);
   await page.waitForFunction(()=>systemSyncs.length>0);
   assert.equal(await page.evaluate(()=>systemSyncs[0].items[0].id),'movie');
   assert.equal(await page.evaluate(()=>JSON.stringify(systemSyncs[0].items).includes('token')),false);
+  await page.locator('nav [data-nav=search]').click();
+  const voice=page.getByRole('button',{name:'Voice search',exact:true});
+  await voice.click();
+  await page.waitForFunction(()=>window.voiceRequestId===1);
+  await page.evaluate(()=>EmberFireTV.voiceSearchResult({id:99,status:'ok',title:'Stale title'}));
+  assert.equal(await page.locator('#search').inputValue(),'');
+  await page.evaluate(()=>EmberFireTV.voiceSearchResult({id:1,status:'ok',title:'  Fire TV movie  '}));
+  await page.getByRole('button',{name:'Fire TV movie',exact:true}).waitFor();
+  assert.equal(await page.locator('#search').inputValue(),movie.Name);
+  assert.ok(requests.some(r=>r.term===movie.Name));
+  const titleSearches = () => requests.filter(r=>r.path==='/Users/user/Items' && r.term===movie.Name).length;
+  const beforeCancelledSearch = titleSearches();
+  await voice.click();
+  await page.waitForFunction(()=>window.voiceRequestId===2);
+  await page.evaluate(()=>EmberFireTV.voiceSearchResult({id:2,status:'unavailable',title:''}));
+  await page.getByText('This device doesn’t provide voice search to Ember. You can type a title.',{exact:true}).waitFor();
+  await voice.click();
+  await page.waitForFunction(()=>window.voiceRequestId===3);
+  await page.evaluate(()=>EmberFireTV.voiceSearchResult({id:3,status:'cancelled',title:''}));
+  await page.locator('button[aria-busy="true"]').filter({hasText:'Voice search'}).waitFor({state:'detached'});
+  assert.equal(titleSearches(),beforeCancelledSearch);
+  await page.locator('nav [data-nav=home]').click();
   await page.getByRole('button',{name:'Fire TV movie',exact:true}).first().click();
   await page.getByRole('button',{name:/^Resume/}).first().click();
   await page.waitForFunction(()=>nativeCommands.some(c=>c.action==='seek'&&c.ms>=30000)&&nativeCommands.some(c=>c.action==='play'));

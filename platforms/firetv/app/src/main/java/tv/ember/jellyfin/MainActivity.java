@@ -1,6 +1,7 @@
 package tv.ember.jellyfin;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.BitmapFactory;
 import android.app.AlertDialog;
@@ -9,6 +10,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.speech.RecognizerIntent;
 import android.view.KeyEvent;
 import android.view.Display;
 import androidx.media3.common.Format;
@@ -56,6 +58,8 @@ import io.github.peerless2012.ass.media.kt.AssPlayerKt;
 @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 public final class MainActivity extends Activity {
     private static final String HOME = "https://appassets.androidplatform.net/assets/index.html";
+    private static final int VOICE_SEARCH_REQUEST = 401;
+    private int voiceSearchId;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WebView web;
     private SeerrClient seerr;
@@ -190,6 +194,9 @@ public final class MainActivity extends Activity {
         }
     };
     private final class Bridge {
+        @JavascriptInterface public void voiceSearch(int id) {
+            handler.post(() -> startVoiceSearch(id));
+        }
         @JavascriptInterface public void updateCommand(String action) {
             handler.post(() -> {
                 if (destroyed || !foreground || !HOME.equals(web.getUrl())) return;
@@ -530,6 +537,45 @@ public final class MainActivity extends Activity {
         return true;
     }
     @Override public void onBackPressed() { key(27); }
+    private void startVoiceSearch(int id) {
+        if (destroyed || !HOME.equals(web.getUrl())) return;
+        if (!foreground || voiceSearchId != 0 || player != null) {
+            voiceSearchResult(id, "unavailable", "");
+            return;
+        }
+        voiceSearchId = id;
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a movie or show title")
+            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+        try {
+            startActivityForResult(intent, VOICE_SEARCH_REQUEST);
+        } catch (ActivityNotFoundException | SecurityException error) {
+            voiceSearchId = 0;
+            voiceSearchResult(id, "unavailable", "");
+        }
+    }
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != VOICE_SEARCH_REQUEST || voiceSearchId == 0) return;
+        int id = voiceSearchId;
+        voiceSearchId = 0;
+        if (result == RESULT_CANCELED) {
+            voiceSearchResult(id, "cancelled", "");
+            return;
+        }
+        ArrayList<String> matches = result == RESULT_OK && data != null
+            ? data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS) : null;
+        String title = matches == null || matches.isEmpty() || matches.get(0) == null ? "" : matches.get(0).trim();
+        voiceSearchResult(id, title.isEmpty() ? "no-match" : "ok", title.substring(0, Math.min(256, title.length())));
+    }
+    private void voiceSearchResult(int id, String status, String title) {
+        if (destroyed || !HOME.equals(web.getUrl())) return;
+        try {
+            JSONObject result = new JSONObject().put("id", id).put("status", status).put("title", title);
+            web.evaluateJavascript("window.EmberFireTV && window.EmberFireTV.voiceSearchResult(" + result + ")", null);
+        } catch (org.json.JSONException ignored) {}
+    }
     @Override protected void onResume() {
         super.onResume();
         foreground = true;
